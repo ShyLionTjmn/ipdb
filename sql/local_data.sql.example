@@ -1,0 +1,9 @@
+INSERT INTO aps(ap_name,ap_scope,ap_client_id,ap_auth_ep,ap_token_ep,ap_userinfo_ep,ap_logout_ep,ap_rsa_pub_key)
+  VALUES ('Keycloak', 'openid', 'ipdb',
+    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/auth',
+    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/token',
+    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/userinfo',
+    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/logout',
+    'copy&paste realm RSA public key here'
+  )
+;

@@ -1,0 +1,10 @@
+<?php
+$IPDB_USER="ipdb_ajax";
+$IPDB_PASS="pass";
+$IPDB_HOST="localhost";
+$IPDB_DB="ipdb";
+
+$PHP_SESSION_NAME="ipdb";
+$DEFAULT_MAX_AUTO_ADD_ALLOWED=20;
+
+?>
