@@ -163,7 +163,11 @@ if($q['action'] == 'check_auth') {
     $providers_list=return_query($query);
     ok_exit(Array("status" => "unauth", "providers" => $providers_list));
   } else {
-    ok_exit(Array("status" => "auth", "user" => $_SESSION['user'], "refresh_expire_in" => ($_SESSION['refresh_expire'] - $time)));
+    ok_exit(Array("status" => "auth",
+                  "user" => $_SESSION['user'],
+                  "expire_in" => ($_SESSION['expire'] - $time),
+                  "refresh_expire_in" => ($_SESSION['refresh_expire'] - $time)
+    ));
   };
 };
 
