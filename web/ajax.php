@@ -92,7 +92,7 @@ foreach(Array('expire', 'refresh_expire', 'user', 'refresh_token', 'openid_ap_id
   };
 };
 
-if(isset($_SESSION['expire']) && $_SESSION['expire'] <= $time+295) {
+if(isset($_SESSION['expire']) && $_SESSION['expire'] <= $time) {
   if($_SESSION['refresh_expire'] <= $time) {
     reset_session();
   } else {
@@ -163,7 +163,7 @@ if($q['action'] == 'check_auth') {
     $providers_list=return_query($query);
     ok_exit(Array("status" => "unauth", "providers" => $providers_list));
   } else {
-    ok_exit(Array("status" => "auth", "user" => $_SESSION['user']));
+    ok_exit(Array("status" => "auth", "user" => $_SESSION['user'], "refresh_expire_in" => ($_SESSION['refresh_expire'] - $time)));
   };
 };
 

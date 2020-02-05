@@ -87,7 +87,7 @@ $( document ).ready(function() {
 
         message += "\nId пользователя: "+data["ok"]["user"]["user_id"];
 
-        //show_dialog(message);
+        show_dialog(message);
       } else {
         // continue building of document structure
       };
