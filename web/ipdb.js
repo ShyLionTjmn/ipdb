@@ -56,7 +56,9 @@ $( document ).ready(function() {
          .click(function() {
            //$("#top_menu").hide();
            //$(this).find(".popup_submenu").toggle();
-           window.location.href="logout.php";
+           let ipdb_uri=window.location.href.split("/").slice(0, -1).join("/") + "/";
+
+           window.location.href="logout.php?back_uri="+encodeURIComponent(ipdb_uri);
          })
        )
        .append( $(SPAN).addClass("ui-button").text("Button")

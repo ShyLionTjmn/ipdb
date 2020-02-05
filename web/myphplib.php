@@ -1,5 +1,17 @@
 <?php
 
+function dumper($var) {
+  ob_start();
+  var_dump($var);
+  $dump_str=ob_get_contents();
+  ob_end_clean();
+  return $dump_str;
+};
+
+function jstr($data) {
+  return json_encode($data, JSON_PRETTY_PRINT);
+};
+
 function reset_session() {
   foreach($_SESSION as $key => $val) {
     unset($_SESSION[$key]);

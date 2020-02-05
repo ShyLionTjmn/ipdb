@@ -32,6 +32,7 @@ CREATE TABLE users (
   user_phone	VARCHAR(256) NOT NULL DEFAULT '',
   user_super	INTEGER NOT NULL DEFAULT 0,
   user_state	INTEGER NOT NULL DEFAULT -1 COMMENT '-2: deleted, -1: auto-added, 0: disabled, 1: enabled',
+  user_last_login DATETIME NOT NULL,
   `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   PRIMARY KEY pl_user_id(user_id),

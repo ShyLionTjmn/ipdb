@@ -17,18 +17,6 @@ header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
 
-function jstr($data) {
-  return json_encode($data, JSON_PRETTY_PRINT);
-};
-
-function dumper($var) {
-  ob_start();
-  var_dump($var);
-  $dump_str=ob_get_contents();
-  ob_end_clean();
-  return $dump_str;
-};
-
 $db=null;
 
 function error_exit($redtext) {
@@ -104,7 +92,7 @@ foreach(Array('expire', 'refresh_expire', 'user', 'refresh_token', 'openid_ap_id
   };
 };
 
-if(isset($_SESSION['expire']) && $_SESSION['expire'] <= $time + 295) {
+if(isset($_SESSION['expire']) && $_SESSION['expire'] <= $time+295) {
   if($_SESSION['refresh_expire'] <= $time) {
     reset_session();
   } else {

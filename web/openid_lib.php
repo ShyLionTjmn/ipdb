@@ -114,7 +114,7 @@ function decode_token($token_str, $pub_key=NULL, $hmac_key=NULL) {
   return $ret;
 };
 
-function process_tokens($tokens, $ap) {
+function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
   global $DEFAULT_MAX_AUTO_ADD_ALLOWED;
   global $MAX_TOKEN_AGE;
 
@@ -207,6 +207,10 @@ function process_tokens($tokens, $ap) {
   $user=return_one($query);
   if($user !== NULL) {
   
+    if($just_logged_in) {
+      run_query("UPDATE users SET user_last_login=NOW() WHERE user_id=".mq($user['user_id']));
+    };
+
     if($user['user_state'] == 1) {
       $updates=Array();
       if(isset($id_token['name']) && $user['user_name'] != $id_token['name']) {
@@ -250,6 +254,7 @@ function process_tokens($tokens, $ap) {
       $query="INSERT INTO users SET";
       $query .= " user_fk_ap_id=".mq($ap['ap_id']);
       $query .= ",user_sub=".mq($id_token['sub']);
+      $query .= ",user_last_login=NOW()";
       if(isset($id_token['name'])) {
         $query .= ",user_name=".mq($id_token['name']);
       };
@@ -262,16 +267,6 @@ function process_tokens($tokens, $ap) {
   
       run_query($query);
       trans_end();
-      $query="SELECT * FROM users WHERE TRUE";
-      $query .= " AND user_fk_ap_id=".mq($ap['ap_id']);
-      $query .= " AND user_sub=".mq($id_token['sub']);
-  
-      $user=return_one($query);
-  
-      if($user === NULL) {
-        reset_session();
-        return(Array("error" => "Ошибка авто-добавления пользователя"));
-      };
   
     } else {
       trans_end();
@@ -279,7 +274,18 @@ function process_tokens($tokens, $ap) {
       return(Array("error" => "Пользователь не существует и превышен лимит на авто-добавление новых пользователей. Обратитесь к администратору системы"));
     };
   };
+
+  $query="SELECT * FROM users WHERE TRUE";
+  $query .= " AND user_fk_ap_id=".mq($ap['ap_id']);
+  $query .= " AND user_sub=".mq($id_token['sub']);
   
+  $user=return_one($query);
+
+  if($user === NULL) {
+    reset_session();
+    return(Array("error" => "Ошибка авто-добавления пользователя"));
+  };
+
   $_SESSION['expire']=$id_token['exp'];
   $_SESSION['refresh_expire']=$refresh_token['exp'];
   $_SESSION['user']=$user;

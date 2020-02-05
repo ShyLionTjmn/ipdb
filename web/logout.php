@@ -14,18 +14,6 @@ $time=time();
 
 $IPDB_CHARSET="utf8mb4";
 
-function jstr($data) {
-  return json_encode($data, JSON_PRETTY_PRINT);
-};
-
-function dumper($var) {
-  ob_start();
-  var_dump($var);
-  $dump_str=ob_get_contents();
-  ob_end_clean();
-  return $dump_str;
-};
-
 $db=null;
 
 $html_started=FALSE;
@@ -71,11 +59,11 @@ function error_exit($redtext) {
   exit;
 };
 
-function ok_exit($redtext) {
+function ok_exit($uri) {
   global $curl;
   if(isset($curl) && $curl !== FALSE) { curl_close($curl); };
   close_db();
-  header("Location: /ipdb/");
+  header("Location: ".$uri);
   exit;
 };
 
@@ -84,6 +72,8 @@ function require_param($param_name) {
     error_exit("Required param '$param_name' is missing");
   };
 };
+
+require_param("back_uri");
 
 $curl = curl_init();
 if($curl === FALSE) {
@@ -108,56 +98,29 @@ session_start();
 
 #error_exit($_SESSION);
 
-require_param("code");
-require_param("ap_id");
-
-if(!isset($_SESSION['openid_ap_id']) || $_SESSION['openid_ap_id'] != $_REQUEST['ap_id']) {
+if(!isset($_SESSION['openid_ap_id'])) {
   reset_session();
-  error_exit("Auth sync error");
+  ok_exit($_REQUEST['back_uri']);
 };
 
-$query="SELECT * FROM aps WHERE ap_off = 0 AND ap_id=".mq($_REQUEST['ap_id']);
-$ap=return_one($query, TRUE);
-
-
-$post_fields=Array("client_id" => $ap['ap_client_id'],
-                   "grant_type" => "authorization_code",
-                   "code" => $_REQUEST['code'],
-                   "redirect_uri" => $_SESSION['openid_redirect_uri']
-);
-
-$post_headers=NULL;
-if($ap['ap_client_secret'] != "") {
-  $post_headers="Authorization: Basic ".base64_encode(urlencode($ap['ap_client_id']).":".urlencode($ap['ap_client_secret']));
-};
-
-$tokens=http_post($ap['ap_token_ep'], $post_fields, $post_headers);
-
-if(isset($tokens['error'])) {
-  if($tokens['error'] == "invalid_grant") {
-    header("Location: ".$_SESSION['openid_success_uri']);
-    reset_session();
-    exit;
-  } else {
-    reset_session();
-    error_exit($tokens['error']);
-  };
-};
-
-$debug_out=Array();
-$debug_out['tokens']=$tokens;
-
-$pres=process_tokens($tokens, $ap);
-
-if(isset($pres['error'])) {
+$query="SELECT * FROM aps WHERE ap_off = 0 AND ap_id=".mq($_SESSION['openid_ap_id']);
+$ap=return_one($query);
+if($ap === NULL || $ap === FALSE) {
   reset_session();
-  error_exit($pres['error']);
+  ok_exit($_REQUEST['back_uri']);
 };
 
-close_db();
+reset_session();
 
-$_SESSION['source'] = "login";
+$uri=$ap['ap_logout_ep'];
+if(strpos($uri, "?") === FALSE) {
+  $uri .= "?";
+} else {
+  $uri .= "&";
+};
 
-header("Location: ".$_SESSION['openid_success_uri']);
+$uri .= "post_logout_redirect_uri=".urlencode($_REQUEST['back_uri']);
+
+ok_exit($uri);
 
 ?>

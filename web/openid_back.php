@@ -14,18 +14,6 @@ $time=time();
 
 $IPDB_CHARSET="utf8mb4";
 
-function jstr($data) {
-  return json_encode($data, JSON_PRETTY_PRINT);
-};
-
-function dumper($var) {
-  ob_start();
-  var_dump($var);
-  $dump_str=ob_get_contents();
-  ob_end_clean();
-  return $dump_str;
-};
-
 $db=null;
 
 $html_started=FALSE;
@@ -71,11 +59,11 @@ function error_exit($redtext) {
   exit;
 };
 
-function ok_exit($redtext) {
+function ok_exit($uri) {
   global $curl;
   if(isset($curl) && $curl !== FALSE) { curl_close($curl); };
   close_db();
-  header("Location: /ipdb/");
+  header("Location: ".$uri);
   exit;
 };
 
@@ -147,17 +135,15 @@ if(isset($tokens['error'])) {
 $debug_out=Array();
 $debug_out['tokens']=$tokens;
 
-$pres=process_tokens($tokens, $ap);
+$pres=process_tokens($tokens, $ap, TRUE);
 
 if(isset($pres['error'])) {
   reset_session();
   error_exit($pres['error']);
 };
 
-close_db();
-
 $_SESSION['source'] = "login";
 
-header("Location: ".$_SESSION['openid_success_uri']);
+ok_exit($_SESSION['openid_success_uri']);
 
 ?>
