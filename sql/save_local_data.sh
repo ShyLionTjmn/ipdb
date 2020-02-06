@@ -15,15 +15,15 @@ fi
 TABLE="users"
 FILE="/devel/ipdb/sql/.00100_${TABLE}${PREFIX}.sql"
 echo "save $TABLE to $FILE"
-$DUMP_CMD ipdb $TABLE                      > $FILE | exit 1
+$DUMP_CMD ipdb $TABLE                      > $FILE || exit 1
 
 TABLE="groups"
 FILE="/devel/ipdb/sql/.00110_${TABLE}${PREFIX}.sql"
 echo "save $TABLE to $FILE"
-$DUMP_CMD --where="group_id>2" ipdb $TABLE > $FILE | exit 1
+$DUMP_CMD --where="group_id>2" ipdb $TABLE > $FILE || exit 1
 
 TABLE="ugs"
 FILE="/devel/ipdb/sql/.00120_${TABLE}${PREFIX}.sql"
 echo "save $TABLE to $FILE"
-$DUMP_CMD ipdb $TABLE                      > $FILE | exit 1
+$DUMP_CMD ipdb $TABLE                      > $FILE || exit 1
 

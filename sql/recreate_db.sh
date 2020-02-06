@@ -12,11 +12,11 @@ $MYSQL -B -N -e 'SHOW TABLES' | sed 's/.*/DROP TABLE &;/' | $MYSQL --init-comman
 for f in /devel/ipdb/sql/schema.sql /devel/ipdb/sql/schema_populate_ru.sql /devel/ipdb/sql/local_data.sql
 do
   echo "Importing $f"
-  $MYSQL < $f | exit 1
+  $MYSQL < $f || exit 1
 done
 
 for f in `ls /devel/ipdb/sql/.0*.auto.sql`
 do
   echo "Importing $f"
-  $MYSQL < $f | exit 1
+  $MYSQL < $f || exit 1
 done

@@ -13,7 +13,7 @@ CREATE TABLE aps (
   ap_client_secret	VARCHAR(1024) NOT NULL DEFAULT '',
   ap_issuer	VARCHAR(1024) NOT NULL DEFAULT '',
   ap_rsa_pub_key	TEXT(16000) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL DEFAULT '',
-  `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   PRIMARY KEY pk_ap_id(ap_id)
 );
@@ -23,7 +23,7 @@ CREATE TABLE groups (
   group_name	VARCHAR(190) NOT NULL DEFAULT '',
   group_rights	VARCHAR(1024) NOT NULL DEFAULT '',
   group_default	INTEGER NOT NULL DEFAULT 0,
-  `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   PRIMARY KEY pk_group_id(group_id),
   UNIQUE KEY uk_group_name(group_name)
@@ -76,7 +76,7 @@ CREATE TABLE users (
   user_phone	VARCHAR(256) NOT NULL DEFAULT '',
   user_state	INTEGER NOT NULL DEFAULT -1 COMMENT '-2: deleted, -1: auto-added, 0: disabled, 1: enabled',
   user_last_login DATETIME NOT NULL,
-  `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   PRIMARY KEY pk_user_id(user_id),
   FOREIGN KEY fk_user_ap_id(user_fk_ap_id) REFERENCES aps(ap_id) ON DELETE SET NULL ON UPDATE CASCADE,
@@ -86,7 +86,7 @@ CREATE TABLE users (
 CREATE TABLE ugs (
   ug_fk_user_id	INTEGER NOT NULL,
   ug_fk_group_id	INTEGER NOT NULL,
-  `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   UNIQUE KEY uk_id_pair(ug_fk_user_id,ug_fk_group_id),
   FOREIGN KEY fk_user_id(ug_fk_user_id) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -94,19 +94,19 @@ CREATE TABLE ugs (
 );
 
 CREATE TABLE atts (
-  `att_id` int(11) NOT NULL AUTO_INCREMENT,
-  `att_key` varchar(64) NOT NULL,
-  `att_object` varchar(16) NOT NULL,
-  `att_regex` varchar(256) NOT NULL DEFAULT '.*',
-  `att_name` varchar(256) NOT NULL,
-  `att_comment` varchar(1024) NOT NULL,
-  `att_default` varchar(1024) NOT NULL,
-  `att_multiple` int(11) NOT NULL DEFAULT '0',
-  `att_input_size` varchar(16) NOT NULL DEFAULT '4em',
-  `att_sort` int(11) NOT NULL DEFAULT 0,
-  `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `att_type` varchar(64) NOT NULL DEFAULT 'text',
-  `att_flags` int(11) NOT NULL DEFAULT '0',
+  `att_id`	int(11) NOT NULL AUTO_INCREMENT,
+  `att_key`	varchar(64) NOT NULL,
+  `att_object`	varchar(16) NOT NULL,
+  `att_regex`	varchar(256) NOT NULL DEFAULT '.*',
+  `att_name`	varchar(256) NOT NULL,
+  `att_comment`	varchar(1024) NOT NULL,
+  `att_default`	varchar(1024) NOT NULL,
+  `att_multiple`	int(11) NOT NULL DEFAULT '0',
+  `att_input_size`	varchar(16) NOT NULL DEFAULT '4em',
+  `att_sort`	int(11) NOT NULL DEFAULT 0,
+  `att_type`	varchar(64) NOT NULL DEFAULT 'text',
+  `att_flags`	int(11) NOT NULL DEFAULT '0',
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   PRIMARY KEY (`att_id`),
   UNIQUE KEY `uk_att` (`att_key`,`att_object`),
@@ -115,12 +115,12 @@ CREATE TABLE atts (
 );
 
 CREATE TABLE `atvs` (
-  `atv_id` int(11) NOT NULL AUTO_INCREMENT,
-  `atv_fk_att_id` int(11) NOT NULL,
-  `atv_object_id` int(11) NOT NULL,
-  `atv_index` int(11) NOT NULL DEFAULT '0',
-  `atv_value` varchar(1024) NOT NULL,
-  `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `atv_id`	int(11) NOT NULL AUTO_INCREMENT,
+  `atv_fk_att_id`	int(11) NOT NULL,
+  `atv_object_id`	int(11) NOT NULL,
+  `atv_index`	int(11) NOT NULL DEFAULT '0',
+  `atv_value`	varchar(1024) NOT NULL,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
   PRIMARY KEY (`atv_id`),
   UNIQUE KEY `uk_atv` (`atv_object_id`,`atv_index`,`atv_fk_att_id`),
@@ -128,3 +128,62 @@ CREATE TABLE `atvs` (
   KEY `atv_fk_att_id` (`atv_fk_att_id`),
   FOREIGN KEY fk_atv_att_id(atv_fk_att_id) REFERENCES `atts` (`att_id`) ON UPDATE CASCADE ON DELETE CASCADE
 );
+
+# VLAN/BDs domains
+CREATE TABLE vds (
+  vd_id		INTEGER NOT NULL AUTO_INCREMENT,
+  vd_name	VARCHAR(190) NOT NULL DEFAULT '',
+  vd_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  vd_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time vlans data changed and periodiaclly checked by front-end to notify user if out of sync',
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	INTEGER,
+  PRIMARY KEY (vd_id),
+  UNIQUE KEY uk_vd_name(vd_name)
+);
+
+CREATE TABLE vlans (
+  vlan_id	INTEGER NOT NULL AUTO_INCREMENT,
+  vlan_number	INTEGER UNSIGNED NOT NULL,
+  vlan_name	VARCHAR(64) NOT NULL,
+  vlan_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  vlan_fk_vd_id	INTEGER NOT NULL,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	INTEGER,
+  PRIMARY KEY (vlan_id),
+  UNIQUE KEY uk_number_vd_id(vlan_number,vlan_fk_vd_id),
+  UNIQUE KEY uk_name_vd_id(vlan_name,vlan_fk_vd_id),
+  FOREIGN KEY (vlan_fk_vd_id) REFERENCES vds(vd_id) ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE sites (
+  site_id	INTEGER NOT NULL AUTO_INCREMENT,
+  site_name	VARCHAR(190) NOT NULL DEFAULT '',
+  site_address	VARCHAR(512) NOT NULL DEFAULT '',
+  site_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  site_lat	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
+  site_lon	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
+  site_fk_site_id INTEGER DEFAULT NULL,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	INTEGER,
+  PRIMARY KEY (site_id),
+  UNIQUE KEY uk_site_name(site_name),
+  FOREIGN KEY (site_fk_site_id) REFERENCES sites(site_id)
+);
+
+CREATE TABLE v4nets (
+  v4net_id	INTEGER NOT NULL AUTO_INCREMENT,
+  v4net_addr	INTEGER UNSIGNED NOT NULL,
+  v4net_mask	TINYINT UNSIGNED NOT NULL,
+  v4net_fk_site_id	INTEGER DEFAULT NULL,
+  v4net_fk_vlan_id	INTEGER DEFAULT NULL,
+  v4net_name	VARCHAR(256) NOT NULL DEFAULT '',
+  v4net_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  v4net_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	INTEGER,
+  PRIMARY KEY (v4net_id),
+  UNIQUE KEY uk_v4net_addr(v4net_addr),
+  FOREIGN KEY (v4net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
+  FOREIGN KEY (v4net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
+);
+
