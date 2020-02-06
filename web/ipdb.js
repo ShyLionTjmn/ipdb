@@ -22,7 +22,7 @@ $( document ).ready(function() {
     } else {
 
       let menu_bar = $(DIV).id("top_menu")
-       .css({"border": "1px solid gray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
+       .css({"border": "1px solid lightgray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
        .hide()
        .click(function(e) {
          e.stopPropagation();
@@ -44,7 +44,7 @@ $( document ).ready(function() {
        )
        .append( menu_bar )
        .append( $(DIV).id("user_info")
-         .css({"border": "1px solid gray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
+         .css({"border": "1px solid lightgray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
        )
        .appendTo( $("BODY") )
       ;

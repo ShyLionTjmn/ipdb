@@ -30,7 +30,7 @@ CREATE TABLE users (
   user_name	VARCHAR(256) NOT NULL DEFAULT '',
   user_email	VARCHAR(256) NOT NULL DEFAULT '',
   user_phone	VARCHAR(256) NOT NULL DEFAULT '',
-  user_super	INTEGER NOT NULL DEFAULT 0,
+  user_rights	VARCHAR(1024) NOT NULL DEFAULT '',
   user_state	INTEGER NOT NULL DEFAULT -1 COMMENT '-2: deleted, -1: auto-added, 0: disabled, 1: enabled',
   user_last_login DATETIME NOT NULL,
   `ts` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
