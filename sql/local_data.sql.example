@@ -1,9 +1,13 @@
-INSERT INTO aps(ap_name,ap_scope,ap_client_id,ap_auth_ep,ap_token_ep,ap_userinfo_ep,ap_logout_ep,ap_rsa_pub_key)
-  VALUES ('Keycloak', 'openid', 'ipdb',
-    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/auth',
-    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/token',
-    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/userinfo',
-    'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/logout',
-    'copy&paste realm RSA public key here'
-  )
+INSERT INTO aps SET
+  ap_name = 'Keycloak',
+  ap_scope = 'openid',
+  ap_client_id = 'ipdb',
+  ap_client_secret = 'get from auth provider',
+  ap_issuer = 'http://10.20.30.40:8080/auth/realms/R1',
+  ap_auth_ep = 'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/auth',
+  ap_token_ep = 'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/token',
+  ap_userinfo_ep = 'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/userinfo',
+  ap_logout_ep = 'http://10.20.30.40:8080/auth/realms/R1/protocol/openid-connect/logout',
+  ap_icon = 'http://10.20.30.40:8080/auth/resources/l4zyf/welcome/keycloak/logo.png',
+  ap_rsa_pub_key = 'MIIBIjANBgkqhki... get from auth provider ....'
 ;

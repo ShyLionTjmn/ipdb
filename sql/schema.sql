@@ -1,13 +1,3 @@
-DROP TABLE IF EXISTS atvs;
-DROP TABLE IF EXISTS atts;
-DROP TABLE IF EXISTS ugs;
-DROP TRIGGER IF EXISTS groups_insert_protect;
-DROP TRIGGER IF EXISTS groups_update_protect;
-DROP TRIGGER IF EXISTS groups_delete_protect;
-DROP TABLE IF EXISTS groups;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS aps;
-
 -- OpenID Connect auth providers
 CREATE TABLE aps (
   ap_id		INTEGER NOT NULL AUTO_INCREMENT,
