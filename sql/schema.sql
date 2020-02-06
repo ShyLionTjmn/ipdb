@@ -40,6 +40,7 @@ CREATE TABLE groups (
 );
 
 INSERT INTO groups SET group_name='default', group_default=1, group_rights='r_viewany';
+INSERT INTO groups SET group_name='Admins', group_default=0, group_rights='r_super';
 
 DELIMITER //
 

@@ -157,6 +157,8 @@ if(isset($_SESSION['user'])) {
       if($groups === NULL || $groups === "") { eror_exit("User is not in any group"); };
       $_SESSION['user']['groups'] = $groups;
       $rights=return_single("SELECT GROUP_CONCAT(DISTINCT group_rights SEPARATOR ',') FROM groups WHERE group_rights != '' AND group_id IN ($groups)");
+      if($rights === NULL) { $rights = ""; };
+      $_SESSION['user']['rights'] = $rights;
     };
   };
 };
