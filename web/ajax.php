@@ -149,6 +149,14 @@ if(isset($_SESSION['user'])) {
       reset_session();
     } else {
       $_SESSION['user'] = $user;
+      $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
+      if($groups === NULL) {
+        run_query("INSERT INTO ugs SET ug_fk_group_id=(SELECT group_id FROM groups WHERE group_default=1 LIMIT 1), ug_fk_user_id=".mq($_SESSION['user']['user_id']));
+        $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
+      };
+      if($groups === NULL || $groups === "") { eror_exit("User is not in any group"); };
+      $_SESSION['user']['groups'] = $groups;
+      $rights=return_single("SELECT GROUP_CONCAT(DISTINCT group_rights SEPARATOR ',') FROM groups WHERE group_rights != '' AND group_id IN ($groups)");
     };
   };
 };
