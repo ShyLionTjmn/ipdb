@@ -171,7 +171,6 @@ CREATE TABLE sites (
 );
 
 CREATE TABLE v4nets (
-  v4net_id	INTEGER NOT NULL AUTO_INCREMENT,
   v4net_addr	INTEGER UNSIGNED NOT NULL,
   v4net_mask	TINYINT UNSIGNED NOT NULL,
   v4net_fk_site_id	INTEGER DEFAULT NULL,
@@ -181,9 +180,44 @@ CREATE TABLE v4nets (
   v4net_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	INTEGER,
-  PRIMARY KEY (v4net_id),
-  UNIQUE KEY uk_v4net_addr(v4net_addr),
+  PRIMARY KEY (v4net_addr),
   FOREIGN KEY (v4net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
   FOREIGN KEY (v4net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
+
+CREATE TABLE v4ips(
+  v4ip_addr	INTEGER UNSIGNED NOT NULL,
+  v4ip_fk_v4net_addr	INTEGER UNSIGNED NOT NULL,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	INTEGER,
+  PRIMARY KEY (v4ip_addr),
+  KEY k_net(v4ip_fk_v4net_addr),
+  FOREIGN KEY (v4ip_fk_v4net_addr) REFERENCES v4nets(v4net_addr) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE v6nets (
+  v6net_addr    VARBINARY(16) NOT NULL,
+  v6net_mask    TINYINT UNSIGNED NOT NULL,
+  v6net_fk_site_id      INTEGER DEFAULT NULL,
+  v6net_fk_vlan_id      INTEGER DEFAULT NULL,
+  v6net_name    VARCHAR(256) NOT NULL DEFAULT '',
+  v6net_descr   VARCHAR(1024) NOT NULL DEFAULT '',
+  v6net_check   BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    INTEGER,
+  PRIMARY KEY (v6net_addr),
+  FOREIGN KEY (v6net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
+  FOREIGN KEY (v6net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
+);
+
+CREATE TABLE v6ips(
+  v6ip_addr     VARBINARY(16) NOT NULL,
+  v6ip_fk_v6net_addr    VARBINARY(16) NOT NULL,
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    INTEGER,
+  PRIMARY KEY (v6ip_addr),
+  KEY k_net(v6ip_fk_v6net_addr),
+  FOREIGN KEY (v6ip_fk_v6net_addr) REFERENCES v6nets(v6net_addr) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
 
