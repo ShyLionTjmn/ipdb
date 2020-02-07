@@ -8,6 +8,7 @@ BACKUP_FILE="/devel/ipdb/sql/.backup_"`date +%s`".sql"
 
 on_error() {
   echo "Restoring from backup"
+  $MYSQL -B -N -e 'SHOW TABLES' | sed 's/.*/DROP TABLE &;/' | $MYSQL --init-command="SET FOREIGN_KEY_CHECKS=0;" || exit 1
   $MYSQL < $BACKUP_FILE
   exit 1
 }
