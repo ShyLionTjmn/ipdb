@@ -399,7 +399,45 @@ CREATE TABLE v6rs(
   tc		TINYINT COMMENT 'v6 address ranges'
 );
 
-CREATE TABLE grn4rs(
-  grn4rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  grn4rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
-  grn4rs_fk_v4net_id
+CREATE TABLE gn4rs(
+  gn4rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gn4rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  gn4rs_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
+  gn4rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    BIGINT UNSIGNED,
+  PRIMARY KEY (gn4rs_id),
+  UNIQUE KEY uk_ids(gn4rs_fk_group_id,gn4rs_fk_v4net_id),
+  FOREIGN KEY (gn4rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gn4rs_fk_v4net_id) REFERENCES v4nets(v4net_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  tc		TINYINT COMMENT 'v4 net group rights'
+);
+
+CREATE TABLE gn6rs(
+  gn6rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gn6rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  gn6rs_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
+  gn6rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 6-take/edit IPs, 8-free IPs, 16-ignore range denies',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    BIGINT UNSIGNED,
+  PRIMARY KEY (gn6rs_id),
+  UNIQUE KEY uk_ids(gn6rs_fk_group_id,gn6rs_fk_v6net_id),
+  FOREIGN KEY (gn6rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gn6rs_fk_v6net_id) REFERENCES v6nets(v6net_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  tc		TINYINT COMMENT 'v6 net group rights'
+);
+
+CREATE TABLE gr4rs(
+  gr4rs_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gr4rs_fk_group_id     BIGINT UNSIGNED NOT NULL,
+  gr4rs_fk_v4r_id     BIGINT UNSIGNED NOT NULL,
+  gr4rs_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-igrore range denies',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    BIGINT UNSIGNED,
+  PRIMARY KEY (gr4rs_id),
+  UNIQUE KEY uk_ids(gr4rs_fk_group_id,gr4rs_fk_v4r_id),
+  FOREIGN KEY (gr4rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gr4rs_fk_v4r_id) REFERENCES v4rs(v4r_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  tc            TINYINT COMMENT 'v4 range group rights'
+);
+
