@@ -1,6 +1,6 @@
 -- OpenID Connect auth providers
 CREATE TABLE aps (
-  ap_id		INTEGER NOT NULL AUTO_INCREMENT,
+  ap_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   ap_off	INTEGER NOT NULL DEFAULT 0,
   ap_name	VARCHAR(256) NOT NULL DEFAULT '',
   ap_scope	VARCHAR(256) NOT NULL DEFAULT '',
@@ -14,17 +14,17 @@ CREATE TABLE aps (
   ap_issuer	VARCHAR(1024) NOT NULL DEFAULT '',
   ap_rsa_pub_key	TEXT(16000) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL DEFAULT '',
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY pk_ap_id(ap_id)
 );
 
 CREATE TABLE groups (
-  group_id	INTEGER NOT NULL AUTO_INCREMENT,
+  group_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   group_name	VARCHAR(190) NOT NULL DEFAULT '',
   group_rights	VARCHAR(1024) NOT NULL DEFAULT '',
   group_default	INTEGER NOT NULL DEFAULT 0,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY pk_group_id(group_id),
   UNIQUE KEY uk_group_name(group_name)
 );
@@ -68,8 +68,8 @@ DELIMITER ;
 
   
 CREATE TABLE users (
-  user_id	INTEGER NOT NULL AUTO_INCREMENT,
-  user_fk_ap_id	INTEGER,
+  user_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_fk_ap_id	BIGINT UNSIGNED,
   user_sub	VARCHAR(256) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL DEFAULT '',
   user_name	VARCHAR(256) NOT NULL DEFAULT '',
   user_email	VARCHAR(256) NOT NULL DEFAULT '',
@@ -77,37 +77,37 @@ CREATE TABLE users (
   user_state	INTEGER NOT NULL DEFAULT -1 COMMENT '-2: deleted, -1: auto-added, 0: disabled, 1: enabled',
   user_last_login DATETIME NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY pk_user_id(user_id),
   FOREIGN KEY fk_user_ap_id(user_fk_ap_id) REFERENCES aps(ap_id) ON DELETE SET NULL ON UPDATE CASCADE,
   UNIQUE KEY uk_ap_id_sub(user_fk_ap_id, user_sub)
 );
 
 CREATE TABLE ugs (
-  ug_fk_user_id	INTEGER NOT NULL,
-  ug_fk_group_id	INTEGER NOT NULL,
+  ug_fk_user_id	BIGINT UNSIGNED NOT NULL,
+  ug_fk_group_id	BIGINT UNSIGNED NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   UNIQUE KEY uk_id_pair(ug_fk_user_id,ug_fk_group_id),
   FOREIGN KEY fk_user_id(ug_fk_user_id) REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY fk_group_id(ug_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE atts (
-  `att_id`	int(11) NOT NULL AUTO_INCREMENT,
+  `att_id`	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `att_key`	varchar(64) NOT NULL,
   `att_object`	varchar(16) NOT NULL,
   `att_regex`	varchar(256) NOT NULL DEFAULT '.*',
   `att_name`	varchar(256) NOT NULL,
   `att_comment`	varchar(1024) NOT NULL,
-  `att_default`	varchar(1024) NOT NULL,
+  `att_default`	varchar(1024) DEFAULT NULL,
   `att_multiple`	int(11) NOT NULL DEFAULT '0',
   `att_input_size`	varchar(16) NOT NULL DEFAULT '4em',
   `att_sort`	int(11) NOT NULL DEFAULT 0,
   `att_type`	varchar(64) NOT NULL DEFAULT 'text',
   `att_flags`	int(11) NOT NULL DEFAULT '0',
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (`att_id`),
   UNIQUE KEY `uk_att` (`att_key`,`att_object`),
   KEY `att_key` (`att_key`),
@@ -115,13 +115,13 @@ CREATE TABLE atts (
 );
 
 CREATE TABLE `atvs` (
-  `atv_id`	int(11) NOT NULL AUTO_INCREMENT,
-  `atv_fk_att_id`	int(11) NOT NULL,
-  `atv_object_id`	int(11) NOT NULL,
-  `atv_index`	int(11) NOT NULL DEFAULT '0',
+  `atv_id`	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `atv_fk_att_id`	BIGINT UNSIGNED NOT NULL,
+  `atv_object_id`	BIGINT UNSIGNED NOT NULL,
+  `atv_index`	BIGINT UNSIGNED NOT NULL DEFAULT '0',
   `atv_value`	varchar(1024) NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (`atv_id`),
   UNIQUE KEY `uk_atv` (`atv_object_id`,`atv_index`,`atv_fk_att_id`),
   KEY `atv_object_id` (`atv_object_id`),
@@ -131,24 +131,24 @@ CREATE TABLE `atvs` (
 
 # VLAN/BDs domains
 CREATE TABLE vds (
-  vd_id		INTEGER NOT NULL AUTO_INCREMENT,
+  vd_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   vd_name	VARCHAR(190) NOT NULL DEFAULT '',
   vd_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   vd_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time vlans data changed and periodiaclly checked by front-end to notify user if out of sync',
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (vd_id),
   UNIQUE KEY uk_vd_name(vd_name)
 );
 
 CREATE TABLE vlans (
-  vlan_id	INTEGER NOT NULL AUTO_INCREMENT,
-  vlan_number	INTEGER UNSIGNED NOT NULL,
+  vlan_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vlan_number	BIGINT UNSIGNED NOT NULL,
   vlan_name	VARCHAR(64) NOT NULL,
   vlan_descr	VARCHAR(1024) NOT NULL DEFAULT '',
-  vlan_fk_vd_id	INTEGER NOT NULL,
+  vlan_fk_vd_id	BIGINT UNSIGNED NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (vlan_id),
   UNIQUE KEY uk_number_vd_id(vlan_number,vlan_fk_vd_id),
   UNIQUE KEY uk_name_vd_id(vlan_name,vlan_fk_vd_id),
@@ -156,68 +156,156 @@ CREATE TABLE vlans (
 );
 
 CREATE TABLE sites (
-  site_id	INTEGER NOT NULL AUTO_INCREMENT,
+  site_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   site_name	VARCHAR(190) NOT NULL DEFAULT '',
   site_address	VARCHAR(512) NOT NULL DEFAULT '',
   site_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   site_lat	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
   site_lon	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
-  site_fk_site_id INTEGER DEFAULT NULL,
+  site_fk_site_id BIGINT UNSIGNED DEFAULT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (site_id),
   UNIQUE KEY uk_site_name(site_name),
   FOREIGN KEY (site_fk_site_id) REFERENCES sites(site_id)
 );
 
+-- ip columns
+CREATE TABLE ics(
+  ic_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ic_default	INTEGER NOT NULL DEFAULT 0 COMMENT 'auto-add to created templates',
+  ic_name	VARCHAR(128) NOT NULL DEFAULT '',
+  ic_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
+  ic_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
+  ic_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  ic_sort	INTEGER NOT NULL DEFAULT 0,
+  ic_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as $("INPUT").css( ic_style )',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    BIGINT UNSIGNED,
+  PRIMARY KEY (ic_id),
+  UNIQUE KEY uk_ic_name(ic_name),
+  COMMENT 'IP columns, linked to nets via templates'
+);
+
+CREATE TABLE tps(
+  tp_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tp_name	VARCHAR(190) NOT NULL DEFAULT '',
+  tp_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    BIGINT UNSIGNED,
+  PRIMARY KEY (tp_id),
+  UNIQUE KEY uk_tp_name(tp_name),
+  COMMENT 'net templates'
+);
+
+CREATE TABLE tcs(
+  tc_fk_ic_id	BIGINT UNSIGNED NOT NULL,
+  tc_fk_tp_id	BIGINT UNSIGNED NOT NULL,
+  UNIQUE KEY uk_ids(tc_fk_ic_id,tc_fk_tp_id),
+  KEY k_tp_id(tc_fk_tp_id),
+  FOREIGN KEY (tc_fk_ic_id) REFERENCES ics(ic_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (tc_fk_tp_id) REFERENCES tps(tp_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  COMMENT 'template columns'
+);
+
 CREATE TABLE v4nets (
+  v4net_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
   v4net_addr	INTEGER UNSIGNED NOT NULL,
   v4net_mask	TINYINT UNSIGNED NOT NULL,
-  v4net_fk_site_id	INTEGER DEFAULT NULL,
-  v4net_fk_vlan_id	INTEGER DEFAULT NULL,
+  v4net_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
+  v4net_fk_vlan_id	BIGINT UNSIGNED DEFAULT NULL,
   v4net_name	VARCHAR(256) NOT NULL DEFAULT '',
   v4net_descr	VARCHAR(1024) NOT NULL DEFAULT '',
-  v4net_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
+  v4net_check	BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
+  v4net_fk_tp_id	BIGINT UNSIGNED DEFAULT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4net_addr),
+  FOREIGN KEY (v4net_fk_tp_id) REFERENCES tps(tp_id) ON DELETE SET NULL,
   FOREIGN KEY (v4net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
   FOREIGN KEY (v4net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
 
 CREATE TABLE v4ips(
+  v4ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v4ip_addr	INTEGER UNSIGNED NOT NULL,
   v4ip_fk_v4net_addr	INTEGER UNSIGNED NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id	INTEGER,
+  fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4ip_addr),
   KEY k_net(v4ip_fk_v4net_addr),
   FOREIGN KEY (v4ip_fk_v4net_addr) REFERENCES v4nets(v4net_addr) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 CREATE TABLE v6nets (
+  v6net_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
   v6net_addr    VARBINARY(16) NOT NULL,
   v6net_mask    TINYINT UNSIGNED NOT NULL,
-  v6net_fk_site_id      INTEGER DEFAULT NULL,
-  v6net_fk_vlan_id      INTEGER DEFAULT NULL,
+  v6net_fk_site_id      BIGINT UNSIGNED DEFAULT NULL,
+  v6net_fk_vlan_id      BIGINT UNSIGNED DEFAULT NULL,
   v6net_name    VARCHAR(256) NOT NULL DEFAULT '',
   v6net_descr   VARCHAR(1024) NOT NULL DEFAULT '',
-  v6net_check   BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
+  v6net_check   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
+  v6net_fk_tp_id	BIGINT UNSIGNED DEFAULT NULL,
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id    INTEGER,
+  fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (v6net_addr),
+  FOREIGN KEY (v6net_fk_tp_id) REFERENCES tps(tp_id) ON DELETE SET NULL,
   FOREIGN KEY (v6net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
   FOREIGN KEY (v6net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
 
 CREATE TABLE v6ips(
+  v6ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v6ip_addr     VARBINARY(16) NOT NULL,
   v6ip_fk_v6net_addr    VARBINARY(16) NOT NULL,
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  fk_user_id    INTEGER,
+  fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (v6ip_addr),
   KEY k_net(v6ip_fk_v6net_addr),
   FOREIGN KEY (v6ip_fk_v6net_addr) REFERENCES v6nets(v6net_addr) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
+
+CREATE TABLE i4vs(
+  iv_fk_ic_id	BIGINT UNSIGNED NOT NULL,
+  iv_fk_v4ip_id	BIGINT UNSIGNED NOT NULL,
+  iv_value	VARCHAR(256) NOT NULL DEFAULT '',
+  UNIQUE KEY uk_ids(iv_fk_ic_id,iv_fk_v4ip_id),
+  KEY k_v4ip_id(iv_fk_v4ip_id),
+  FOREIGN KEY (iv_fk_ic_id) REFERENCES ics(ic_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (iv_fk_v4ip_id) REFERENCES v4ips(v4ip_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  COMMENT 'ipv4 column values'
+);
+
+CREATE TABLE i6vs(
+  iv_fk_ic_id	BIGINT UNSIGNED NOT NULL,
+  iv_fk_v6ip_id	BIGINT UNSIGNED NOT NULL,
+  iv_value	VARCHAR(256) NOT NULL DEFAULT '',
+  UNIQUE KEY uk_ids(iv_fk_ic_id,iv_fk_v4ip_id),
+  KEY k_v6ip_id(iv_fk_v6ip_id),
+  FOREIGN KEY (iv_fk_ic_id) REFERENCES ics(ic_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (iv_fk_v6ip_id) REFERENCES v6ips(v6ip_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  COMMENT 'ipv6 column values'
+);
+
+CREATE TABLE n4cs(
+  nc_fk_ic_id	BIGINT UNSIGNED NOT NULL,
+  nc_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
+  UNIQUE KEY (nc_fk_ic_id, nc_fk_v4net_id),
+  KEY k_v6net_id (nc_fk_v6net_id),
+  FOREIGN KEY (nc_fk_ic_id) REFERENCES ics(ic_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (nc_fk_v4net_id) REFERENCES v4nets(v4net_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  COMMENT 'v4 network columns'
+);
+
+CREATE TABLE n6cs(
+  nc_fk_ic_id	BIGINT UNSIGNED NOT NULL,
+  nc_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
+  UNIQUE KEY (nc_fk_ic_id, nc_fk_v6net_id),
+  KEY k_v6net_id (nc_fk_v6net_id),
+  FOREIGN KEY (nc_fk_ic_id) REFERENCES ics(ic_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (nc_fk_v6net_id) REFERENCES v6nets(v6net_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  COMMENT 'v6 network columns'
+);
 

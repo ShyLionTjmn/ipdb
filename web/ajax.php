@@ -160,8 +160,6 @@ if(isset($_SESSION['user'])) {
       if($rights === NULL) { $rights = ""; };
       $_SESSION['user']['rights'] = $rights;
 
-      $v6test=return_single("select v6net_addr from v6nets");
-      $_SESSION['user']['v6test'] = bin2hex($v6test);
     };
   };
 };
