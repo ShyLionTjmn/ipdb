@@ -252,13 +252,13 @@ CREATE TABLE v4nets (
 CREATE TABLE v4ips(
   v4ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v4ip_addr	INTEGER UNSIGNED NOT NULL,
-  v4ip_fk_v4net_addr	INTEGER UNSIGNED NOT NULL,
+  v4ip_fk_v4net_id	INTEGER UNSIGNED NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4ip_id),
   UNIQUE KEY (v4ip_addr),
-  KEY k_net(v4ip_fk_v4net_addr),
-  FOREIGN KEY (v4ip_fk_v4net_addr) REFERENCES v4nets(v4net_addr) ON UPDATE CASCADE ON DELETE CASCADE
+  KEY k_net(v4ip_fk_v4net_id),
+  FOREIGN KEY (v4ip_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 CREATE TABLE v6nets (
@@ -283,13 +283,13 @@ CREATE TABLE v6nets (
 CREATE TABLE v6ips(
   v6ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v6ip_addr     VARBINARY(16) NOT NULL,
-  v6ip_fk_v6net_addr    VARBINARY(16) NOT NULL,
+  v6ip_fk_v6net_id    VARBINARY(16) NOT NULL,
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (v6ip_id),
   UNIQUE KEY (v6ip_addr),
-  KEY k_net(v6ip_fk_v6net_addr),
-  FOREIGN KEY (v6ip_fk_v6net_addr) REFERENCES v6nets(v6net_addr) ON UPDATE CASCADE ON DELETE CASCADE
+  KEY k_net(v6ip_fk_v6net_id),
+  FOREIGN KEY (v6ip_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 
@@ -368,13 +368,38 @@ CREATE TABLE v6favs(
 );
 
 CREATE TABLE v4rs(
-  v4r_id	BIGINT UNSIGNED NOT NULL,
+  v4r_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   v4r_start	INTEGER UNSIGNED NOT NULL,
   v4r_stop	INTEGER UNSIGNED NOT NULL,
   v4r_name	VARCHAR(128) NOT NULL DEFAULT '',
-  v4r_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
-  v4r_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
   v4r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   v4r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
+  v4r_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
+  v4r_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	BIGINT UNSIGNED,
+  PRIMARY KEY (v4r_id),
+  UNIQUE KEY uk_name(v4r_start,v4r_stop,v4r_name),
+  tc		TINYINT COMMENT 'v4 address ranges'
 );
 
+CREATE TABLE v6rs(
+  v6r_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  v6r_start	VARBINARY(16) NOT NULL,
+  v6r_stop	VARBINARY(16) NOT NULL,
+  v6r_name	VARCHAR(128) NOT NULL DEFAULT '',
+  v6r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  v6r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
+  v6r_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
+  v6r_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	BIGINT UNSIGNED,
+  PRIMARY KEY (v6r_id),
+  UNIQUE KEY uk_name(v6r_start,v6r_stop,v6r_name),
+  tc		TINYINT COMMENT 'v6 address ranges'
+);
+
+CREATE TABLE grn4rs(
+  grn4rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  grn4rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  grn4rs_fk_v4net_id
