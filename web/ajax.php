@@ -59,7 +59,8 @@ function require_p($param_name, $param_regex=null) {
   };
 };
 
-function has_right($rightstr, $right) {
+function has_right($right, $rightstr=NULL) {
+  if($rightstr === NULL) { $rightstr = $_SESSION['user']['rights']; };
   if(strpos($rightstr, 'r_super') !== FALSE || strpos($rightstr, $right) !== FALSE) {
     return TRUE;
   } else {
@@ -164,11 +165,13 @@ if(isset($_SESSION['user'])) {
       };
       if($groups === NULL || $groups === "") { eror_exit("User is not in any group"); };
       $_SESSION['user']['groups'] = $groups;
+
       $rights=return_single("SELECT GROUP_CONCAT(DISTINCT group_rights SEPARATOR ',') FROM groups WHERE group_rights != '' AND group_id IN ($groups)");
       if($rights === NULL) { $rights = ""; };
+      #used by has_right !
       $_SESSION['user']['rights'] = $rights;
 
-      if(!has_right($_SESSION['user']['rights'], 'r_super')) {
+      if(!has_right('r_super')) {
         #networks access
         $query="SELECT gn4rs_rmask, v4net_id, v4net_addr, v4net_mask FROM gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id WHERE gn4rs_fk_group_id IN ($groups)";
         $_SESSION['user']['v4nets_access']=return_query($query, 'v4net_id');
@@ -203,13 +206,14 @@ if($q['action'] == 'check_auth') {
     $query="SELECT DISTINCT v4net_addr, v4net_mask FROM g4favs WHERE v4fav_fk_group_id IN (".$_SESSION['user']['groups'].") ORDER BY v4net_addr ASC, v4net_mask ASC";
     $g4favs=return_query($query);
 
-    ok_exit(Array("status" => "auth",
-                  "user" => $_SESSION['user'],
-                  "v4favs" => $v4favs,
-                  "g4favs" => $g4favs,
-                  "expire_in" => ($_SESSION['expire'] - $time),
-                  "refresh_expire_in" => ($_SESSION['refresh_expire'] - $time)
-    ));
+    $ret=Array("status" => "auth",
+                "user" => $_SESSION['user'],
+                "expire_in" => ($_SESSION['expire'] - $time),
+                "refresh_expire_in" => ($_SESSION['refresh_expire'] - $time)
+    );
+    $ret['user']['v4favs']=$v4favs;
+    $ret['user']['g4favs']=$g4favs;
+    ok_exit($ret);
   };
 };
 

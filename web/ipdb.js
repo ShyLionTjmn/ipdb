@@ -1,12 +1,155 @@
 var ud;
 
+const R_SUPER='r_super';
+const R_VIEWANY='r_viewany';
+
+const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
+const s_blocks_color={"color": "rgb(79, 129, 189)"};
+
+function has_right(right, rightstr) {
+  if(rightstr === undefined) { rightstr=ud['user']['rights']; };
+  if(rightstr.indexOf(R_SUPER) >= 0 || rightstr.indexOf(right) >= 0) {
+    return true;
+  } else {
+    return false;
+  };
+};
+
+function v4nav(data) {
+  let contents=$("#ipv4");
+  if(contents.length != 1) {
+    error_at();
+  };
+
+  contents.empty();
+
+  $("#page_title").text("IPv4 v4nav");
+};
+
+function v4view(data) {
+  let contents=$("#ipv4");
+  if(contents.length != 1) {
+    error_at();
+  };
+
+  contents.empty();
+
+  $("#page_title").text("IPv4 view");
+};
+
+function v4get_net(net, masklen) {
+  run_query({"action": "v4get_net", "net": net, "mask": masklen}, function(data) {
+    if(data["ok"]["type"] == "nav") {
+      v4nav(data["ok"]);
+    } else {
+      v4view(data["ok"]);
+    };
+  });
+};
+
 function ipv4() {
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
   };
 
-  contents.text("IPV4");
+  $("#page_title").text("IPv4");
+
+  contents.empty();
+
+  $(DIV)
+   .css({"display": "inline-block", "margin": "5px", "border": "3px solid", "border-radius": "5px", "vertical-align": "top"})
+   .css(s_blocks_border_color)
+   .append( $(DIV)
+     .css({"border-bottom": "2px solid"})
+     .css(s_blocks_border_color)
+     .append( $(DIV)
+       .css({"padding-right": "5px", "display": "inline-block"})
+       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-sitemap").css(s_blocks_color) )
+     )
+     .append( $(DIV)
+       .css({"display": "inline-block", "border-left": "2px solid"})
+       .css(s_blocks_border_color)
+       .append( $(SPAN).text("Навигация").css({"font-size": "larger", "margin-left": "0.5em", "margin-right": "0.5em"}) )
+     )
+   )
+   .append( $(TABLE)
+     .append( $(TR)
+       .append( $(TD)
+         .append( $(SPAN).text("0.0.0.0/0").title("Перейти к навигации по подсетям") )
+       )
+       .append( $(TD)
+         .append( $(BUTTON).button({"icon": "ui-icon-sitemap"})
+           .title("Перейти к навигации по подсетям")
+           .css({"padding-left": "0.5em", "padding-right": "0.5em", "margin-left": "1em"})
+           .click(function() {
+             v4get_net(0, 0);
+           })
+         )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD)
+         .append( $(INPUT).id("v4goto_net").prop({"placeholder": "x.x.x.x/mm"})
+           .title("Введите адрес сети в CIDR нотации. Если сеть не существует, интерфейс перейдет в режим навигации ближайшей в сторону увеличения сети, либо к просмотру/редактированию существующей сети")
+         )
+       )
+       .append( $(TD)
+         .append( $(BUTTON).button({"icon": "ui-icon-sitemap"})
+           .title("Перейти к навигации по указаной подсети")
+           .css({"padding-left": "0.5em", "padding-right": "0.5em", "margin-left": "1em"})
+           .click(function() {
+           })
+         )
+       )
+     )
+   )
+   .appendTo( contents )
+  ;
+
+  $(DIV)
+   .css({"display": "inline-block", "margin": "5px", "border": "3px solid", "border-radius": "5px", "vertical-align": "top"})
+   .css(s_blocks_border_color)
+   .append( $(DIV)
+     .css({"border-bottom": "2px solid"})
+     .css(s_blocks_border_color)
+     .append( $(DIV)
+       .css({"padding-right": "5px", "display": "inline-block"})
+       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bookmark").css(s_blocks_color) )
+     )
+     .append( $(DIV)
+       .css({"display": "inline-block", "border-left": "2px solid"})
+       .css(s_blocks_border_color)
+       .append( $(SPAN).text("Избранное").css({"font-size": "larger", "margin-left": "0.5em", "margin-right": "0.5em"}) )
+     )
+   )
+   .append( $(DIV).text("To Do")
+   )
+   .appendTo( contents )
+  ;
+
+  $(BR).appendTo( contents );
+
+  $(DIV)
+   .css({"display": "inline-block", "margin": "5px", "border": "3px solid", "border-radius": "5px", "vertical-align": "top"})
+   .css(s_blocks_border_color)
+   .append( $(DIV)
+     .css({"border-bottom": "2px solid"})
+     .css(s_blocks_border_color)
+     .append( $(DIV)
+       .css({"padding-right": "5px", "display": "inline-block"})
+       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-search").css(s_blocks_color) )
+     )
+     .append( $(DIV)
+       .css({"display": "inline-block", "border-left": "2px solid"})
+       .css(s_blocks_border_color)
+       .append( $(SPAN).text("Поиск").css({"font-size": "larger", "margin-left": "0.5em", "margin-right": "0.5em"}) )
+     )
+   )
+   .append( $(DIV).text("To Do")
+   )
+   .appendTo( contents )
+  ;
 };
 
 $( document ).ready(function() {
@@ -25,7 +168,14 @@ $( document ).ready(function() {
        "border": "1px solid black"
      })
    )
+   .append( $(DIV).id("page_title")
+     .css({
+       "position": "absolute", "right": "0em", "top": "0em", "left": "0em",
+       "text-align": "center", "font-size": "3em"
+     })
+   )
   ;
+
 
   run_query({"action": "check_auth"}, function(data) {
     ud=data["ok"];
@@ -84,6 +234,7 @@ $( document ).ready(function() {
 
       $("#user_info").text(data["ok"]["user"]["user_name"]);
 
+
       if(data["ok"]["user"]["user_state"] < 1) {
         let message;
         switch(Number(data["ok"]["user"]["user_state"])) {
@@ -101,6 +252,13 @@ $( document ).ready(function() {
 
         show_dialog(message);
       } else {
+        if(has_right(R_SUPER)) {
+          $("#user_info").append( $(SPAN).addClass("ui-icon").addClass("ui-icon-wrench").title("Super user!").css({"color": "gray", "margin-left": "0.5em"}) );
+        } else {
+          if(has_right(R_VIEWANY)) {
+            $("#user_info").append( $(SPAN).addClass("ui-icon").addClass("ui-icon-eye").title("Can view all nets").css({"color": "gray", "margin-left": "0.5em"}) );
+          };
+        };
         // continue building of document structure
         $(DIV).id("ipv4")
          .css({"margin-top": "3em"})
