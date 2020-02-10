@@ -252,7 +252,7 @@ CREATE TABLE v4nets (
 CREATE TABLE v4ips(
   v4ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v4ip_addr	INTEGER UNSIGNED NOT NULL,
-  v4ip_fk_v4net_id	INTEGER UNSIGNED NOT NULL,
+  v4ip_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4ip_id),
@@ -283,7 +283,7 @@ CREATE TABLE v6nets (
 CREATE TABLE v6ips(
   v6ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v6ip_addr     VARBINARY(16) NOT NULL,
-  v6ip_fk_v6net_id    VARBINARY(16) NOT NULL,
+  v6ip_fk_v6net_id    BIGINT UNSIGNED NOT NULL,
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (v6ip_id),
@@ -377,10 +377,12 @@ CREATE TABLE v4rs(
   v4r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
   v4r_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
   v4r_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
+  v4r_fk_v4net_id	BIGINT UNSIGNED DEFAULT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4r_id),
   UNIQUE KEY uk_name(v4r_start,v4r_stop,v4r_name),
+  FOREIGN KEY (v4r_fk_v4net_id) REFERENCES v4nets(v4net_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc		TINYINT COMMENT 'v4 address ranges'
 );
 
@@ -388,15 +390,18 @@ CREATE TABLE v6rs(
   v6r_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   v6r_start	VARBINARY(16) NOT NULL,
   v6r_stop	VARBINARY(16) NOT NULL,
+  v6r_visible	TINYINT UNSIGNED NOT NULL DEFAULT 1,
   v6r_name	VARCHAR(128) NOT NULL DEFAULT '',
   v6r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   v6r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
   v6r_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
   v6r_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
+  v6r_fk_v6net_id	BIGINT UNSIGNED DEFAULT NULL,
   `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v6r_id),
   UNIQUE KEY uk_name(v6r_start,v6r_stop,v6r_name),
+  FOREIGN KEY (v6r_fk_v6net_id) REFERENCES v6nets(v6net_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc		TINYINT COMMENT 'v6 address ranges'
 );
 
@@ -404,7 +409,7 @@ CREATE TABLE gn4rs(
   gn4rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   gn4rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
   gn4rs_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
-  gn4rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies',
+  gn4rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies, 32-manage access, 64-add/del/edit ranges, 128-drop net',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (gn4rs_id),
@@ -418,7 +423,7 @@ CREATE TABLE gn6rs(
   gn6rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   gn6rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
   gn6rs_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
-  gn6rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 6-take/edit IPs, 8-free IPs, 16-ignore range denies',
+  gn6rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies, 32-manage access, 64-add/del/edit ranges, 128-drop net',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (gn6rs_id),
@@ -432,7 +437,7 @@ CREATE TABLE gr4rs(
   gr4rs_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   gr4rs_fk_group_id     BIGINT UNSIGNED NOT NULL,
   gr4rs_fk_v4r_id     BIGINT UNSIGNED NOT NULL,
-  gr4rs_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-igrore range denies',
+  gr4rs_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  4-take nets',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (gr4rs_id),
@@ -440,5 +445,19 @@ CREATE TABLE gr4rs(
   FOREIGN KEY (gr4rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (gr4rs_fk_v4r_id) REFERENCES v4rs(v4r_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc            TINYINT COMMENT 'v4 range group rights'
+);
+
+CREATE TABLE gr6rs(
+  gr6rs_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gr6rs_fk_group_id     BIGINT UNSIGNED NOT NULL,
+  gr6rs_fk_v6r_id     BIGINT UNSIGNED NOT NULL,
+  gr6rs_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  4-take nets',
+  `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id    BIGINT UNSIGNED,
+  PRIMARY KEY (gr6rs_id),
+  UNIQUE KEY uk_ids(gr6rs_fk_group_id,gr6rs_fk_v6r_id),
+  FOREIGN KEY (gr6rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gr6rs_fk_v6r_id) REFERENCES v6rs(v6r_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  tc            TINYINT COMMENT 'v6 range group rights'
 );
 
