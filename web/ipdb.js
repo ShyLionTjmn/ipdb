@@ -1,3 +1,14 @@
+var ud;
+
+function ipv4() {
+  let contents=$("#ipv4");
+  if(contents.length != 1) {
+    error_at();
+  };
+
+  contents.text("IPV4");
+};
+
 $( document ).ready(function() {
   $("BODY")
    .append( $(DIV).id("debug")
@@ -17,6 +28,7 @@ $( document ).ready(function() {
   ;
 
   run_query({"action": "check_auth"}, function(data) {
+    ud=data["ok"];
     if(data["ok"]["status"] == "unauth") {
       showLoginWindow(data["ok"]["providers"], "Необходимо пройти авторизацию.");
     } else {
@@ -90,6 +102,20 @@ $( document ).ready(function() {
         show_dialog(message);
       } else {
         // continue building of document structure
+        $(DIV).id("ipv4")
+         .css({"margin-top": "3em"})
+         .appendTo("BODY")
+        ;
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("IPv4")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             ipv4();
+           })
+         )
+        ;
+
+        ipv4();
       };
 
     };

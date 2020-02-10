@@ -367,11 +367,37 @@ CREATE TABLE v6favs(
   tc		TINYINT COMMENT 'v6 user favorites'
 );
 
+CREATE TABLE g4favs(
+  v4fav_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  v4net_addr	INTEGER UNSIGNED NOT NULL,
+  v4net_mask	TINYINT UNSIGNED NOT NULL,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	BIGINT UNSIGNED,
+  UNIQUE KEY uk_v4favs(v4fav_fk_group_id, v4net_addr, v4net_mask),
+  KEY k_group_id(v4fav_fk_group_id),
+  FOREIGN KEY (v4fav_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  tc		TINYINT COMMENT 'v4 group favorites'
+);
+
+CREATE TABLE g6favs(
+  v6fav_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  v6net_addr	VARBINARY(16) NOT NULL,
+  v6net_mask	TINYINT UNSIGNED NOT NULL,
+  `ts`		DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  fk_user_id	BIGINT UNSIGNED,
+  UNIQUE KEY uk_v6favs(v6fav_fk_group_id, v6net_addr, v6net_mask),
+  KEY k_group_id(v6fav_fk_group_id),
+  FOREIGN KEY (v6fav_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  tc		TINYINT COMMENT 'v4 group favorites'
+);
+
+
 CREATE TABLE v4rs(
   v4r_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   v4r_start	INTEGER UNSIGNED NOT NULL,
   v4r_stop	INTEGER UNSIGNED NOT NULL,
   v4r_visible	TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  v4r_access	TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0-cosmetic or allow access for specific group, 1-deny ip manipulation except if group has 16 in rmask in gn4rs table',
   v4r_name	VARCHAR(128) NOT NULL DEFAULT '',
   v4r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   v4r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
@@ -391,6 +417,7 @@ CREATE TABLE v6rs(
   v6r_start	VARBINARY(16) NOT NULL,
   v6r_stop	VARBINARY(16) NOT NULL,
   v6r_visible	TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  v6r_access	TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0-cosmetic or allow access for specific group, 1-deny ip manipulation except if group has 16 in rmask in gn6rs table',
   v6r_name	VARCHAR(128) NOT NULL DEFAULT '',
   v6r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   v6r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',

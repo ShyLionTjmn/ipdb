@@ -59,6 +59,14 @@ function require_p($param_name, $param_regex=null) {
   };
 };
 
+function has_right($rightstr, $right) {
+  if(strpos($rightstr, 'r_super') !== FALSE || strpos($rightstr, $right) !== FALSE) {
+    return TRUE;
+  } else {
+    return FALSE;
+  };
+};
+
 
 $json=file_get_contents("php://input");
 $q = json_decode($json, true);
@@ -160,6 +168,21 @@ if(isset($_SESSION['user'])) {
       if($rights === NULL) { $rights = ""; };
       $_SESSION['user']['rights'] = $rights;
 
+      if(!has_right($_SESSION['user']['rights'], 'r_super')) {
+        #networks access
+        $query="SELECT gn4rs_rmask, v4net_id, v4net_addr, v4net_mask FROM gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id WHERE gn4rs_fk_group_id IN ($groups)";
+        $_SESSION['user']['v4nets_access']=return_query($query, 'v4net_id');
+
+        $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, v4net_id";
+        $query .= " FROM (gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id) INNER JOIN v4rs ON v4r_fk_v4net_id=v4net_id";
+        $query .= " WHERE gn4rs_fk_group_id IN ($groups)";
+        $_SESSION['user']['v4rs_net_access']=return_query($query, 'v4r_id');
+
+        $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, gr4rs_rmask FROM gr4rs INNER JOIN v4rs ON v4r_id=gr4rs_fk_v4r_id";
+        $query .= " WHERE gr4rs_fk_group_id IN ($groups)";
+        $_SESSION['user']['v4rs_access']=return_query($query, 'v4r_id');
+      };
+
     };
   };
 };
@@ -174,8 +197,16 @@ if($q['action'] == 'check_auth') {
     $providers_list=return_query($query);
     ok_exit(Array("status" => "unauth", "providers" => $providers_list));
   } else {
+    $query="SELECT v4net_addr, v4net_mask FROM v4favs WHERE v4fav_fk_user_id=".mq($_SESSION['user']['user_id'])." ORDER BY v4net_addr ASC, v4net_mask ASC";
+    $v4favs=return_query($query);
+
+    $query="SELECT DISTINCT v4net_addr, v4net_mask FROM g4favs WHERE v4fav_fk_group_id IN (".$_SESSION['user']['groups'].") ORDER BY v4net_addr ASC, v4net_mask ASC";
+    $g4favs=return_query($query);
+
     ok_exit(Array("status" => "auth",
                   "user" => $_SESSION['user'],
+                  "v4favs" => $v4favs,
+                  "g4favs" => $g4favs,
                   "expire_in" => ($_SESSION['expire'] - $time),
                   "refresh_expire_in" => ($_SESSION['refresh_expire'] - $time)
     ));
