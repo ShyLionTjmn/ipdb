@@ -19,6 +19,19 @@ header("Expires: 0");
 
 $db=null;
 
+function len2mask($m) {
+  return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
+};
+
+function get_closest_netinfo($n, $m) {
+  # validate n and m prior call !!
+  $ret=Array();
+
+  $mask=len2mask($m);
+  $net=$n & $mask;
+  # LEFT
+};
+
 function error_exit($redtext) {
   close_db(FALSE);
   global $curl;
@@ -49,13 +62,37 @@ function require_param($param_name) {
   };
 };
 
-function require_p($param_name, $param_regex=null) {
+function require_p($param_name, $param_check=null) {
   global $q;
   if(!isset($q[$param_name])) {
     error_exit("Required param '$param_name' is missing");
   };
-  if(isset($param_regex) && !preg_match($param_regex, $q[$param_name])) {
-    error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'");
+  if(isset($param_check)) {
+    if(is_array($param_check)) {
+      switch($param_check['type']) {
+      case "v4addr":
+        if(!preg_match('/^\d+$/', $q[$param_name])) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        if($q[$param_name] > 4294967295) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        break;
+      case "v4masklen":
+        if(!preg_match('/^\d+$/', $q[$param_name])) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        if($q[$param_name] > 32) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        break;
+      case "v6addr":
+        if(!preg_match('/^[0-9a-f]{32}$/', $q[$param_name])) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        break;
+      case "v6masklen":
+        if(!preg_match('/^\d+$/', $q[$param_name])) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        if($q[$param_name] > 128) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        break;
+      default:
+        error_exit("Prog error at ".__LINE__);
+      };
+    } else {
+      if(!preg_match($param_check, $q[$param_name])) {
+        error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'");
+      };
+    };
   };
 };
 
@@ -223,7 +260,12 @@ if(!isset($_SESSION['user'])) {
   custom_exit(Array("no_auth" => $providers_list));
 };
 
-if($q['action'] == 'boo') {
+if($q['action'] == 'v4get_net') {
+  require_p('net', [ "type" => "v4addr" ]);
+  require_p('mask', [ "type" => "v4masklen" ]);
+
+  $net_info=get_closest_netinfo($q['net'], $q['mask']);
+
   ok_exit("moo");
 } else {
   error_exit("Unknown action");
