@@ -43,8 +43,14 @@ function get_closest_v4netinfo($n, $m) {
   $ret['net_bcast_text'] = long2ip($net | $mask_rev);
 
   return $ret;
+};
 
-  # LEFT
+function get_v4netinfo($n, $m) {
+  $net_info=get_closest_v4netinfo($n, $m);
+  if($n !== $net_info['net']) {
+    error_exit("Bad network supplied");
+  };
+  return $net_info;
 };
 
 function error_exit($redtext) {
@@ -291,10 +297,33 @@ if(!isset($_SESSION['user'])) {
 if($q['action'] == 'v4get_net') {
   require_p('net', [ "type" => "v4addr" ]);
   require_p('mask', [ "type" => "v4masklen" ]);
+  $ret=Array();
 
-  $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
+  $query="SELECT * FROM v4nets WHERE v4net_addr = ".mq($net_info['net']);
+  $row=return_one($query);
+  if($row !== NULL) {
+    $net_rights=get_v4net_rights($row);
 
-  ok_exit($net_info);
+    if(!$net_rights['can_view_name']) { $row['v4net_name'] = 'hidden'; };
+    if(!$net_rights['can_view_descr']) { $row['v4net_descr'] = 'hidden'; };
+    $ret['net']=$row;
+    $ret['type']="net";
+
+    $net_info=get_v4netinfo($row['v4net_addr'], $row['v4net_mask']);
+
+    ok_exit($ret);
+  } else {
+    $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
+
+    $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net'])." AND v4net_addr <= ".mq($net_info['net_bcast'])." ORDER BY v4net_addr ASC";
+    $rows=return_query($query);
+
+    $nets=Array();
+    foreach($rows => $row) {
+    };
+
+    ok_exit($nets);
+  };
 } else {
   error_exit("Unknown action");
 };
