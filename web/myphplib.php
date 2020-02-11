@@ -12,9 +12,17 @@ function jstr($data) {
   return json_encode($data, JSON_PRETTY_PRINT);
 };
 
-function reset_session() {
+function reset_session($reason=NULL) {
   foreach($_SESSION as $key => $val) {
     unset($_SESSION[$key]);
+  };
+
+  if($reason !== NULL) {
+    if(is_array($reason)) {
+      $_SESSION['.reset_reason']=json_encode($reason, JSON_PRETTY_PRINT);
+    } else {
+      $_SESSION['.reset_reason']=$reason;
+    };
   };
 };
 

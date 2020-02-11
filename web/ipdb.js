@@ -6,6 +6,14 @@ const R_VIEWANY='r_viewany';
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
 
+function v4oct2long(i3, i2, i1, i0) {
+  let ret = (0xFF & i3) << 24;
+  ret += (0xFF & i2) << 16;
+  ret += (0xFF & i1) << 8;
+  ret += (0xFF & i0);
+  return ret;
+};
+
 function has_right(right, rightstr) {
   if(rightstr === undefined) { rightstr=ud['user']['rights']; };
   if(rightstr.indexOf(R_SUPER) >= 0 || rightstr.indexOf(right) >= 0) {
@@ -16,9 +24,11 @@ function has_right(right, rightstr) {
 };
 
 function v4nav(data) {
+  return;
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
+    return;
   };
 
   contents.empty();
@@ -27,9 +37,11 @@ function v4nav(data) {
 };
 
 function v4view(data) {
+  return;
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
+    return;
   };
 
   contents.empty();
@@ -51,6 +63,7 @@ function ipv4() {
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
+    return;
   };
 
   $("#page_title").text("IPv4");
@@ -90,15 +103,29 @@ function ipv4() {
      )
      .append( $(TR)
        .append( $(TD)
-         .append( $(INPUT).id("v4goto_net").prop({"placeholder": "x.x.x.x/mm"})
+         .append( $(INPUT).id("v4goto_net").prop({"placeholder": "x.x.x.x/mm", "type": "search"})
            .title("Введите адрес сети в CIDR нотации. Если сеть не существует, интерфейс перейдет в режим навигации ближайшей в сторону увеличения сети, либо к просмотру/редактированию существующей сети")
+           .enterKey(function() { $("#v4goto_net_btn").trigger("click"); })
          )
        )
        .append( $(TD)
-         .append( $(BUTTON).button({"icon": "ui-icon-sitemap"})
+         .append( $(BUTTON).button({"icon": "ui-icon-sitemap"}).id("v4goto_net_btn")
            .title("Перейти к навигации по указаной подсети")
            .css({"padding-left": "0.5em", "padding-right": "0.5em", "margin-left": "1em"})
            .click(function() {
+             let val=$("#v4goto_net").val();
+             if(val === undefined) { error_at(); return; };
+             let match=String(val).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+             if(match === null) {
+               $("#v4goto_net").animateHighlight();
+               return;
+             };
+             if(match.length != 6) { error_at(); return; };
+             if(Number(match[1]) > 255 || Number(match[2]) > 255 || Number(match[3]) > 255 || Number(match[4]) > 255 || Number(match[5]) > 32) {
+               $("#v4goto_net").animateHighlight();
+               return;
+             };
+             v4get_net( v4oct2long(Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])), Number(match[5]) );
            })
          )
        )

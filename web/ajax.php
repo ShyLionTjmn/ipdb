@@ -23,12 +23,27 @@ function len2mask($m) {
   return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
 };
 
-function get_closest_netinfo($n, $m) {
+function get_closest_v4netinfo($n, $m) {
   # validate n and m prior call !!
   $ret=Array();
 
   $mask=len2mask($m);
   $net=$n & $mask;
+
+  $mask_rev = 0xFFFFFFFF & (~ $mask );
+
+  $ret['net'] = $net;
+  $ret['net_text'] = long2ip($net);
+  $ret['bitmask'] = $mask;
+  $ret['bitmask_text'] = long2ip($mask);
+  $ret['bitmask_rev'] = $mask_rev;
+  $ret['bitmask_rev_text'] = long2ip($mask_rev);
+  $ret['masklen'] = $m;
+  $ret['net_bcast'] = $net | $mask_rev;
+  $ret['net_bcast_text'] = long2ip($net | $mask_rev);
+
+  return $ret;
+
   # LEFT
 };
 
@@ -132,21 +147,23 @@ $in_transaction=0;
 session_name($PHP_SESSION_NAME);
 session_start();
 
+unset($_SESSION['.reset_reason']);
+
 foreach(Array('expire', 'refresh_expire', 'user', 'refresh_token', 'openid_ap_id') as $key) {  #, 'openid_redirect_uri'
   if(!isset($_SESSION[$key])) {
-    reset_session();
+    reset_session("no keys");
   };
 };
 
 if(isset($_SESSION['expire']) && $_SESSION['expire'] <= $time) {
   if($_SESSION['refresh_expire'] <= $time) {
-    reset_session();
+    reset_session("refresh_expire");
   } else {
     #time to refresh tokens
     $query="SELECT * FROM aps WHERE ap_off = 0 AND ap_id=".mq($_SESSION['openid_ap_id']);
     $ap=return_one($query);
     if($ap === NULL) {
-      reset_session();
+      reset_session("no ap");
     } else {
 
       $curl = curl_init();
@@ -168,14 +185,14 @@ if(isset($_SESSION['expire']) && $_SESSION['expire'] <= $time) {
 
       $tokens=http_post($ap['ap_token_ep'], $post_fields, $post_headers);
       if(isset($tokens['error'])) {
-        reset_session();
+        reset_session("refresh error: ".$tokens['error']);
         goto SKIP_SESSION;
       };
 
       $pres=process_tokens($tokens, $ap);
 
       if(isset($pres['error'])) {
-        reset_session();
+        reset_session("refresh process_tokens error: ".$pres['error']);
         error_exit($pres['error']);
       };
 
@@ -188,11 +205,11 @@ if(isset($_SESSION['user'])) {
   #check if ap is still on
   $query="SELECT ap_id FROM aps WHERE ap_off=0 AND ap_id=".mq($_SESSION['user']['user_fk_ap_id']);
   if( return_single($query) === FALSE) {
-    reset_session();
+    reset_session("no user ap");
   } else {
     $user=return_one("SELECT * FROM users WHERE user_id=".mq($_SESSION['user']['user_id']));
     if($user === NULL) {
-      reset_session();
+      reset_session("no user_id");
     } else {
       $_SESSION['user'] = $user;
       $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
@@ -235,7 +252,11 @@ if($q['action'] == 'check_auth') {
     $query="SELECT ap_id, ap_name, ap_icon FROM aps WHERE ap_off = 0";
 
     $providers_list=return_query($query);
-    ok_exit(Array("status" => "unauth", "providers" => $providers_list));
+    $ret=Array("status" => "unauth", "providers" => $providers_list);
+    if(isset($_SESSION['.reset_reason'])) {
+      $ret['.reset_reason'] = $_SESSION['.reset_reason'];
+    };
+    ok_exit($ret);
   } else {
     $query="SELECT v4net_addr, v4net_mask FROM v4favs WHERE v4fav_fk_user_id=".mq($_SESSION['user']['user_id'])." ORDER BY v4net_addr ASC, v4net_mask ASC";
     $v4favs=return_query($query);
@@ -257,6 +278,13 @@ if($q['action'] == 'check_auth') {
 if(!isset($_SESSION['user'])) {
   $query="SELECT ap_id, ap_name, ap_icon FROM aps WHERE ap_off = 0";
   $providers_list=return_query($query);
+  $ret=Array("no_auth" => $providers_list);
+
+  if(isset($_SESSION['.reset_reason'])) {
+    $ret['.reset_reason'] = $_SESSION['.reset_reason'];
+  };
+  ok_exit($ret);
+
   custom_exit(Array("no_auth" => $providers_list));
 };
 
@@ -264,9 +292,9 @@ if($q['action'] == 'v4get_net') {
   require_p('net', [ "type" => "v4addr" ]);
   require_p('mask', [ "type" => "v4masklen" ]);
 
-  $net_info=get_closest_netinfo($q['net'], $q['mask']);
+  $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
 
-  ok_exit("moo");
+  ok_exit($net_info);
 } else {
   error_exit("Unknown action");
 };
