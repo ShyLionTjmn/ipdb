@@ -23,7 +23,7 @@ function v4oct2long(i3, i2, i1, i0) {
   ret += (0xFF & i2) << 16;
   ret += (0xFF & i1) << 8;
   ret += (0xFF & i0);
-  return ret;
+  return ret >>> 0;
 };
 
 function has_right(right, rightstr) {

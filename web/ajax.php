@@ -338,7 +338,11 @@ if($q['action'] == 'v4get_net') {
 
   $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net']);
   $query .= " AND v4net_last <= ".mq($net_info['net']);
-  $query .= " AND v4net_mask >= ".mq($q['mask']);
+  $query .= " AND v4net_mask <= ".mq($q['mask']);
+
+  $ret['_queries']=Array();
+
+  $ret['_queries'][] = $query;
 
   $row=return_one($query);
   if($row !== NULL) {
@@ -362,6 +366,7 @@ if($q['action'] == 'v4get_net') {
       $query .= " AND v4r_start <= ".mq($row['v4net_last']);
       $query .= " AND v4r_fk_v4net_id IS NULL";
 
+  $ret['_queries'][] = $query;
       $ext_ranges=return_query($query);
 
       $ret['ext_ranges']=$ext_ranges;
@@ -371,6 +376,7 @@ if($q['action'] == 'v4get_net') {
       $query .= " AND v4r_start <= ".mq($row['v4net_last']);
       $query .= " AND v4r_fk_v4net_id = ".mq($row['v4net_id']);
 
+  $ret['_queries'][] = $query;
       $int_ranges=return_query($query);
 
       $ret['int_ranges']=$int_ranges;
@@ -380,8 +386,19 @@ if($q['action'] == 'v4get_net') {
   } else {
 
     $ret['type']="nav";
+    $ret['net_info']=$net_info;
 
-    $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net'])." AND v4net_addr <= ".mq($net_info['net_last'])." ORDER BY v4net_addr ASC";
+    $max_mask_len=8;
+    if($net_info['masklen'] >= 8) { $max_mask_len=16; };
+    if($net_info['masklen'] >= 16) { $max_mask_len=24; };
+    if($net_info['masklen'] >= 24) { $max_mask_len=32; };
+
+    $query="SELECT * FROM v4nets WHERE";
+    $query .= " v4net_addr >= ".mq($net_info['net']);
+    $query .= " AND v4net_addr <= ".mq($net_info['net_last']);
+    $query .= " AND v4net_mask <= ".mq($max_mask_len);
+    $query .= " ORDER BY v4net_addr ASC";
+  $ret['_queries'][] = $query;
     $rows=return_query($query);
 
     $nets=Array();
@@ -397,11 +414,22 @@ if($q['action'] == 'v4get_net') {
     };
     $ret['nets']=$nets;
 
+    $query="SELECT COUNT(*) AS aggr_count, (v4net_addr & ".mq(len2mask($max_mask_len)).") AS aggr_net, ".mq($max_mask_len)." AS aggr_mask FROM v4nets WHERE";
+    $query .= " v4net_addr >= ".mq($net_info['net']);
+    $query .= " AND v4net_addr <= ".mq($net_info['net_last']);
+    $query .= " AND v4net_mask > ".mq($max_mask_len);
+    $query .= " GROUP BY aggr_net";
+    $query .= " ORDER BY aggr_net ASC";
+  $ret['_queries'][] = $query;
+    $rows=return_query($query);
+    $ret['aggr_nets']=$rows;
+
     $query="SELECT * FROM v4rs WHERE";
     $query .= " v4r_stop >= ".mq($net_info['net']);
     $query .= " AND v4r_start <= ".mq($net_info['net_last']);
     $query .= " AND v4r_fk_v4net_id IS NULL";
      
+  $ret['_queries'][] = $query;
     $ext_ranges=return_query($query);
     
     $ret['ext_ranges']=$ext_ranges;
