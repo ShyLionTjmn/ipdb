@@ -19,8 +19,31 @@ header("Expires: 0");
 
 $db=null;
 
+const R_SUPER		= 'r_super';
+const R_VIEWANY		= 'r_viewany';
+
+
+const NR_VIEWNAME	= 1 << 0;
+const NR_VIEWOTHER	= 1 << 1;
+const NR_TAKE_IP	= 1 << 2;
+const NR_EDIT_IP	= NR_TAKE_IP;
+const NR_FREE_IP	= 1 << 3;
+const NR_IGNORE		= 1 << 4;
+const NR_MAN_ACCESS	= 1 << 5;
+const NR_MAN_RANGES	= 1 << 6;
+const NR_DROP_NET	= 1 << 7;
+const NR_EDIT_NET	= 1 << 8;
+
 function len2mask($m) {
   return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
+};
+
+function get_v4net_rights($netrow) {
+
+#DUMMY!!
+  $ret = 0xFFFFFFFF;
+#DUMMY!!
+  return $ret;
 };
 
 function get_closest_v4netinfo($n, $m) {
@@ -39,8 +62,8 @@ function get_closest_v4netinfo($n, $m) {
   $ret['bitmask_rev'] = $mask_rev;
   $ret['bitmask_rev_text'] = long2ip($mask_rev);
   $ret['masklen'] = $m;
-  $ret['net_bcast'] = $net | $mask_rev;
-  $ret['net_bcast_text'] = long2ip($net | $mask_rev);
+  $ret['net_last'] = $net | $mask_rev;
+  $ret['net_last_text'] = long2ip($net | $mask_rev);
 
   return $ret;
 };
@@ -119,13 +142,25 @@ function require_p($param_name, $param_check=null) {
 
 function has_right($right, $rightstr=NULL) {
   if($rightstr === NULL) { $rightstr = $_SESSION['user']['rights']; };
-  if(strpos($rightstr, 'r_super') !== FALSE || strpos($rightstr, $right) !== FALSE) {
+  if(strpos($rightstr, R_SUPER) !== FALSE || strpos($rightstr, $right) !== FALSE) {
     return TRUE;
   } else {
     return FALSE;
   };
 };
 
+function has_nright($rmask, $right) {
+  if(has_right(R_SUPER)) {
+    return TRUE;
+  };
+  if(has_right(R_VIEWANY) && ($right === NR_VIEWNAME || $right === NR_VIEWOTHER)) {
+    return TRUE;
+  };
+  if($rmask & $right) {
+    return TRUE;
+  };
+  return FALSE;
+};
 
 $json=file_get_contents("php://input");
 $q = json_decode($json, true);
@@ -231,7 +266,7 @@ if(isset($_SESSION['user'])) {
       #used by has_right !
       $_SESSION['user']['rights'] = $rights;
 
-      if(!has_right('r_super')) {
+      if(!has_right(R_SUPER)) {
         #networks access
         $query="SELECT gn4rs_rmask, v4net_id, v4net_addr, v4net_mask FROM gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id WHERE gn4rs_fk_group_id IN ($groups)";
         $_SESSION['user']['v4nets_access']=return_query($query, 'v4net_id');
@@ -299,31 +334,80 @@ if($q['action'] == 'v4get_net') {
   require_p('mask', [ "type" => "v4masklen" ]);
   $ret=Array();
 
-  $query="SELECT * FROM v4nets WHERE v4net_addr = ".mq($net_info['net']);
+  $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
+
+  $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net']);
+  $query .= " AND v4net_last <= ".mq($net_info['net']);
+  $query .= " AND v4net_mask >= ".mq($q['mask']);
+
   $row=return_one($query);
   if($row !== NULL) {
     $net_rights=get_v4net_rights($row);
 
-    if(!$net_rights['can_view_name']) { $row['v4net_name'] = 'hidden'; };
-    if(!$net_rights['can_view_descr']) { $row['v4net_descr'] = 'hidden'; };
+    if(!has_nright($net_rights, NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
+    if(!has_nright($net_rights, NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
+
     $ret['net']=$row;
+    $ret['net']['net_rights']=$net_rights;
+
     $ret['type']="net";
 
-    $net_info=get_v4netinfo($row['v4net_addr'], $row['v4net_mask']);
+    if(!has_nright($net_rights, NR_VIEWOTHER)) {
+      $ret['net']['noaccess']=TRUE;
+    } else {
+      $net_info=get_v4netinfo($row['v4net_addr'], $row['v4net_mask']);
+
+      $query="SELECT * FROM v4rs WHERE";
+      $query .= " v4r_stop >= ".mq($row['v4net_addr']);
+      $query .= " AND v4r_start <= ".mq($row['v4net_last']);
+      $query .= " AND v4r_fk_v4net_id IS NULL";
+
+      $ext_ranges=return_query($query);
+
+      $ret['ext_ranges']=$ext_ranges;
+
+      $query="SELECT * FROM v4rs WHERE";
+      $query .= " v4r_stop >= ".mq($row['v4net_addr']);
+      $query .= " AND v4r_start <= ".mq($row['v4net_last']);
+      $query .= " AND v4r_fk_v4net_id = ".mq($row['v4net_id']);
+
+      $int_ranges=return_query($query);
+
+      $ret['int_ranges']=$int_ranges;
+    };
 
     ok_exit($ret);
   } else {
-    $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
 
-    $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net'])." AND v4net_addr <= ".mq($net_info['net_bcast'])." ORDER BY v4net_addr ASC";
+    $ret['type']="nav";
+
+    $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net'])." AND v4net_addr <= ".mq($net_info['net_last'])." ORDER BY v4net_addr ASC";
     $rows=return_query($query);
 
     $nets=Array();
-    foreach($rows => $row) {
-    };
+    foreach($rows as $row) {
+      $net_rights=get_v4net_rights($row);
+      $row['net_rights']=$net_rights;
 
-    ok_exit($nets);
+      if(!has_nright($net_rights, NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
+      if(!has_nright($net_rights, NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
+
+
+      $nets[] = $row;
+    };
+    $ret['nets']=$nets;
+
+    $query="SELECT * FROM v4rs WHERE";
+    $query .= " v4r_stop >= ".mq($net_info['net']);
+    $query .= " AND v4r_start <= ".mq($net_info['net_last']);
+    $query .= " AND v4r_fk_v4net_id IS NULL";
+     
+    $ext_ranges=return_query($query);
+    
+    $ret['ext_ranges']=$ext_ranges;
+
   };
+  ok_exit($ret);
 } else {
   error_exit("Unknown action");
 };

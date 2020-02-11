@@ -3,6 +3,18 @@ var ud;
 const R_SUPER='r_super';
 const R_VIEWANY='r_viewany';
 
+const NR_VIEWNAME       = 1 << 0;
+const NR_VIEWOTHER      = 1 << 1;
+const NR_TAKE_IP        = 1 << 2;
+const NR_EDIT_IP        = NR_TAKE_IP;
+const NR_FREE_IP        = 1 << 3;
+const NR_IGNORE         = 1 << 4;
+const NR_MAN_ACCESS     = 1 << 5; 
+const NR_MAN_RANGES     = 1 << 6;
+const NR_DROP_NET       = 1 << 7;
+const NR_EDIT_NET       = 1 << 8;
+
+
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
 
