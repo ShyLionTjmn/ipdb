@@ -70,8 +70,8 @@ function get_closest_v4netinfo($n, $m) {
 
 function get_v4netinfo($n, $m) {
   $net_info=get_closest_v4netinfo($n, $m);
-  if($n !== $net_info['net']) {
-    error_exit("Bad network supplied");
+  if($n != $net_info['net']) {
+    error_exit("Bad network supplied $n/$m vs:\n".JSON_encode($net_info));
   };
   return $net_info;
 };
@@ -336,8 +336,8 @@ if($q['action'] == 'v4get_net') {
 
   $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
 
-  $query="SELECT * FROM v4nets WHERE v4net_addr >= ".mq($net_info['net']);
-  $query .= " AND v4net_last <= ".mq($net_info['net']);
+  $query="SELECT * FROM v4nets WHERE v4net_addr <= ".mq($net_info['net']);
+  $query .= " AND v4net_last >= ".mq($net_info['net']);
   $query .= " AND v4net_mask <= ".mq($q['mask']);
 
   $ret['_queries']=Array();
