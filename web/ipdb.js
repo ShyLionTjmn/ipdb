@@ -35,8 +35,16 @@ function has_right(right, rightstr) {
   };
 };
 
+function ip4octets(net) {
+  let ret=[];
+  ret[0] = net >> 24;
+  ret[1] = (net >> 16) & 0xFF;
+  ret[2] = (net >> 8) & 0xFF;
+  ret[3] = net & 0xFF;
+  return ret;
+};
+
 function v4nav(data) {
-  return;
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
@@ -46,6 +54,70 @@ function v4nav(data) {
   contents.empty();
 
   $("#page_title").text("IPv4 v4nav");
+
+  let table=$(TABLE)
+   .appendTo(contents)
+  ;
+
+  let thead=$(THEAD)
+   .appendTo(table)
+  ;
+  let htr=$(TR)
+   .appendTo(thead)
+  ;
+
+  let masklen_start = data['net_info']['masklen'] + 1;
+  let masklen_stop;
+
+  let first_ip_octets=ip4octets(data['net_info']['net']);
+  let last_ip_octets=ip4octets(data['net_info']['net_last']);
+
+  let first_octet;
+  let last_octet;
+
+  if(data['net_info']['masklen'] < 8) {
+    masklen_stop = 8;
+    first_octet=first_ip_octets[0];
+    last_octet=last_ip_octets[0];
+  } else if(data['net_info']['masklen'] < 16) {
+    masklen_stop = 16;
+    first_octet=first_ip_octets[1];
+    last_octet=last_ip_octets[1];
+  } else if(data['net_info']['masklen'] < 24) {
+    masklen_stop = 24;
+    first_octet=first_ip_octets[2];
+    last_octet=last_ip_octets[2];
+  } else {
+    masklen_stop = 32;
+    first_octet=first_ip_octets[3];
+    last_octet=last_ip_octets[3];
+  };
+
+  $(TH).text("") //top-left corner
+   .appendTo(htr)
+  ;
+
+  for(let i=masklen_start; i <= masklen_stop; i++) {
+    $(TH).text("/"+i)
+     .appendTo(htr)
+    ;
+  };
+
+  let tbody=$(TBODY)
+   .appendTo(table)
+  ;
+
+  for(let o=first_octet; o <= last_octet; o++) {
+    let tr=$(TR);
+    tr.append( $(TD).text(o) );
+    for(let i=masklen_start; i <= masklen_stop; i++) {
+      $(TD).text(i)
+       .appendTo(tr)
+      ;
+    };
+
+    tr.appendTo(tbody);
+  };
 };
 
 function v4view(data) {
