@@ -37,9 +37,9 @@ function has_right(right, rightstr) {
 
 function ip4octets(net) {
   let ret=[];
-  ret[0] = net >> 24;
-  ret[1] = (net >> 16) & 0xFF;
-  ret[2] = (net >> 8) & 0xFF;
+  ret[0] = net >>> 24;
+  ret[1] = (net >>> 16) & 0xFF;
+  ret[2] = (net >>> 8) & 0xFF;
   ret[3] = net & 0xFF;
   return ret;
 };
