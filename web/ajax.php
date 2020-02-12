@@ -39,10 +39,12 @@ function len2mask($m) {
 };
 
 function get_v4net_rights($netrow) {
+  $ret = 0;
 
-#DUMMY!!
-  $ret = 0xFFFFFFFF;
-#DUMMY!!
+  if(isset($GLOBALS['v4nets_access']) && isset($GLOBALS['v4nets_access'][ $netrow['v4net_id'] ])) {
+    return $GLOBALS['v4nets_access'][ $netrow['v4net_id'] ]['rmask'];
+  };
+
   return $ret;
 };
 
@@ -266,20 +268,6 @@ if(isset($_SESSION['user'])) {
       #used by has_right !
       $_SESSION['user']['rights'] = $rights;
 
-      if(!has_right(R_SUPER)) {
-        #networks access
-        $query="SELECT gn4rs_rmask, v4net_id, v4net_addr, v4net_mask FROM gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id WHERE gn4rs_fk_group_id IN ($groups)";
-        $_SESSION['user']['v4nets_access']=return_query($query, 'v4net_id');
-
-        $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, v4net_id";
-        $query .= " FROM (gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id) INNER JOIN v4rs ON v4r_fk_v4net_id=v4net_id";
-        $query .= " WHERE gn4rs_fk_group_id IN ($groups)";
-        $_SESSION['user']['v4rs_net_access']=return_query($query, 'v4r_id');
-
-        $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, gr4rs_rmask FROM gr4rs INNER JOIN v4rs ON v4r_id=gr4rs_fk_v4r_id";
-        $query .= " WHERE gr4rs_fk_group_id IN ($groups)";
-        $_SESSION['user']['v4rs_access']=return_query($query, 'v4r_id');
-      };
 
     };
   };
@@ -327,6 +315,23 @@ if(!isset($_SESSION['user'])) {
   ok_exit($ret);
 
   custom_exit(Array("no_auth" => $providers_list));
+} else {
+  #get access rights for future use in requests
+  if(!has_right(R_SUPER)) {
+    #networks access
+    $query="SELECT BIT_OR(gn4rs_rmask) as rmask, v4net_id FROM gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id WHERE gn4rs_fk_group_id IN ($groups) GROUP BY v4net_id";
+    $GLOBALS['v4nets_access']=return_query($query, 'v4net_id');
+
+    $query="SELECT DISTINCT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, v4net_id";
+    $query .= " FROM (gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id) INNER JOIN v4rs ON v4r_fk_v4net_id=v4net_id";
+    $query .= " WHERE gn4rs_fk_group_id IN ($groups)";
+    $GLOBALS['v4rs_net_access']=return_query($query);
+
+    $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, BIT_OR(gr4rs_rmask) AS rmask FROM gr4rs INNER JOIN v4rs ON v4r_id=gr4rs_fk_v4r_id";
+    $query .= " WHERE gr4rs_fk_group_id IN ($groups)";
+    $query .= " GROUP BY v4r_id";
+    $GLOBALS['v4rs_access']=return_query($query);
+  };
 };
 
 if($q['action'] == 'v4get_net') {
