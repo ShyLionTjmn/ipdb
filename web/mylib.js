@@ -406,3 +406,28 @@ function error_at(message) {
   let line=frameRE.exec(stack.shift())[1];
   error_dialog(message+" at "+line);
 };
+
+function nets2lang(capital, lang, num) {
+  let ret;
+  if(lang == "ru") {
+    if(capital) { ret="С"; } else { ret="с"; };
+    let strnum=String(num);
+
+    if(strnum.match(/1$/) && num != 11) {
+      ret += "еть";
+    } else if(strnum.match(/[2-4]$/) && (num < 12 || num > 14)) {
+      ret += "ети";
+    } else {
+      ret += "етей";
+    };
+
+  } else {
+    if(capital) { ret="N"; } else { ret="n"; };
+    if(num != 1) {
+      ret += "ets";
+    } else {
+      ret += "et";
+    };
+  };
+  return ret;
+};

@@ -18,6 +18,10 @@ const NR_EDIT_NET       = 1 << 8;
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
 
+const color_odd="#FFE0FF";
+const color_even="#E0FFFF";
+
+
 const v4len2mask=[
   0, //0.0.0.0
   2147483648, //128.0.0.0
@@ -92,6 +96,7 @@ function v4nav(data) {
   $("#page_title").text("IPv4 v4nav");
 
   let table=$(TABLE)
+   .css({"border-collapse": "collapse", "font-size": "large", "border": "1px solid #222222"})
    .appendTo(contents)
   ;
 
@@ -99,6 +104,7 @@ function v4nav(data) {
    .appendTo(table)
   ;
   let htr=$(TR)
+   .css({"position": "relative", "background-color": "white"})
    .appendTo(thead)
   ;
 
@@ -128,14 +134,22 @@ function v4nav(data) {
   let last_octet=last_ip_octets[octet_index];
 
   $(TH).text("") //top-left corner
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray"})
    .appendTo(htr)
   ;
 
   for(let i=masklen_start; i <= masklen_stop; i++) {
     $(TH).text("/"+i)
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
      .appendTo(htr)
     ;
   };
+
+  //last column
+  $(TH)
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+   .appendTo(htr)
+  ;
 
   let tbody=$(TBODY)
    .appendTo(table)
@@ -143,8 +157,16 @@ function v4nav(data) {
 
   let rows_octets=first_ip_octets.slice();
 
+  let last_net=undefined;
+
   for(let o=first_octet; o <= last_octet; o++) {
     let tr=$(TR);
+
+    if(o % 2) {
+      tr.css({"background-color": color_odd});
+    } else {
+      tr.css({"background-color": color_even});
+    };
 
     rows_octets[octet_index] = o;
 
@@ -152,29 +174,111 @@ function v4nav(data) {
 
     let row_net=v4oct2long(rows_octets[0], rows_octets[1], rows_octets[2], rows_octets[3]);
 
-    tr.append( $(TD).text(row_ip_text) );
+    tr
+     .append( $(TD).text(row_ip_text)
+       .css({"border-bottom": "1px solid gray"})
+     )
+    ;
     for(let i=masklen_start; i <= masklen_stop; i++) {
       let cell_text="";
-      let cell_style={};
+      let cell_style={"color": "blue"};
 
       let mask_net = (row_net & v4len2mask[i]) >>> 0;
+      let mask_net_last = (mask_net | (~v4len2mask[i] >>> 0)) >>> 0;
 
-      let takable= row_net == mask_net;
 
-      let taken = data['nets'][ mask_net ] !== undefined;
-      if(taken) {
-        cell_style['background-color']="gray";
+      let taken= (last_net != undefined &&
+         mask_net >= last_net['v4net_addr'] &&
+         mask_net <= last_net['v4net_last']
+      );
+
+      let view = false;
+
+      if(!taken &&
+         data['nets'][ mask_net ] !== undefined &&
+         data['nets'][ mask_net ]['v4net_mask'] == i
+      ) {
+        taken = true;
+        last_net = data['nets'][ mask_net ];
+        last_net_octets=ip4octets(mask_net);
+        last_net['net_text']=last_net_octets[0]+"."+last_net_octets[1]+"."+last_net_octets[2]+"."+last_net_octets[3];
+        view=true;
       };
 
+      //let takable= (row_net == mask_net) && !taken && data['aggr_nets'][ row_net ] == undefined;
+      let takable= (row_net == mask_net) && !taken;
+
+      if(takable && data['aggr_nets'][ row_net ] != undefined) {
+        takable = false;
+        cell_style['background-color']="lightgray";
+      };
 
       if(takable) {
-        cell_text="<>";
+        for(n in data['nets']) {
+          if(data['nets'][n]['v4net_addr'] >= mask_net && data['nets'][n]['v4net_addr'] <= mask_net_last) {
+            takable = false;
+            cell_style['background-color']="lightgray";
+            break;
+          };
+        };
       };
-      $(TD).text(cell_text)
+
+      let navigatable = (row_net == mask_net) && !taken && (i < 32);
+
+      if(taken) {
+        cell_style['background-color']="lightgray";
+      };
+
+      let td=$(TD)
+       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+      ;
+
+      if(taken) {
+        if(view) {
+          td
+           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bullets")
+             .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
+           )
+          ;
+        } else {
+          td.title("Входит в сеть "+last_net['net_text']+"/"+last_net['v4net_mask']);
+        };
+      } else {
+        if(takable) {
+          td
+           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-cart")
+             .title("Занять сеть "+row_ip_text+"/"+i)
+           )
+          ;
+        };
+        if(navigatable) {
+          td
+           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-sitemap")
+             .title("Навигация по подсетям "+row_ip_text+"/"+i)
+           )
+          ;
+        };
+      };
+
+      td
        .css(cell_style)
        .appendTo(tr)
       ;
     };
+
+    let net_name="";
+    
+    if(data['nets'][ row_net ] !== undefined) {
+      net_name=data['nets'][ row_net ]['v4net_name'];
+    } else if(data['aggr_nets'][ row_net ] !== undefined) {
+      net_name = "... " + data['aggr_nets'][ row_net ]['aggr_count'] + " " + nets2lang(false, 'ru', data['aggr_nets'][ row_net ]['aggr_count']);
+    };
+
+    tr
+     .append( $(TD).text(net_name)
+       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+     )
+    ;
 
     tr.appendTo(tbody);
   };
@@ -336,7 +440,11 @@ $( document ).ready(function() {
    .append( $(DIV).id("led")
      .css({
        "position": "absolute", "right": "0em", "top": "0em", "width": "1em", "height": "1em",
-       "border": "1px solid black"
+       "border": "1px solid black",
+       "z-index": 1000000
+     })
+     .click(function() {
+       $("#debug").toggle();
      })
    )
    .append( $(DIV).id("page_title")

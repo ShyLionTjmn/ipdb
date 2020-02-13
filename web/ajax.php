@@ -431,7 +431,7 @@ if($q['action'] == 'v4get_net') {
     $query .= " GROUP BY aggr_net";
     $query .= " ORDER BY aggr_net ASC";
   $ret['_queries'][] = $query;
-    $rows=return_query($query);
+    $rows=return_query($query, 'aggr_net');
     $ret['aggr_nets']=$rows;
 
     $query="SELECT * FROM v4rs WHERE";
