@@ -190,6 +190,12 @@ function v4nav(data) {
 
     let row_net=v4oct2long(rows_octets[0], rows_octets[1], rows_octets[2], rows_octets[3]);
 
+    if(last_net != undefined &&
+       row_net > last_net['v4net_last']
+    ) {
+      last_net = undefined;
+    };
+
     let row_has_nets=false;
 
     for(n in data['nets']) {
@@ -225,16 +231,11 @@ function v4nav(data) {
       let mask_net_last = (mask_net | (~v4len2mask[i] >>> 0)) >>> 0;
 
 
-      let taken= (last_net != undefined &&
-         mask_net >= last_net['v4net_addr'] &&
-         mask_net <= last_net['v4net_last']
-      );
+      let taken=false;
 
       let view = false;
-
-      if(!taken &&
-         data['nets'][ mask_net ] !== undefined &&
-         data['nets'][ mask_net ]['v4net_mask'] == i
+      if(data['nets'][ row_net ] != undefined &&
+         data['nets'][ row_net ]['v4net_mask'] == i
       ) {
         taken = true;
         last_net = data['nets'][ mask_net ];
@@ -242,6 +243,16 @@ function v4nav(data) {
         last_net['net_text']=last_net_octets[0]+"."+last_net_octets[1]+"."+last_net_octets[2]+"."+last_net_octets[3];
         view=true;
       };
+
+      if(!taken && last_net != undefined &&
+         row_net >= last_net['v4net_addr'] &&
+         row_net <= last_net['v4net_last'] &&
+         i >= last_net['v4net_mask']
+      ) {
+        taken = true;
+      };
+
+
 
       //let takable= (row_net == mask_net) && !taken && data['aggr_nets'][ row_net ] == undefined;
       let takable= (row_net == mask_net) && !taken;
