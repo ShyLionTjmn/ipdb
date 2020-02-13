@@ -338,16 +338,16 @@ function run_query(query, successfunc) {
         if(DEBUG) {
           $("#debug").text(JSON.stringify(data, null, 2));
         };
+        if(data["ok"]["no_auth"] != undefined) {
+          showLoginWindow(data["no_auth"], "Истекло время неактивности сеанса, необходимо пройти авторизацию.");
+          return;
+        };
         if(successfunc != null) {
           successfunc(data);
         };
         return;
       };
       let message;
-      if(data["no_auth"] != undefined) {
-        showLoginWindow(data["no_auth"], "Истекло время неактивности сеанса, необходимо пройти авторизацию.");
-        return;
-      };
       if(data["error"] != undefined) {
         if(typeof(data["error"]) === "string") {
           message=data["error"];

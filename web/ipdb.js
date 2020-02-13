@@ -18,6 +18,42 @@ const NR_EDIT_NET       = 1 << 8;
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
 
+const v4len2mask=[
+  0, //0.0.0.0
+  2147483648, //128.0.0.0
+  3221225472, //192.0.0.0
+  3758096384, //224.0.0.0
+  4026531840, //240.0.0.0
+  4160749568, //248.0.0.0
+  4227858432, //252.0.0.0
+  4261412864, //254.0.0.0
+  4278190080, //255.0.0.0
+  4286578688, //255.128.0.0
+  4290772992, //255.192.0.0
+  4292870144, //255.224.0.0
+  4293918720, //255.240.0.0
+  4294443008, //255.248.0.0
+  4294705152, //255.252.0.0
+  4294836224, //255.254.0.0
+  4294901760, //255.255.0.0
+  4294934528, //255.255.128.0
+  4294950912, //255.255.192.0
+  4294959104, //255.255.224.0
+  4294963200, //255.255.240.0
+  4294965248, //255.255.248.0
+  4294966272, //255.255.252.0
+  4294966784, //255.255.254.0
+  4294967040, //255.255.255.0
+  4294967168, //255.255.255.128
+  4294967232, //255.255.255.192
+  4294967264, //255.255.255.224
+  4294967280, //255.255.255.240
+  4294967288, //255.255.255.248
+  4294967292, //255.255.255.252
+  4294967294, //255.255.255.254
+  4294967295 //255.255.255.255
+];
+
 function v4oct2long(i3, i2, i1, i0) {
   let ret = (0xFF & i3) << 24;
   ret += (0xFF & i2) << 16;
@@ -72,26 +108,24 @@ function v4nav(data) {
   let first_ip_octets=ip4octets(data['net_info']['net']);
   let last_ip_octets=ip4octets(data['net_info']['net_last']);
 
-  let first_octet;
-  let last_octet;
+  let octet_index;
 
   if(data['net_info']['masklen'] < 8) {
     masklen_stop = 8;
-    first_octet=first_ip_octets[0];
-    last_octet=last_ip_octets[0];
+    octet_index = 0;
   } else if(data['net_info']['masklen'] < 16) {
     masklen_stop = 16;
-    first_octet=first_ip_octets[1];
-    last_octet=last_ip_octets[1];
+    octet_index = 1;
   } else if(data['net_info']['masklen'] < 24) {
     masklen_stop = 24;
-    first_octet=first_ip_octets[2];
-    last_octet=last_ip_octets[2];
+    octet_index = 2;
   } else {
     masklen_stop = 32;
-    first_octet=first_ip_octets[3];
-    last_octet=last_ip_octets[3];
+    octet_index = 3;
   };
+
+  let first_octet=first_ip_octets[octet_index];
+  let last_octet=last_ip_octets[octet_index];
 
   $(TH).text("") //top-left corner
    .appendTo(htr)
@@ -107,11 +141,37 @@ function v4nav(data) {
    .appendTo(table)
   ;
 
+  let rows_octets=first_ip_octets.slice();
+
   for(let o=first_octet; o <= last_octet; o++) {
     let tr=$(TR);
-    tr.append( $(TD).text(o) );
+
+    rows_octets[octet_index] = o;
+
+    let row_ip_text=rows_octets[0]+"."+rows_octets[1]+"."+rows_octets[2]+"."+rows_octets[3];
+
+    let row_net=v4oct2long(rows_octets[0], rows_octets[1], rows_octets[2], rows_octets[3]);
+
+    tr.append( $(TD).text(row_ip_text) );
     for(let i=masklen_start; i <= masklen_stop; i++) {
-      $(TD).text(i)
+      let cell_text="";
+      let cell_style={};
+
+      let mask_net = (row_net & v4len2mask[i]) >>> 0;
+
+      let takable= row_net == mask_net;
+
+      let taken = data['nets'][ mask_net ] !== undefined;
+      if(taken) {
+        cell_style['background-color']="gray";
+      };
+
+
+      if(takable) {
+        cell_text="<>";
+      };
+      $(TD).text(cell_text)
+       .css(cell_style)
        .appendTo(tr)
       ;
     };

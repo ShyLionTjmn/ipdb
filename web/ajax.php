@@ -45,6 +45,11 @@ function get_v4net_rights($netrow) {
     return $GLOBALS['v4nets_access'][ $netrow['v4net_id'] ]['rmask'];
   };
 
+#  foreach($GLOBALS['v4rs_access'] as $row) {
+#    if($netrow['v4net_addr'] >= $row['v4r_start'] && $netrow['v4net_addr'] <= $row['v4r_stop'])
+#    if($row['v4r_start'] <= $netrow['v4net_last'] &&
+#  };
+
   return $ret;
 };
 
@@ -415,7 +420,7 @@ if($q['action'] == 'v4get_net') {
       if(!has_nright($net_rights, NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
 
 
-      $nets[] = $row;
+      $nets[ $row['v4net_addr'] ] = $row;
     };
     $ret['nets']=$nets;
 
