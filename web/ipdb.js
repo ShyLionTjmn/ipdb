@@ -21,6 +21,9 @@ const s_blocks_color={"color": "rgb(79, 129, 189)"};
 const color_odd="#FFE0FF";
 const color_even="#E0FFFF";
 
+//const color_taken="#EEEEEE";
+const color_taken="#FFFFCC";
+
 
 const v4len2mask=[
   0, //0.0.0.0
@@ -59,13 +62,21 @@ const v4len2mask=[
 ];
 
 function v4oct2long(i3, i2, i1, i0) {
+  let ret = i3 * 16777216;
+  ret += i2 * 65536;
+  ret += i1 * 256;
+  ret += i0;
+  return ret >>> 0;
+};
+/*
+function v4oct2long(i3, i2, i1, i0) {
   let ret = (0xFF & i3) << 24;
   ret += (0xFF & i2) << 16;
   ret += (0xFF & i1) << 8;
   ret += (0xFF & i0);
   return ret >>> 0;
 };
-
+*/
 function has_right(right, rightstr) {
   if(rightstr === undefined) { rightstr=ud['user']['rights']; };
   if(rightstr.indexOf(R_SUPER) >= 0 || rightstr.indexOf(right) >= 0) {
@@ -77,14 +88,27 @@ function has_right(right, rightstr) {
 
 function ip4octets(net) {
   let ret=[];
+  ret[0] = Math.floor( net / 16777216);
+  ret[1] = Math.floor( (net & 0xFFFFFF) / 65536);
+  ret[2] = Math.floor( (net & 0xFFFF) / 256);
+  ret[3] = net & 0xFF;
+  return ret;
+};
+
+/*
+function ip4octets(net) {
+  let ret=[];
   ret[0] = net >>> 24;
   ret[1] = (net >>> 16) & 0xFF;
   ret[2] = (net >>> 8) & 0xFF;
   ret[3] = net & 0xFF;
   return ret;
 };
+*/
 
 function v4nav(data) {
+  let func_start=Date.now();
+
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
@@ -160,7 +184,27 @@ function v4nav(data) {
   let last_net=undefined;
 
   for(let o=first_octet; o <= last_octet; o++) {
-    let tr=$(TR);
+    rows_octets[octet_index] = o;
+
+    let row_ip_text=rows_octets[0]+"."+rows_octets[1]+"."+rows_octets[2]+"."+rows_octets[3];
+
+    let row_net=v4oct2long(rows_octets[0], rows_octets[1], rows_octets[2], rows_octets[3]);
+
+    let row_has_nets=false;
+
+    for(n in data['nets']) {
+      if(row_net >= data['nets'][n]['v4net_addr'] && row_net <= data['nets'][n]['v4net_last']) {
+        row_has_nets=true;
+        break;
+      };
+    };
+
+    if(data['aggr_nets'][ row_net ] != undefined) {
+      row_has_nets=true;
+    };
+
+    let tr=$(TR).data('has_nets', row_has_nets);
+    if(!row_has_nets) tr.addClass("has_no_nets");
 
     if(o % 2) {
       tr.css({"background-color": color_odd});
@@ -168,15 +212,9 @@ function v4nav(data) {
       tr.css({"background-color": color_even});
     };
 
-    rows_octets[octet_index] = o;
-
-    let row_ip_text=rows_octets[0]+"."+rows_octets[1]+"."+rows_octets[2]+"."+rows_octets[3];
-
-    let row_net=v4oct2long(rows_octets[0], rows_octets[1], rows_octets[2], rows_octets[3]);
-
     tr
      .append( $(TD).text(row_ip_text)
-       .css({"border-bottom": "1px solid gray"})
+       .css({"border-bottom": "1px solid gray", "padding-left": "0.5em", "padding-right": "0.5em"})
      )
     ;
     for(let i=masklen_start; i <= masklen_stop; i++) {
@@ -210,14 +248,24 @@ function v4nav(data) {
 
       if(takable && data['aggr_nets'][ row_net ] != undefined) {
         takable = false;
-        cell_style['background-color']="lightgray";
+        cell_style['background-color']=color_taken;
       };
 
       if(takable) {
         for(n in data['nets']) {
           if(data['nets'][n]['v4net_addr'] >= mask_net && data['nets'][n]['v4net_addr'] <= mask_net_last) {
             takable = false;
-            cell_style['background-color']="lightgray";
+            cell_style['background-color']=color_taken;
+            break;
+          };
+        };
+      };
+
+      if(takable) {
+        for(n in data['aggr_nets']) {
+          if(data['aggr_nets'][n]['aggr_net'] >= mask_net && data['aggr_nets'][n]['aggr_net'] <= mask_net_last) {
+            takable = false;
+            cell_style['background-color']=color_taken;
             break;
           };
         };
@@ -226,35 +274,66 @@ function v4nav(data) {
       let navigatable = (row_net == mask_net) && !taken && (i < 32);
 
       if(taken) {
-        cell_style['background-color']="lightgray";
+        cell_style['background-color']=color_taken;
       };
 
       let td=$(TD)
-       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray", "padding-left": "0.2em", "padding-right": "0.2em"})
       ;
 
       if(taken) {
         if(view) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bullets")
+             .addClass("ui-button")
+             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": "blue"})
+             .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
            )
           ;
         } else {
+          td
+           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
+             .css({"padding-left": "0.2em", "padding-right": "0.2em"})
+           )
+          ;
           td.title("Входит в сеть "+last_net['net_text']+"/"+last_net['v4net_mask']);
         };
+        td
+         .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
+           .css({"padding-left": "0.2em", "padding-right": "0.2em"})
+         )
+        ;
       } else {
         if(takable) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-cart")
+             .addClass("ui-button")
+             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": "blue"})
+             .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Занять сеть "+row_ip_text+"/"+i)
+           )
+          ;
+        } else {
+          td
+           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
+             .css({"padding-left": "0.2em", "padding-right": "0.2em"})
            )
           ;
         };
         if(navigatable) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-sitemap")
+             .addClass("ui-button")
+             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": "blue"})
+             .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Навигация по подсетям "+row_ip_text+"/"+i)
+           )
+          ;
+        } else {
+          td
+           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
+             .css({"padding-left": "0.2em", "padding-right": "0.2em"})
            )
           ;
         };
@@ -266,22 +345,30 @@ function v4nav(data) {
       ;
     };
 
-    let net_name="";
-    
+    let net_td=$(TD);
+
     if(data['nets'][ row_net ] !== undefined) {
-      net_name=data['nets'][ row_net ]['v4net_name'];
+      net_td.text(data['nets'][ row_net ]['v4net_name'])
+       .title(data['nets'][ row_net ]['v4net_descr'])
+      ;
     } else if(data['aggr_nets'][ row_net ] !== undefined) {
-      net_name = "... " + data['aggr_nets'][ row_net ]['aggr_count'] + " " + nets2lang(false, 'ru', data['aggr_nets'][ row_net ]['aggr_count']);
+      net_td.text("... " + data['aggr_nets'][ row_net ]['aggr_count'] + " " + nets2lang(false, 'ru', data['aggr_nets'][ row_net ]['aggr_count']));
     };
 
+    let net_name_css={"padding-left": "0.5em", "padding-right": "0.5em", "border-bottom": "1px solid gray", "border-left": "1px solid gray"};
+    if(row_has_nets) net_name_css['background-color'] = color_taken;
+
     tr
-     .append( $(TD).text(net_name)
-       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+     .append( net_td
+       .css(net_name_css)
      )
     ;
 
     tr.appendTo(tbody);
   };
+  let func_stop=Date.now();
+
+  $("#debug").text( func_stop - func_start );
 };
 
 function v4view(data) {
