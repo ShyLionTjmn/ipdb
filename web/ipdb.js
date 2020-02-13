@@ -1,4 +1,9 @@
+// GLOBALS
+
 var ud;
+var $R={};
+var page_root;
+
 
 const R_SUPER='r_super';
 const R_VIEWANY='r_viewany';
@@ -23,7 +28,6 @@ const color_even="#E0FFFF";
 
 //const color_taken="#EEEEEE";
 const color_taken="#FFFFCC";
-
 
 const v4len2mask=[
   0, //0.0.0.0
@@ -60,6 +64,33 @@ const v4len2mask=[
   4294967294, //255.255.255.254
   4294967295 //255.255.255.255
 ];
+
+function saveQuery(title) {
+  let query_string="";
+  for(let key in $R) {
+    if(typeof($R[key]) === "object") {
+      for(let i=0; i < $R[key].length; i++) {
+        if(query_string.length > 0) query_string += "&";
+        query_string += key+"[]="+encodeURIComponent($R[key][i]);
+      };
+    } else {
+      if(typeof($R[key]) === "boolean") {
+        if($R[key]) === true) {
+          if(query_string.length > 0) query_string += "&";
+          query_string += key;
+        };
+      } else {
+        if(query_string.length > 0) query_string += "&";
+        query_string += key+"="+encodeURIComponent($R[key]);
+      };
+    };
+  };
+  let save_uri=page_root;
+  if(query_string.length > 0) {
+    save_uri += "?"+query_string;
+  };
+  window.history.pushState({}, title, save_uri);
+};
 
 function v4oct2long(i3, i2, i1, i0) {
   let ret = i3 * 16777216;
@@ -107,6 +138,7 @@ function ip4octets(net) {
 */
 
 function v4nav(data) {
+  saveQuery("IPv4 v4nav");
   let func_start=Date.now();
 
   let contents=$("#ipv4");
@@ -383,6 +415,7 @@ function v4nav(data) {
 };
 
 function v4view(data) {
+  saveQuery("IPv4 view");
   return;
   let contents=$("#ipv4");
   if(contents.length != 1) {
@@ -395,8 +428,12 @@ function v4view(data) {
   $("#page_title").text("IPv4 view");
 };
 
-function v4get_net(net, masklen) {
-  run_query({"action": "v4get_net", "net": net, "mask": masklen}, function(data) {
+function v4get_net() {
+  require_param("action", /^v4get_net$/);
+  require_param("net", "v4long");
+  require_param("masklen", "v4masklen");
+
+  run_query({"action": "v4get_net", "net": $R['net'], "mask": $R['masklen']}, function(data) {
     if(data["ok"]["type"] == "nav") {
       v4nav(data["ok"]);
     } else {
@@ -442,7 +479,8 @@ function ipv4() {
            .title("Перейти к навигации по подсетям")
            .css({"padding-left": "0.5em", "padding-right": "0.5em", "margin-left": "1em"})
            .click(function() {
-             v4get_net(0, 0);
+             $R={ "action": "v4get_net", "net": 0, "masklen": 0 };
+             v4get_net();
            })
          )
        )
@@ -526,6 +564,36 @@ function ipv4() {
 };
 
 $( document ).ready(function() {
+
+  page_root=window.location.href.split("?")[0];
+  let qs=window.location.search.substring(1);
+
+  qs.split("&").forEach(function(vp) {
+    vpa=vp.split("=");
+    let key=undefined;
+    let val=undefined;
+
+    if(vpa.length == 1) {
+      key=vpa[0];
+      val=true;
+    } else {
+      key=vpa[0];
+      val=decodeURIComponent(vpa[1]);
+    };
+
+    if(key.substring(key.length-2, key.length) == "[]") {
+      key=key.substring(0, key.length-2);
+      if(key.length > 0) {
+        if($R[ key ] === undefined) {
+          $R[ key ] = Array();
+        };
+        $R[ key ].push(val);
+      };
+    } else {
+      $R[ key ] = val;
+    };
+  });
+
   $("BODY")
    .append( $(DIV).id("debug")
      .css({
@@ -553,6 +621,9 @@ $( document ).ready(function() {
    )
   ;
 
+  if($R['action'] == undefined) {
+    $R['action']='ipv4';
+  };
 
   run_query({"action": "check_auth"}, function(data) {
     ud=data["ok"];
@@ -595,9 +666,8 @@ $( document ).ready(function() {
          .click(function() {
            //$("#top_menu").hide();
            //$(this).find(".popup_submenu").toggle();
-           let ipdb_uri=window.location.href.split("/").slice(0, -1).join("/") + "/";
 
-           window.location.href="logout.php?back_uri="+encodeURIComponent(ipdb_uri);
+           window.location.href="logout.php?back_uri="+encodeURIComponent(page_root);
          })
        )
        .append( $(SPAN).addClass("ui-button").text("Button")
@@ -650,7 +720,11 @@ $( document ).ready(function() {
          )
         ;
 
-        ipv4();
+        if($R['action'] == "ipv4") {
+          ipv4();
+        } else if($R['action'] == "v4get_net") {
+          v4get_net();
+        };
       };
 
     };

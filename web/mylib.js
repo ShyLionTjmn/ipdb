@@ -431,3 +431,48 @@ function nets2lang(capital, lang, num) {
   };
   return ret;
 };
+
+function param_by_type_check(type, value) {
+  if(type == "v4long") {
+    if(!String(value).match(/^\d+$/) || Number(value) < 0 || Number(value) > 4294967295) return false;
+  } else if(type == "v4masklen") {
+    if(!String(value).match(/^\d+$/) || Number(value) < 0 || Number(value) > 32) return false;
+  } else {
+    return false;
+  };
+
+  return true;
+};
+
+function require_param(key, check) {
+  if($R['key'] === undefined) {
+    error_dialog("Required param "+key+" is missing");
+    throw("Required param "+key+" is missing");
+  };
+  if(check == undefined) return true;
+  if(typeof(check) === "object") {
+    if(typeof($R['key']) === "object") {
+      for(let i in $R['key']) {
+        if(!String($R['key'][i]).match(check)) {
+          error_dialog("Required param "+key+" has bad value "+String($R['key'][i]));
+          throw("Required param "+key+" has bad value "+String($R['key'][i]));
+        };
+      };
+    } else if(!String($R['key']).match(check)) {
+      error_dialog("Required param "+key+" has bad value "+String($R['key']));
+      throw("Required param "+key+" has bad value "+String($R['key']));
+    };
+  } else {
+    if(typeof($R['key']) === "object") {
+      for(let i in $R['key']) {
+        if(!param_by_type_check(check, $R['key'][i])) {
+          error_dialog("Required param "+key+" has bad value "+String($R['key'][i]));
+          throw("Required param "+key+" has bad value "+String($R['key'][i]));
+        };
+      };
+    } else if(!param_by_type_check(check, $R['key'])) {
+      error_dialog("Required param "+key+" has bad value "+String($R['key']));
+      throw("Required param "+key+" has bad value "+String($R['key']));
+    };
+  };
+};
