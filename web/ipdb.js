@@ -28,6 +28,7 @@ const color_even="#E0FFFF";
 
 //const color_taken="#EEEEEE";
 const color_taken="#FFFFCC";
+const color_table_buttons="rgb(79, 129, 189)";
 
 const v4len2mask=[
   0, //0.0.0.0
@@ -67,7 +68,9 @@ const v4len2mask=[
 
 function saveQuery(title) {
   let query_string="";
-  for(let key in $R) {
+  let ks=keys($R).sort();
+  for(let k=0; k < ks.length; k++) {
+    let key=ks[k];
     if(typeof($R[key]) === "object") {
       for(let i=0; i < $R[key].length; i++) {
         if(query_string.length > 0) query_string += "&";
@@ -75,7 +78,7 @@ function saveQuery(title) {
       };
     } else {
       if(typeof($R[key]) === "boolean") {
-        if($R[key]) === true) {
+        if($R[key] === true) {
           if(query_string.length > 0) query_string += "&";
           query_string += key;
         };
@@ -89,14 +92,16 @@ function saveQuery(title) {
   if(query_string.length > 0) {
     save_uri += "?"+query_string;
   };
-  window.history.pushState({}, title, save_uri);
+  if(window.location.href != save_uri) {
+    window.history.pushState({}, title, save_uri);
+  };
 };
 
 function v4oct2long(i3, i2, i1, i0) {
-  let ret = i3 * 16777216;
-  ret += i2 * 65536;
-  ret += i1 * 256;
-  ret += i0;
+  let ret = Number(i3) * 16777216;
+  ret += Number(i2) * 65536;
+  ret += Number(i1) * 256;
+  ret += Number(i0);
   return ret >>> 0;
 };
 /*
@@ -117,7 +122,13 @@ function has_right(right, rightstr) {
   };
 };
 
+function v4long2ip(net) {
+  let o=ip4octets(net);
+  return o[0]+"."+o[1]+"."+o[2]+"."+o[3];
+};
+
 function ip4octets(net) {
+  net = Number(net);
   let ret=[];
   ret[0] = Math.floor( net / 16777216);
   ret[1] = Math.floor( (net & 0xFFFFFF) / 65536);
@@ -138,7 +149,6 @@ function ip4octets(net) {
 */
 
 function v4nav(data) {
-  saveQuery("IPv4 v4nav");
   let func_start=Date.now();
 
   let contents=$("#ipv4");
@@ -149,7 +159,11 @@ function v4nav(data) {
 
   contents.empty();
 
-  $("#page_title").text("IPv4 v4nav");
+  let page_title="Навигация: "+data['net_info']['net_text']+"/"+data['net_info']['masklen'];
+
+  document.title="IPDB: "+page_title;
+  saveQuery(page_title);
+  $("#page_title").text(page_title);
 
   let table=$(TABLE)
    .css({"border-collapse": "collapse", "font-size": "large", "border": "1px solid #222222"})
@@ -164,7 +178,7 @@ function v4nav(data) {
    .appendTo(thead)
   ;
 
-  let masklen_start = data['net_info']['masklen'] + 1;
+  let masklen_start = Number(data['net_info']['masklen']) + 1;
   let masklen_stop;
 
   let first_ip_octets=ip4octets(data['net_info']['net']);
@@ -172,13 +186,13 @@ function v4nav(data) {
 
   let octet_index;
 
-  if(data['net_info']['masklen'] < 8) {
+  if(Number(data['net_info']['masklen']) < 8) {
     masklen_stop = 8;
     octet_index = 0;
-  } else if(data['net_info']['masklen'] < 16) {
+  } else if(Number(data['net_info']['masklen']) < 16) {
     masklen_stop = 16;
     octet_index = 1;
-  } else if(data['net_info']['masklen'] < 24) {
+  } else if(Number(data['net_info']['masklen']) < 24) {
     masklen_stop = 24;
     octet_index = 2;
   } else {
@@ -186,12 +200,43 @@ function v4nav(data) {
     octet_index = 3;
   };
 
+  let top_masklen = masklen_stop - 8;
+
   let first_octet=first_ip_octets[octet_index];
   let last_octet=last_ip_octets[octet_index];
 
-  $(TH).text("") //top-left corner
-   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray"})
+  let top_left=$(TH).text("") //top-left corner
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "padding-left": "0.2em"})
    .appendTo(htr)
+  ;
+
+  if(Number(data['net_info']['masklen']) != 0) {
+    let top_net = (Number(data['net_info']['net']) & v4len2mask[top_masklen]) >>> 0;
+    top_left
+     .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-caret-2-n")
+       .addClass("ui-button")
+       .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+       .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
+       .title("Перейти на уровень выше. К сети "+v4long2ip(top_net)+"/"+top_masklen)
+     )
+    ;
+
+  } else {
+    top_left
+     .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
+       .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+       .css({"padding-left": "0.2em", "padding-right": "0.2em"})
+     )
+    ;
+  };
+
+  top_left
+   .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-refresh")
+     .addClass("ui-button")
+     .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+     .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
+     .title("Обновить данные")
+   )
   ;
 
   for(let i=masklen_start; i <= masklen_stop; i++) {
@@ -257,7 +302,7 @@ function v4nav(data) {
     ;
     for(let i=masklen_start; i <= masklen_stop; i++) {
       let cell_text="";
-      let cell_style={"color": "blue"};
+      let cell_style={"color": color_table_buttons};
 
       let mask_net = (row_net & v4len2mask[i]) >>> 0;
       let mask_net_last = (mask_net | (~v4len2mask[i] >>> 0)) >>> 0;
@@ -322,6 +367,19 @@ function v4nav(data) {
 
       let td=$(TD)
        .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray", "padding-left": "0.2em", "padding-right": "0.2em"})
+       .data({"net": row_net, "masklen": i})
+       .dblclick(function() {
+         let _net = $(this).data("net");
+         let _masklen = $(this).data("masklen");
+
+         let calc_text="Network: "+v4long2ip(_net)+"/"+_masklen;
+         calc_text += "\nMask: "+v4long2ip(v4len2mask[_masklen]);
+         calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[_masklen]) >>> 0);
+         calc_text += "\nLast IP: "+v4long2ip((_net | ~v4len2mask[_masklen]) >>> 0);
+
+         $("#calc_text").text(calc_text);
+         $("#calc").show();
+       })
       ;
 
       if(taken) {
@@ -329,7 +387,7 @@ function v4nav(data) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bullets")
              .addClass("ui-button")
-             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": "blue"})
+             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
              .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
            )
@@ -352,7 +410,7 @@ function v4nav(data) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-cart")
              .addClass("ui-button")
-             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": "blue"})
+             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
              .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Занять сеть "+row_ip_text+"/"+i)
            )
@@ -368,7 +426,7 @@ function v4nav(data) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-sitemap")
              .addClass("ui-button")
-             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": "blue"})
+             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
              .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Навигация по подсетям "+row_ip_text+"/"+i)
            )
@@ -411,7 +469,7 @@ function v4nav(data) {
   };
   let func_stop=Date.now();
 
-  $("#debug").text( func_stop - func_start );
+  //$("#debug").text( func_stop - func_start );
 };
 
 function v4view(data) {
@@ -443,6 +501,8 @@ function v4get_net() {
 };
 
 function ipv4() {
+  require_param("action", /^ipv4$/);
+  saveQuery();
   let contents=$("#ipv4");
   if(contents.length != 1) {
     error_at();
@@ -619,6 +679,21 @@ $( document ).ready(function() {
        "text-align": "center", "font-size": "3em"
      })
    )
+   .append( $(DIV).id("calc")
+     .css({
+       "position": "fixed", "bottom": "2em", "right": "2em", "width": "auto", "height": "auto",
+       "border": "1px solid black",
+       "z-index": 1000000
+     })
+     .append( $(DIV)
+       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-circlesmall-close")
+         .click(function() { $("#calc").hide(); })
+       )
+     )
+     .append( $(DIV).id("calc_text")
+       .css({"white-space": "pre"})
+     )
+   )
   ;
 
   if($R['action'] == undefined) {
@@ -715,6 +790,7 @@ $( document ).ready(function() {
          .append( $(SPAN).addClass("ui-button").text("IPv4")
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
+             $R={"action": "ipv4"};
              ipv4();
            })
          )

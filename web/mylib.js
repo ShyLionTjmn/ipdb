@@ -445,34 +445,34 @@ function param_by_type_check(type, value) {
 };
 
 function require_param(key, check) {
-  if($R['key'] === undefined) {
+  if($R[key] === undefined) {
     error_dialog("Required param "+key+" is missing");
     throw("Required param "+key+" is missing");
   };
   if(check == undefined) return true;
   if(typeof(check) === "object") {
-    if(typeof($R['key']) === "object") {
-      for(let i in $R['key']) {
-        if(!String($R['key'][i]).match(check)) {
-          error_dialog("Required param "+key+" has bad value "+String($R['key'][i]));
-          throw("Required param "+key+" has bad value "+String($R['key'][i]));
+    if(typeof($R[key]) === "object") {
+      for(let i in $R[key]) {
+        if(!String($R[key][i]).match(check)) {
+          error_dialog("Required param "+key+" has bad value "+String($R[key][i]));
+          throw("Required param "+key+" has bad value "+String($R[key][i]));
         };
       };
-    } else if(!String($R['key']).match(check)) {
-      error_dialog("Required param "+key+" has bad value "+String($R['key']));
-      throw("Required param "+key+" has bad value "+String($R['key']));
+    } else if(!String($R[key]).match(check)) {
+      error_dialog("Required param "+key+" has bad value "+String($R[key]));
+      throw("Required param "+key+" has bad value "+String($R[key]));
     };
   } else {
-    if(typeof($R['key']) === "object") {
-      for(let i in $R['key']) {
-        if(!param_by_type_check(check, $R['key'][i])) {
-          error_dialog("Required param "+key+" has bad value "+String($R['key'][i]));
-          throw("Required param "+key+" has bad value "+String($R['key'][i]));
+    if(typeof($R[key]) === "object") {
+      for(let i in $R[key]) {
+        if(!param_by_type_check(check, $R[key][i])) {
+          error_dialog("Required param "+key+" has bad value "+String($R[key][i]));
+          throw("Required param "+key+" has bad value "+String($R[key][i]));
         };
       };
-    } else if(!param_by_type_check(check, $R['key'])) {
-      error_dialog("Required param "+key+" has bad value "+String($R['key']));
-      throw("Required param "+key+" has bad value "+String($R['key']));
+    } else if(!param_by_type_check(check, $R[key])) {
+      error_dialog("Required param "+key+" has bad value "+String($R[key]));
+      throw("Required param "+key+" has bad value "+String($R[key]));
     };
   };
 };
