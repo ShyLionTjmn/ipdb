@@ -22,7 +22,7 @@ const NR_EDIT_NET       = 1 << 8;
 
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
-const s_ranges_spacing={};
+const s_ranges_spacing={"min-width": "1em", "display": "inline-block"};
 
 const color_odd="#FFE0FF";
 const color_even="#E0FFFF";
@@ -66,6 +66,37 @@ const v4len2mask=[
   4294967294, //255.255.255.254
   4294967295 //255.255.255.255
 ];
+
+$.fn.range_symbol = function(net_start, net_last, range_start, range_stop) {
+  if(net_start == range_start && net_last > range_stop) {
+    this.html("&#x21f1;")  // ⇱ , range is started on row net and goes inside row
+     .css({"font-weight": "bold"})
+  } else if(net_start == range_start && net_last < range_stop) {
+    this.html("&#x2533;"); // ┳ , range is started on row net and goes to next row or beyond
+  } else if(net_start < range_start && net_last < range_stop && net_last >= range_start) {
+    this.html("&#x250f;"); // ┏ , range is started inside row net and goes to next row or beyond
+  } else if(net_start > range_start && net_last < range_stop) {
+    this.html("&#x2503;"); // ┃, row net is inside range
+  } else if(net_start < range_start && net_last > range_stop) {
+    this.html("&#x25c0;"); // ◀, range is inside row net
+  } else if(net_start == range_start && net_last == range_stop) {
+    //this.html("&#x21b9;")  // ↹
+    // .css({"transform": "rotate(90deg)"}); // , range is equal row net
+    //this.html("&#x29f1;"); // ⧱ , range is equal row net
+    this.html("&#x25fc;"); // ◼ , range is equal row net
+  } else if(net_start > range_start && net_start < range_stop && net_last > range_stop) {
+    this.html("&#x2517;"); // ┗ , range is started before row net and goes inside row
+  } else if(net_start > range_start && net_last == range_stop) {
+    this.html("&#x253B;"); // ┻ , range is started before row net and end on row
+  } else if(net_start < range_start && net_last == range_stop) {
+    this.html("&#x21f2;")  // ⇲ , range is started inside row net and ends on row
+     .css({"font-weight": "bold"})
+  } else {
+    this.html("?"); //unpredicted
+  };
+  
+  return this;
+};
 
 function saveQuery(title) {
   let query_string="";
@@ -441,6 +472,10 @@ function v4nav(data) {
 
   let outer_ranges=Array();
   let inner_ranges=Array();
+  let inside_ranges=Array();
+
+  let cut_net_mask=v4len2mask[ masklen_stop ];
+  let cut_net_wildcard= (~cut_net_mask) >>> 0;
 
   for(r in data['ext_ranges']) {
     if(Number(data['ext_ranges'][r]['v4r_visible']) > 0 || has_right(R_SUPER)) {
@@ -449,7 +484,18 @@ function v4nav(data) {
       ) {
         outer_ranges.push(r);
       } else {
-        inner_ranges.push(r);
+        let r_start_net = (Number(data['ext_ranges'][r]['v4r_start']) & cut_net_mask) >>> 0;
+        let r_stop_net = (Number(data['ext_ranges'][r]['v4r_stop']) & cut_net_mask) >>> 0;
+
+        let r_start_host = (Number(data['ext_ranges'][r]['v4r_start']) & cut_net_wildcard) >>> 0;
+        let r_stop_host = (Number(data['ext_ranges'][r]['v4r_stop']) & cut_net_wildcard) >>> 0;
+        let r_stop_host_next = ((Number(data['ext_ranges'][r]['v4r_stop'])+1) & cut_net_wildcard) >>> 0;
+
+        if(r_start_net == r_stop_net && (r_start_host > 0 || r_stop_host_next > 0)) {
+          inside_ranges.push(r);
+        } else {
+          inner_ranges.push(r);
+        };
       };
     };
   };
@@ -714,23 +760,61 @@ function v4nav(data) {
       let r=inner_ranges[i];
       let range=data['ext_ranges'][r];
 
-      let r_span=$(SPAN)
+      let r_elm=$(LABEL)
        .css(s_ranges_spacing)
+       .css(JSON.parse(range['v4r_style']))
       ;
 
       if(row_net > Number(range['v4r_stop']) || row_last < Number(range['v4r_start'])) {
-        r_span.html(" ");
-      } else if(row_net > Number(range['v4r_start']) && row_last < Number(range['v4r_stop'])) {
-        r_span.html("&#9475;"); // vertical bar, row net is inside range
-      } else if(row_net < Number(range['v4r_start']) && row_last > Number(range['v4r_stop'])) {
-        r_span.html("&#x25c0;"); // triangle left-pointing, range is inside row net
-      } else if(row_net == Number(range['v4r_start']) && row_last == Number(range['v4r_stop'])) {
-        r_span.html("&#x21b9;").css({"transform": "rotate(90deg)"}); // triangle left-pointing, range is equal row net
-      } else if(row_net == Number(range['v4r_start']) && row_last < Number(range['v4r_stop'])) {
-        r_span.html("&#x2533;"); // T , range is started on row net and goes to next row or beyond
-      } else if(row_net < Number(range['v4r_start']) && row_last < Number(range['v4r_stop']) && row_last >= Number(range['v4r_start'])) {
-        r_span.html("&#x250f;"); // г , range is started inside row net and goes to next row or beyond
+        r_elm.html(" ");
+      } else {
+        r_elm.range_symbol(row_net, row_last, Number(range['v4r_start']), Number(range['v4r_stop']));
+
+        r_elm
+         .title("Диапазон: "+range['v4r_name']+"\nНажмите для более подробной информации")
+         .data("ranges", [ r ])
+         .click(function() {
+           let _ranges_list=$(this).data("ranges");
+           let _ranges=$(this).closest("TABLE").data("ext_ranges");
+           v4ranges_calc_show(_ranges, _ranges_list);
+         })
+        ;
       };
+
+      r_elm.appendTo( r_td )
+    };
+
+    if(inside_ranges.length > 0) {
+      let r_elm=$(LABEL)
+       .css(s_ranges_spacing)
+      ;
+
+      let row_inside_ranges=Array();
+
+      for(let i=0; i < inside_ranges.length; i++) {
+        let r=inside_ranges[i];
+        let range=data['ext_ranges'][r];
+        if(row_net < Number(range['v4r_start']) && row_last > Number(range['v4r_stop'])) {
+          row_inside_ranges.push(r);
+          data['ext_ranges'][r]['_hit'] = true;
+        };
+      };
+
+      if(row_inside_ranges.length == 0) {
+        r_elm.html(" ");
+      } else {
+        r_elm.html("&#x25c0;") // ◀, range is inside row net
+         .title(row_inside_ranges.length+" диапазонов внутри подсети.\nНажмите для более подробной информации")
+         .data("ranges", row_inside_ranges)
+         .click(function() {
+           let _ranges_list=$(this).data("ranges");
+           let _ranges=$(this).closest("TABLE").data("ext_ranges");
+           v4ranges_calc_show(_ranges, _ranges_list);
+         })
+        ;
+      };
+
+      r_elm.appendTo(r_td);
     };
 
     tr
