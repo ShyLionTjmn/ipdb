@@ -148,10 +148,41 @@ function ip4octets(net) {
 };
 */
 
+function v4cacl_show(net, masklen, elm) {
+  let calc_text="Network: "+v4long2ip(net)+"/"+masklen;
+  calc_text += "\nMask: "+v4long2ip(v4len2mask[masklen]);
+  calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[masklen]) >>> 0);
+  calc_text += "\nLast IP: "+v4long2ip((net | ~v4len2mask[masklen]) >>> 0);
+
+  $("#calc_text").text(calc_text);
+  $("#calc").show();
+
+  $("#calc_text").animateHighlight("lightgreen");
+
+  $(".calc_highlight").each(function() {
+    let saved_bg_color=$(this).data("saved_bg_color");
+
+    $(this).removeClass("calc_highlight");
+    if(saved_bg_color != undefined) {
+      $(this).css({"background-color": saved_bg_color});
+    } else {
+      $(this).css({"background-color": "initial"});
+    };
+  });
+
+  if(elm != undefined) {
+    let elm_bg_color=elm.css("background-color");
+    if(elm_bg_color != "lightgreen") {
+      elm.data("saved_bg_color", elm_bg_color);
+    };
+    elm.css({"background-color": "lightgreen"}).addClass("calc_highlight");
+  };
+};
+
 function v4nav(data) {
   let func_start=Date.now();
 
-  let contents=$("#ipv4");
+  let contents=$("#contents");
   if(contents.length != 1) {
     error_at();
     return;
@@ -200,7 +231,17 @@ function v4nav(data) {
     octet_index = 3;
   };
 
-  let top_masklen = masklen_stop - 8;
+  let top_masklen;
+
+  if(Number(data['net_info']['masklen']) <= 8) {
+    top_masklen = 0;
+  } else if(Number(data['net_info']['masklen']) <= 16) {
+    top_masklen = 8;
+  } else if(Number(data['net_info']['masklen']) <= 24) {
+    top_masklen = 16;
+  } else {
+    top_masklen = 24;
+  };
 
   let first_octet=first_ip_octets[octet_index];
   let last_octet=last_ip_octets[octet_index];
@@ -218,6 +259,13 @@ function v4nav(data) {
        .css({"margin-left": "0.2em", "margin-right": "0.2em"})
        .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
        .title("Перейти на уровень выше. К сети "+v4long2ip(top_net)+"/"+top_masklen)
+       .data({"net": top_net, "masklen": top_masklen})
+       .click(function() {
+         let _net=$(this).data("net");
+         let _masklen=$(this).data("masklen");
+         $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+         v4get_net();
+       })
      )
     ;
 
@@ -236,6 +284,28 @@ function v4nav(data) {
      .css({"margin-left": "0.2em", "margin-right": "0.2em"})
      .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
      .title("Обновить данные")
+     .data({"net": data['net_info']['net'], "masklen": data['net_info']['masklen']})
+     .click(function() {
+       let _net=$(this).data("net");
+       let _masklen=$(this).data("masklen");
+       $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+       v4get_net();
+     })
+   )
+  ;
+
+  top_left
+   .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-info")
+     .addClass("ui-button")
+     .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+     .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
+     .title("Показать маску сети и прочие расчетные данные. Также двойной клик на любой ячейке выведет данные по соответствующей подсети/маске.")
+     .data({"net": data['net_info']['net'], "masklen": data['net_info']['masklen']})
+     .click(function() {
+       let _net=$(this).data("net");
+       let _masklen=$(this).data("masklen");
+       v4cacl_show(_net, _masklen, $(this).closest("TH"));
+     })
    )
   ;
 
@@ -246,7 +316,13 @@ function v4nav(data) {
     ;
   };
 
-  //last column
+  //net name column
+  $(TH)
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+   .appendTo(htr)
+  ;
+
+  //ranges column
   $(TH)
    .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
    .appendTo(htr)
@@ -372,13 +448,7 @@ function v4nav(data) {
          let _net = $(this).data("net");
          let _masklen = $(this).data("masklen");
 
-         let calc_text="Network: "+v4long2ip(_net)+"/"+_masklen;
-         calc_text += "\nMask: "+v4long2ip(v4len2mask[_masklen]);
-         calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[_masklen]) >>> 0);
-         calc_text += "\nLast IP: "+v4long2ip((_net | ~v4len2mask[_masklen]) >>> 0);
-
-         $("#calc_text").text(calc_text);
-         $("#calc").show();
+         v4cacl_show(_net, _masklen, $(this));
        })
       ;
 
@@ -390,6 +460,13 @@ function v4nav(data) {
              .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
              .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
+             .data({"net": row_net, "masklen": i})
+             .click(function() {
+               let _net=$(this).data("net");
+               let _masklen=$(this).data("masklen");
+               $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+               v4get_net();
+             })
            )
           ;
         } else {
@@ -413,6 +490,11 @@ function v4nav(data) {
              .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
              .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Занять сеть "+row_ip_text+"/"+i)
+             .data({"net": row_net, "masklen": i})
+             .click(function() {
+               let _net=$(this).data("net");
+               let _masklen=$(this).data("masklen");
+             })
            )
           ;
         } else {
@@ -429,6 +511,13 @@ function v4nav(data) {
              .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
              .css({"margin-left": "0.2em", "margin-right": "0.2em"})
              .title("Навигация по подсетям "+row_ip_text+"/"+i)
+             .data({"net": row_net, "masklen": i})
+             .click(function() {
+               let _net=$(this).data("net");
+               let _masklen=$(this).data("masklen");
+               $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+               v4get_net();
+             })
            )
           ;
         } else {
@@ -446,6 +535,7 @@ function v4nav(data) {
       ;
     };
 
+    // net name TD
     let net_td=$(TD);
 
     if(data['nets'][ row_net ] !== undefined) {
@@ -465,8 +555,23 @@ function v4nav(data) {
      )
     ;
 
+    //ranges TD
+
+    let r_td=$(TD);
+    let r_css={"background-color": "white"};
+
+
+    tr
+     .append( r_td
+       .css(r_css)
+     )
+    ;
+
+
     tr.appendTo(tbody);
   };
+
+  v4cacl_show(data['net_info']['net'], data['net_info']['masklen'], top_left);
   let func_stop=Date.now();
 
   //$("#debug").text( func_stop - func_start );
@@ -475,7 +580,7 @@ function v4nav(data) {
 function v4view(data) {
   saveQuery("IPv4 view");
   return;
-  let contents=$("#ipv4");
+  let contents=$("#contents");
   if(contents.length != 1) {
     error_at();
     return;
@@ -491,6 +596,20 @@ function v4get_net() {
   require_param("net", "v4long");
   require_param("masklen", "v4masklen");
 
+  let contents=$("#contents");
+  if(contents.length != 1) {
+    error_at();
+    return;
+  };
+
+  $(DIV)
+   .css({"position": "fixed", "top": "49%", "left": "0", "right": "0", "height": "auto", "text-align": "center"})
+   .append( $(DIV).text("Загрузка")
+     .css({"display": "inline-block", "background-color": "white", "font-size": "400%", "border": "2px solid gray", "padding": "0.5em"})
+   )
+   .appendTo( contents )
+  ;
+
   run_query({"action": "v4get_net", "net": $R['net'], "mask": $R['masklen']}, function(data) {
     if(data["ok"]["type"] == "nav") {
       v4nav(data["ok"]);
@@ -503,7 +622,7 @@ function v4get_net() {
 function ipv4() {
   require_param("action", /^ipv4$/);
   saveQuery();
-  let contents=$("#ipv4");
+  let contents=$("#contents");
   if(contents.length != 1) {
     error_at();
     return;
@@ -682,17 +801,24 @@ $( document ).ready(function() {
    .append( $(DIV).id("calc")
      .css({
        "position": "fixed", "bottom": "2em", "right": "2em", "width": "auto", "height": "auto",
-       "border": "1px solid black",
        "z-index": 1000000
      })
      .append( $(DIV)
-       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-circlesmall-close")
-         .click(function() { $("#calc").hide(); })
+       .css({"border": "1px solid black", "display": "inline-block"})
+       .css({"padding": "0.2em"})
+       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-close")
+         .click(function() {
+           $(".calc_highlight").each(function() { $(this).removeClass("calc_highlight").css({"background-color": "initial"}); });
+           $("#calc").hide();
+         })
        )
      )
      .append( $(DIV).id("calc_text")
+       .css({"padding": "0.2em"})
+       .css({"border": "1px solid black"})
        .css({"white-space": "pre"})
      )
+     .hide()
    )
   ;
 
@@ -782,7 +908,7 @@ $( document ).ready(function() {
           };
         };
         // continue building of document structure
-        $(DIV).id("ipv4")
+        $(DIV).id("contents")
          .css({"margin-top": "3em"})
          .appendTo("BODY")
         ;
