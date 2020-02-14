@@ -11,7 +11,7 @@ INSERT INTO v4rs SET
 ;
 
 INSERT INTO v4rs SET
-  v4r_start=INET_ATON('27.10.0.0')
+  v4r_start=INET_ATON('27.1.0.0')
  ,v4r_stop=INET_ATON('27.10.255.255')
  ,v4r_name='27.10/16'
  ,v4r_descr='descr for 27.10/16'

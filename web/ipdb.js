@@ -22,6 +22,7 @@ const NR_EDIT_NET       = 1 << 8;
 
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
+const s_ranges_spacing={};
 
 const color_odd="#FFE0FF";
 const color_even="#E0FFFF";
@@ -148,6 +149,57 @@ function ip4octets(net) {
 };
 */
 
+function v4ranges_calc_show(ranges, ranges_list) {
+  $(".calc_highlight").each(function() {
+    let saved_bg_color=$(this).data("saved_bg_color");
+
+    $(this).removeClass("calc_highlight");
+    if(saved_bg_color != undefined) {
+      $(this).css({"background-color": saved_bg_color});
+    } else {
+      $(this).css({"background-color": "initial"});
+    };
+  });
+
+  let calc_cont=$("#calc_text").empty();
+
+  ranges_list.sort(function(a,b) {
+    if(ranges[a]['v4r_start'] != ranges[b]['v4r_start']) {
+      return Number(ranges[a]['v4r_start']) - Number(ranges[a]['v4r_start']);
+    } else if(ranges[a]['v4r_stop'] != ranges[b]['v4r_stop']) {
+      return Number(ranges[a]['v4r_stop']) - Number(ranges[a]['v4r_stop']);
+    } else {
+      return String(ranges[a]['v4r_name']).localeCompare(String(ranges[b]['v4r_name']));
+    };
+  });
+
+  let table_div=$(DIV).css({"display": "table"});
+
+  for(let i=0; i < ranges_list.length; i++) {
+    let r=ranges_list[i];
+    let row=$(DIV).css({"display": "table-row"})
+     .append( $(SPAN).addClass("ui-icon")
+       .css({"display": "table-cell"})
+       .addClass( ranges[r]['v4r_icon'] != "" ? ranges[r]['v4r_icon'] : "ui-icon-arrow-2-n-s")
+       .css( JSON.parse(ranges[r]['v4r_icon_style']) )
+       .css(s_ranges_spacing)
+     )
+     .append( $(SPAN).text(v4long2ip(ranges[r]['v4r_start'])+" - "+v4long2ip(ranges[r]['v4r_stop']))
+       .css({"display": "table-cell"})
+       .css({"white-space": "pre", "margin-left": "0.5em"})
+       .css( JSON.parse(ranges[r]['v4r_style']) )
+     )
+     .append( $(SPAN).text(ranges[r]['v4r_name'])
+       .css({"display": "table-cell"})
+       .css({"white-space": "pre", "margin-left": "0.5em"})
+       .title( ranges[r]['v4r_descr'] )
+     )
+    ;
+    row.appendTo( table_div );
+  };
+  table_div.appendTo( calc_cont );
+};
+
 function v4cacl_show(net, masklen, elm) {
   let calc_text="Network: "+v4long2ip(net)+"/"+masklen;
   calc_text += "\nMask: "+v4long2ip(v4len2mask[masklen]);
@@ -198,6 +250,7 @@ function v4nav(data) {
 
   let table=$(TABLE)
    .css({"border-collapse": "collapse", "font-size": "large", "border": "1px solid #222222"})
+   .data("ext_ranges", data['ext_ranges'])
    .appendTo(contents)
   ;
 
@@ -299,7 +352,7 @@ function v4nav(data) {
      .addClass("ui-button")
      .css({"margin-left": "0.2em", "margin-right": "0.2em"})
      .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
-     .title("Показать маску сети и прочие расчетные данные. Также двойной клик на любой ячейке выведет данные по соответствующей подсети/маске.")
+     .title("Показать маску сети и прочие расчетные данные. Также клик на любой ячейке выведет данные по соответствующей подсети/маске.")
      .data({"net": data['net_info']['net'], "masklen": data['net_info']['masklen']})
      .click(function() {
        let _net=$(this).data("net");
@@ -323,7 +376,7 @@ function v4nav(data) {
   ;
 
   //ranges column
-  $(TH)
+  let r_th=$(TH)
    .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
    .appendTo(htr)
   ;
@@ -335,6 +388,39 @@ function v4nav(data) {
   let rows_octets=first_ip_octets.slice();
 
   let last_net=undefined;
+
+  let outer_ranges=Array();
+  let inner_ranges=Array();
+
+  for(r in data['ext_ranges']) {
+    if(Number(data['ext_ranges'][r]['v4r_visible']) > 0 || has_right(R_SUPER)) {
+      if(Number(data['net_info']['net']) > Number(data['ext_ranges'][r]['v4r_start']) &&
+         Number(data['net_info']['net_last']) < Number(data['ext_ranges'][r]['v4r_stop'])
+      ) {
+        outer_ranges.push(r);
+      } else {
+        inner_ranges.push(r);
+      };
+    };
+  };
+
+  let outer_ranges_span=undefined;
+
+  if(outer_ranges.length > 0) {
+    outer_ranges_span=$(SPAN)
+     .addClass("ui-icon").addClass("ui-icon-bullet")
+     .css({"color": "gray"})
+     .css(s_ranges_spacing)
+     .data("ranges", outer_ranges)
+     .title(outer_ranges.length+" диапазонов, в которые сеть входит целиком. Нажмите на этот значёк для подробной информации.")
+     .click(function() {
+       let _ranges_list=$(this).data("ranges");
+       let _ranges=$(this).closest("TABLE").data("ext_ranges");
+       v4ranges_calc_show(_ranges, _ranges_list);
+     })
+     .appendTo( r_th )
+    ;
+  };
 
   for(let o=first_octet; o <= last_octet; o++) {
     rows_octets[octet_index] = o;
@@ -442,9 +528,10 @@ function v4nav(data) {
       };
 
       let td=$(TD)
-       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray", "padding-left": "0.2em", "padding-right": "0.2em"})
+       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray", "padding-left": "0.5em", "padding-right": "0.5em"})
        .data({"net": row_net, "masklen": i})
-       .dblclick(function() {
+       .click(function(e) {
+         if(e.target != this && !$(e.target).hasClass("ui-icon-blank")) return;
          let _net = $(this).data("net");
          let _masklen = $(this).data("masklen");
 
@@ -559,7 +646,6 @@ function v4nav(data) {
 
     let r_td=$(TD);
     let r_css={"background-color": "white"};
-
 
     tr
      .append( r_td
