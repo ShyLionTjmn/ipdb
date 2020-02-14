@@ -177,22 +177,72 @@ function v4ranges_calc_show(ranges, ranges_list) {
 
   for(let i=0; i < ranges_list.length; i++) {
     let r=ranges_list[i];
-    let row=$(DIV).css({"display": "table-row"})
-     .append( $(SPAN).addClass("ui-icon")
-       .css({"display": "table-cell"})
-       .addClass( ranges[r]['v4r_icon'] != "" ? ranges[r]['v4r_icon'] : "ui-icon-arrow-2-n-s")
+
+    let vis_span;
+
+    if(Number(ranges[r]['v4r_visible']) > 0) {
+      vis_span = $(SPAN).addClass("ui-icon")
+       .addClass("ui-icon-blank")
+       .css(s_ranges_spacing)
+      ;
+    } else {
+      vis_span = $("<S/>")
+       .append( $(SPAN).html("&#128065;")
+         .css({"color": "gray"})
+         .title("Скрытая")
+       )
+      ;
+    };
+
+    let icon;
+
+    if(String(ranges[r]['v4r_icon']).match(/^ui-icon(?:-[a-z0-9]+)+$/)) {
+      icon=$(SPAN).addClass("ui-icon")
+       .addClass( ranges[r]['v4r_icon'] )
        .css( JSON.parse(ranges[r]['v4r_icon_style']) )
        .css(s_ranges_spacing)
-     )
-     .append( $(SPAN).text(v4long2ip(ranges[r]['v4r_start'])+" - "+v4long2ip(ranges[r]['v4r_stop']))
-       .css({"display": "table-cell"})
-       .css({"white-space": "pre", "margin-left": "0.5em"})
-       .css( JSON.parse(ranges[r]['v4r_style']) )
-     )
-     .append( $(SPAN).text(ranges[r]['v4r_name'])
-       .css({"display": "table-cell"})
-       .css({"white-space": "pre", "margin-left": "0.5em"})
        .title( ranges[r]['v4r_descr'] )
+      ;
+    } else if(String(ranges[r]['v4r_icon']).match(/^&#[0-9a-fA-F]+;$/)) {
+      icon=$(SPAN).html( ranges[r]['v4r_icon'] )
+       .css( JSON.parse(ranges[r]['v4r_icon_style']) )
+       .css(s_ranges_spacing)
+       .title( ranges[r]['v4r_descr'] )
+      ;
+    } else if(String(ranges[r]['v4r_icon']).match(/\.(?:png|jpg|jpeg|ico|gif)$/)) {
+      icon=$(IMG).prop("src", ranges[r]['v4r_icon'] )
+       .css( JSON.parse(ranges[r]['v4r_icon_style']) )
+       .css(s_ranges_spacing)
+       .title( ranges[r]['v4r_descr'] )
+      ;
+    } else {
+      icon=$(SPAN).addClass("ui-icon")
+       .addClass("ui-icon-arrow-2-n-s")
+       .css( JSON.parse(ranges[r]['v4r_icon_style']) )
+       .css(s_ranges_spacing)
+       .title( ranges[r]['v4r_descr'] )
+      ;
+    };
+
+    let row=$(DIV).css({"display": "table-row"})
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( icon )
+     )
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( vis_span )
+     )
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( $(SPAN).text(v4long2ip(ranges[r]['v4r_start'])+" - "+v4long2ip(ranges[r]['v4r_stop']))
+         .css({"white-space": "pre", "margin-left": "0.5em"})
+         .css( JSON.parse(ranges[r]['v4r_style']) )
+         .title( ranges[r]['v4r_descr'] )
+       )
+     )
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( $(SPAN).text(ranges[r]['v4r_name'])
+         .css({"white-space": "pre", "margin-left": "0.5em"})
+         .title( ranges[r]['v4r_descr'] )
+       )
      )
     ;
     row.appendTo( table_div );
@@ -404,6 +454,17 @@ function v4nav(data) {
     };
   };
 
+  inner_ranges.sort(function(a,b) {
+    if(data['ext_ranges'][a]['v4r_start'] != data['ext_ranges'][b]['v4r_start']) {
+      return Number(data['ext_ranges'][a]['v4r_start']) - Number(data['ext_ranges'][a]['v4r_start']);
+    } else if(data['ext_ranges'][a]['v4r_stop'] != data['ext_ranges'][b]['v4r_stop']) {
+      return Number(data['ext_ranges'][a]['v4r_stop']) - Number(data['ext_ranges'][a]['v4r_stop']);
+    } else {
+      return String(data['ext_ranges'][a]['v4r_name']).localeCompare(String(data['ext_ranges'][b]['v4r_name']));
+    };
+  });
+
+
   let outer_ranges_span=undefined;
 
   if(outer_ranges.length > 0) {
@@ -428,6 +489,7 @@ function v4nav(data) {
     let row_ip_text=rows_octets[0]+"."+rows_octets[1]+"."+rows_octets[2]+"."+rows_octets[3];
 
     let row_net=v4oct2long(rows_octets[0], rows_octets[1], rows_octets[2], rows_octets[3]);
+    let row_last=(row_net | ~v4len2mask[masklen_stop]) >>> 0;
 
     if(last_net != undefined &&
        row_net > last_net['v4net_last']
@@ -460,6 +522,7 @@ function v4nav(data) {
     tr
      .append( $(TD).text(row_ip_text)
        .css({"border-bottom": "1px solid gray", "padding-left": "0.5em", "padding-right": "0.5em"})
+       .title( v4long2ip(row_last) )
      )
     ;
     for(let i=masklen_start; i <= masklen_stop; i++) {
@@ -646,6 +709,29 @@ function v4nav(data) {
 
     let r_td=$(TD);
     let r_css={"background-color": "white"};
+
+    for(let i=0; i < inner_ranges.length; i++) {
+      let r=inner_ranges[i];
+      let range=data['ext_ranges'][r];
+
+      let r_span=$(SPAN)
+       .css(s_ranges_spacing)
+      ;
+
+      if(row_net > Number(range['v4r_stop']) || row_last < Number(range['v4r_start'])) {
+        r_span.html(" ");
+      } else if(row_net > Number(range['v4r_start']) && row_last < Number(range['v4r_stop'])) {
+        r_span.html("&#9475;"); // vertical bar, row net is inside range
+      } else if(row_net < Number(range['v4r_start']) && row_last > Number(range['v4r_stop'])) {
+        r_span.html("&#x25c0;"); // triangle left-pointing, range is inside row net
+      } else if(row_net == Number(range['v4r_start']) && row_last == Number(range['v4r_stop'])) {
+        r_span.html("&#x21b9;").css({"transform": "rotate(90deg)"}); // triangle left-pointing, range is equal row net
+      } else if(row_net == Number(range['v4r_start']) && row_last < Number(range['v4r_stop'])) {
+        r_span.html("&#x2533;"); // T , range is started on row net and goes to next row or beyond
+      } else if(row_net < Number(range['v4r_start']) && row_last < Number(range['v4r_stop']) && row_last >= Number(range['v4r_start'])) {
+        r_span.html("&#x250f;"); // г , range is started inside row net and goes to next row or beyond
+      };
+    };
 
     tr
      .append( r_td
