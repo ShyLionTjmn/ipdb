@@ -84,7 +84,7 @@ $.fn.range_symbol = function(net_start, net_last, range_start, range_stop) {
     // .css({"transform": "rotate(90deg)"}); // , range is equal row net
     //this.html("&#x29f1;"); // ⧱ , range is equal row net
     this.html("&#x25fc;"); // ◼ , range is equal row net
-  } else if(net_start > range_start && net_start < range_stop && net_last > range_stop) {
+  } else if(net_start > range_start && net_start <= range_stop && net_last > range_stop) {
     this.html("&#x2517;"); // ┗ , range is started before row net and goes inside row
   } else if(net_start > range_start && net_last == range_stop) {
     this.html("&#x253B;"); // ┻ , range is started before row net and end on row
@@ -125,7 +125,7 @@ function saveQuery(title) {
     save_uri += "?"+query_string;
   };
   if(window.location.href != save_uri) {
-    window.history.pushState({}, title, save_uri);
+    window.history.pushState($R, title, save_uri);
   };
 };
 
@@ -275,13 +275,20 @@ function v4ranges_calc_show(ranges, ranges_list) {
          .title( ranges[r]['v4r_descr'] )
        )
      )
+     /*.append( $(DIV).css({"display": "table-cell"})
+       .append( $(SPAN).text(ranges[r]['_debug'])
+         .css({"white-space": "pre", "margin-left": "0.5em"})
+         .title( ranges[r]['v4r_descr'] )
+       )
+     )*/
     ;
     row.appendTo( table_div );
   };
   table_div.appendTo( calc_cont );
+  $("#calc").show();
 };
 
-function v4cacl_show(net, masklen, elm) {
+function v4calc_show(net, masklen, elm) {
   let calc_text="Network: "+v4long2ip(net)+"/"+masklen;
   calc_text += "\nMask: "+v4long2ip(v4len2mask[masklen]);
   calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[masklen]) >>> 0);
@@ -438,7 +445,7 @@ function v4nav(data) {
      .click(function() {
        let _net=$(this).data("net");
        let _masklen=$(this).data("masklen");
-       v4cacl_show(_net, _masklen, $(this).closest("TH"));
+       v4calc_show(_net, _masklen, $(this).closest("TH"));
      })
    )
   ;
@@ -483,6 +490,8 @@ function v4nav(data) {
          Number(data['net_info']['net_last']) < Number(data['ext_ranges'][r]['v4r_stop'])
       ) {
         outer_ranges.push(r);
+        data['ext_ranges'][r]['_hit'] = true;
+        data['ext_ranges'][r]['_debug'] = "outer";
       } else {
         let r_start_net = (Number(data['ext_ranges'][r]['v4r_start']) & cut_net_mask) >>> 0;
         let r_stop_net = (Number(data['ext_ranges'][r]['v4r_stop']) & cut_net_mask) >>> 0;
@@ -491,10 +500,12 @@ function v4nav(data) {
         let r_stop_host = (Number(data['ext_ranges'][r]['v4r_stop']) & cut_net_wildcard) >>> 0;
         let r_stop_host_next = ((Number(data['ext_ranges'][r]['v4r_stop'])+1) & cut_net_wildcard) >>> 0;
 
-        if(r_start_net == r_stop_net && (r_start_host > 0 || r_stop_host_next > 0)) {
+        if(r_start_net == r_stop_net && (r_start_host > 0 && r_stop_host_next > 0)) {
           inside_ranges.push(r);
+          data['ext_ranges'][r]['_debug'] = "inside";
         } else {
           inner_ranges.push(r);
+          data['ext_ranges'][r]['_debug'] = "inner";
         };
       };
     };
@@ -514,9 +525,9 @@ function v4nav(data) {
   let outer_ranges_span=undefined;
 
   if(outer_ranges.length > 0) {
-    outer_ranges_span=$(SPAN)
-     .addClass("ui-icon").addClass("ui-icon-bullet")
-     .css({"color": "gray"})
+    outer_ranges_span=$(LABEL).html("&#x26AB;")
+     //.addClass("ui-icon").addClass("ui-icon-bullet")
+     .css({"color": "green"})
      .css(s_ranges_spacing)
      .data("ranges", outer_ranges)
      .title(outer_ranges.length+" диапазонов, в которые сеть входит целиком. Нажмите на этот значёк для подробной информации.")
@@ -644,7 +655,7 @@ function v4nav(data) {
          let _net = $(this).data("net");
          let _masklen = $(this).data("masklen");
 
-         v4cacl_show(_net, _masklen, $(this));
+         v4calc_show(_net, _masklen, $(this));
        })
       ;
 
@@ -768,6 +779,7 @@ function v4nav(data) {
       if(row_net > Number(range['v4r_stop']) || row_last < Number(range['v4r_start'])) {
         r_elm.html(" ");
       } else {
+        data['ext_ranges'][r]['_hit'] = true;
         r_elm.range_symbol(row_net, row_last, Number(range['v4r_start']), Number(range['v4r_stop']));
 
         r_elm
@@ -827,9 +839,23 @@ function v4nav(data) {
     tr.appendTo(tbody);
   };
 
-  v4cacl_show(data['net_info']['net'], data['net_info']['masklen'], top_left);
-  let func_stop=Date.now();
 
+  let not_hit=Array();
+
+  for(let r in data['ext_ranges']) {
+    if(!data['ext_ranges'][r]['_hit']) {
+      not_hit.push(r);
+    };
+  };
+
+  if(not_hit.length == 0) {
+    v4calc_show(data['net_info']['net'], data['net_info']['masklen'], top_left);
+  } else {
+    v4ranges_calc_show(data['ext_ranges'], not_hit);
+  };
+
+
+  let func_stop=Date.now();
   //$("#debug").text( func_stop - func_start );
 };
 
@@ -998,7 +1024,23 @@ function ipv4() {
   ;
 };
 
+function process_R() {
+  if($R['action'] == "ipv4") {
+    ipv4();
+  } else if($R['action'] == "v4get_net") {
+    v4get_net();
+  } else {
+    $R={'action': "ipv4"};
+    ipv4();
+  };
+};
+
 $( document ).ready(function() {
+
+  window.onpopstate=function(e) {
+    $R=e.state;
+    process_R();
+  };
 
   page_root=window.location.href.split("?")[0];
   let qs=window.location.search.substring(1);
@@ -1178,11 +1220,8 @@ $( document ).ready(function() {
          )
         ;
 
-        if($R['action'] == "ipv4") {
-          ipv4();
-        } else if($R['action'] == "v4get_net") {
-          v4get_net();
-        };
+        process_R();
+
       };
 
     };
