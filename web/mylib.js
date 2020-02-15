@@ -432,6 +432,30 @@ function nets2lang(capital, lang, num) {
   return ret;
 };
 
+function ranges2lang(capital, lang, num) {
+  let ret;
+  if(lang == "ru") {
+    if(capital) { ret="Д"; } else { ret="д"; };
+    let strnum=String(num);
+
+    if(strnum.match(/1$/) && num != 11) {
+      ret += "иапазон";
+    } else if(strnum.match(/[2-4]$/) && (num < 12 || num > 14)) {
+      ret += "иапазона";
+    } else {
+      ret += "иапазонов";
+    };
+
+  } else {
+    if(capital) { ret="R"; } else { ret="r"; };
+    if(num != 1) {
+      ret += "anges";
+    } else {
+      ret += "ange";
+    };
+  };
+  return ret;
+};
 function param_by_type_check(type, value) {
   if(type == "v4long") {
     if(!String(value).match(/^\d+$/) || Number(value) < 0 || Number(value) > 4294967295) return false;

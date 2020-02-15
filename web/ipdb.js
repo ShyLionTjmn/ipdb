@@ -180,7 +180,7 @@ function ip4octets(net) {
 };
 */
 
-function v4ranges_calc_show(ranges, ranges_list) {
+function clear_calc() {
   $(".calc_highlight").each(function() {
     let saved_bg_color=$(this).data("saved_bg_color");
 
@@ -192,8 +192,13 @@ function v4ranges_calc_show(ranges, ranges_list) {
     };
   });
 
-  let calc_cont=$("#calc_text").empty();
+  $("#calc_text").empty();
+};
 
+function v4ranges_calc_show(ranges, ranges_list) {
+  clear_calc();
+
+  let calc_cont=$("#calc_text");
   ranges_list.sort(function(a,b) {
     if(ranges[a]['v4r_start'] != ranges[b]['v4r_start']) {
       return Number(ranges[a]['v4r_start']) - Number(ranges[a]['v4r_start']);
@@ -289,6 +294,8 @@ function v4ranges_calc_show(ranges, ranges_list) {
 };
 
 function v4calc_show(net, masklen, elm) {
+  clear_calc();
+
   let calc_text="Network: "+v4long2ip(net)+"/"+masklen;
   calc_text += "\nMask: "+v4long2ip(v4len2mask[masklen]);
   calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[masklen]) >>> 0);
@@ -298,17 +305,6 @@ function v4calc_show(net, masklen, elm) {
   $("#calc").show();
 
   $("#calc_text").animateHighlight("lightgreen");
-
-  $(".calc_highlight").each(function() {
-    let saved_bg_color=$(this).data("saved_bg_color");
-
-    $(this).removeClass("calc_highlight");
-    if(saved_bg_color != undefined) {
-      $(this).css({"background-color": saved_bg_color});
-    } else {
-      $(this).css({"background-color": "initial"});
-    };
-  });
 
   if(elm != undefined) {
     let elm_bg_color=elm.css("background-color");
@@ -530,7 +526,7 @@ function v4nav(data) {
      .css({"color": "green"})
      .css(s_ranges_spacing)
      .data("ranges", outer_ranges)
-     .title(outer_ranges.length+" диапазонов, в которые сеть входит целиком. Нажмите на этот значёк для подробной информации.")
+     .title(outer_ranges.length+" "+ranges2lang(false, "ru", outer_ranges.length)+", в которые сеть входит целиком. Нажмите на этот значёк для подробной информации.")
      .click(function() {
        let _ranges_list=$(this).data("ranges");
        let _ranges=$(this).closest("TABLE").data("ext_ranges");
@@ -783,7 +779,7 @@ function v4nav(data) {
         r_elm.range_symbol(row_net, row_last, Number(range['v4r_start']), Number(range['v4r_stop']));
 
         r_elm
-         .title("Диапазон: "+range['v4r_name']+"\nНажмите для более подробной информации")
+         .title(ranges2lang(true, "ru", 1)+": "+v4long2ip(range['v4r_start'])+" - "+v4long2ip(range['v4r_stop'])+"\n"+range['v4r_name']+"\nНажмите для более подробной информации")
          .data("ranges", [ r ])
          .click(function() {
            let _ranges_list=$(this).data("ranges");
@@ -816,7 +812,7 @@ function v4nav(data) {
         r_elm.html(" ");
       } else {
         r_elm.html("&#x25c0;") // ◀, range is inside row net
-         .title(row_inside_ranges.length+" диапазонов внутри подсети.\nНажмите для более подробной информации")
+         .title(row_inside_ranges.length+" "+ranges2lang(false, "ru", outer_ranges.length)+" внутри подсети.\nНажмите для более подробной информации")
          .data("ranges", row_inside_ranges)
          .click(function() {
            let _ranges_list=$(this).data("ranges");
@@ -1178,7 +1174,26 @@ $( document ).ready(function() {
        )
       ;
 
-      $("#user_info").text(data["ok"]["user"]["user_name"]);
+      
+      $("#user_info")
+       .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-contact")
+         .title("debug info")
+         .css({"margin-right": "0.5em"})
+         .css(s_blocks_color)
+         .click(function() {
+           clear_calc();
+           let calc_cont=$("#calc_text");
+           calc_cont
+            .append( $(DIV).css({"white-space": "pre"})
+              .text( JSON.stringify(ud, null, "  ") )
+            )
+           ;
+           $("#calc").show();
+         })
+       )
+      ;
+
+      $("#user_info").append( $(SPAN).text(data["ok"]["user"]["user_name"]) );
 
 
       if(data["ok"]["user"]["user_state"] < 1) {
