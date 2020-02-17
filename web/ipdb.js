@@ -18,6 +18,9 @@ const NR_MAN_ACCESS     = 1 << 5;
 const NR_MAN_RANGES     = 1 << 6;
 const NR_DROP_NET       = 1 << 7;
 const NR_EDIT_NET       = 1 << 8;
+const RR_TAKE_NET       = 1 << 9;
+const RR_DENY_TAKE_IP   = 1 << 10; //also deny editing
+
 
 
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
@@ -214,18 +217,33 @@ function v4ranges_calc_show(ranges, ranges_list) {
   for(let i=0; i < ranges_list.length; i++) {
     let r=ranges_list[i];
 
-    let vis_span;
+    let attributes=$(SPAN);
 
     if(Number(ranges[r]['v4r_visible']) > 0) {
-      vis_span = $(SPAN).addClass("ui-icon")
-       .addClass("ui-icon-blank")
-       .css(s_ranges_spacing)
+      attributes
+       .append( $(LABEL).addClass("ui-icon")
+         .addClass("ui-icon-blank")
+         .css(s_ranges_spacing)
+       )
       ;
     } else {
-      vis_span = $("<S/>")
-       .append( $(SPAN).html("&#128065;")
-         .css({"color": "gray"})
-         .title("Скрытая")
+      attributes
+       .append( $("<S/>")
+         .css(s_ranges_spacing)
+         .append( $(LABEL).html("&#128065;")
+           .css({"color": "gray"})
+           .title("Скрытая")
+         )
+       )
+      ;
+    };
+
+    if(has_right(R_SUPER) || (Number(ranges[r]['rmask']) & RR_TAKE_NET) > 0) {
+      attributes
+       .append( $(LABEL).addClass("ui-icon")
+         .addClass("ui-icon-unlocked")
+         .css(s_ranges_spacing)
+         .title("Разрешено занимать сети")
        )
       ;
     };
@@ -233,14 +251,14 @@ function v4ranges_calc_show(ranges, ranges_list) {
     let icon;
 
     if(String(ranges[r]['v4r_icon']).match(/^ui-icon(?:-[a-z0-9]+)+$/)) {
-      icon=$(SPAN).addClass("ui-icon")
+      icon=$(LABEL).addClass("ui-icon")
        .addClass( ranges[r]['v4r_icon'] )
        .css( JSON.parse(ranges[r]['v4r_icon_style']) )
        .css(s_ranges_spacing)
        .title( ranges[r]['v4r_descr'] )
       ;
     } else if(String(ranges[r]['v4r_icon']).match(/^&#[0-9a-fA-F]+;$/)) {
-      icon=$(SPAN).html( ranges[r]['v4r_icon'] )
+      icon=$(LABEL).html( ranges[r]['v4r_icon'] )
        .css( JSON.parse(ranges[r]['v4r_icon_style']) )
        .css(s_ranges_spacing)
        .title( ranges[r]['v4r_descr'] )
@@ -252,7 +270,7 @@ function v4ranges_calc_show(ranges, ranges_list) {
        .title( ranges[r]['v4r_descr'] )
       ;
     } else {
-      icon=$(SPAN).addClass("ui-icon")
+      icon=$(LABEL).addClass("ui-icon")
        .addClass("ui-icon-arrow-2-n-s")
        .css( JSON.parse(ranges[r]['v4r_icon_style']) )
        .css(s_ranges_spacing)
@@ -265,7 +283,7 @@ function v4ranges_calc_show(ranges, ranges_list) {
        .append( icon )
      )
      .append( $(DIV).css({"display": "table-cell"})
-       .append( vis_span )
+       .append( attributes )
      )
      .append( $(DIV).css({"display": "table-cell"})
        .append( $(SPAN).text(v4long2ip(ranges[r]['v4r_start'])+" - "+v4long2ip(ranges[r]['v4r_stop']))
@@ -634,6 +652,28 @@ function v4nav(data) {
             cell_style['background-color']=color_taken;
             break;
           };
+        };
+      };
+
+      if(takable && !has_right(R_SUPER)) {
+        let rmask=0;
+        for(r in outer_ranges) {
+          if(mask_net >= data['ext_ranges'][r]['v4r_start'] && mask_net_last <= data['ext_ranges'][r]['v4r_stop']) {
+            rmask = rmask | Number(data['ext_ranges'][r]['rmask']);
+            if( (rmask & RR_TAKE_NET) > 0) break;
+          };
+        };
+        if( (rmask & RR_TAKE_NET) == 0) {
+          for(r in inner_ranges) {
+            if(mask_net >= data['ext_ranges'][r]['v4r_start'] && mask_net_last <= data['ext_ranges'][r]['v4r_stop']) {
+              rmask = rmask | Number(data['ext_ranges'][r]['rmask']);
+              if( (rmask & RR_TAKE_NET) > 0) break;
+            };
+          };
+        };
+
+        if( (rmask & RR_TAKE_NET) == 0) {
+          takable = false;
         };
       };
 

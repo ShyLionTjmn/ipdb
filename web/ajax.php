@@ -33,6 +33,8 @@ const NR_MAN_ACCESS	= 1 << 5;
 const NR_MAN_RANGES	= 1 << 6;
 const NR_DROP_NET	= 1 << 7;
 const NR_EDIT_NET	= 1 << 8;
+const RR_TAKE_NET	= 1 << 9;
+const RR_DENY_TAKE_IP	= 1 << 10; //also deny editing
 
 function len2mask($m) {
   return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
@@ -324,16 +326,16 @@ if(!isset($_SESSION['user'])) {
   #get access rights for future use in requests
   if(!has_right(R_SUPER)) {
     #networks access
-    $query="SELECT BIT_OR(gn4rs_rmask) as rmask, v4net_id FROM gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id WHERE gn4rs_fk_group_id IN ($groups) GROUP BY v4net_id";
+    $query="SELECT BIT_OR(gn4r_rmask) as rmask, v4net_id FROM gn4rs INNER JOIN v4nets ON gn4r_fk_v4net_id=v4net_id WHERE gn4r_fk_group_id IN ($groups) GROUP BY v4net_id";
     $GLOBALS['v4nets_access']=return_query($query, 'v4net_id');
 
-    $query="SELECT DISTINCT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, v4net_id";
-    $query .= " FROM (gn4rs INNER JOIN v4nets ON gn4rs_fk_v4net_id=v4net_id) INNER JOIN v4rs ON v4r_fk_v4net_id=v4net_id";
-    $query .= " WHERE gn4rs_fk_group_id IN ($groups)";
+    $query="SELECT DISTINCT v4r_id, v4r_start, v4r_stop, v4r_visible, v4net_id";
+    $query .= " FROM (gn4rs INNER JOIN v4nets ON gn4r_fk_v4net_id=v4net_id) INNER JOIN v4rs ON v4r_fk_v4net_id=v4net_id";
+    $query .= " WHERE gn4r_fk_group_id IN ($groups)";
     $GLOBALS['v4rs_net_access']=return_query($query);
 
-    $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, v4r_access, BIT_OR(gr4rs_rmask) AS rmask FROM gr4rs INNER JOIN v4rs ON v4r_id=gr4rs_fk_v4r_id";
-    $query .= " WHERE gr4rs_fk_group_id IN ($groups)";
+    $query="SELECT v4r_id, v4r_start, v4r_stop, v4r_visible, BIT_OR(gr4r_rmask) AS rmask FROM gr4rs INNER JOIN v4rs ON v4r_id=gr4r_fk_v4r_id";
+    $query .= " WHERE gr4r_fk_group_id IN ($groups)";
     $query .= " GROUP BY v4r_id";
     $GLOBALS['v4rs_access']=return_query($query);
   };
@@ -403,7 +405,9 @@ if($q['action'] == 'v4get_net') {
     if($net_info['masklen'] >= 16) { $max_mask_len=24; };
     if($net_info['masklen'] >= 24) { $max_mask_len=32; };
 
-    $query="SELECT * FROM v4nets WHERE";
+    $query="SELECT v4nets.*";
+    $query .= ", (SELECT BIT_OR(gn4r_rmask) FROM gn4rs WHERE gn4r_fk_v4net_id=v4net_id AND gn4r_fk_group_id IN ($groups)) as rmask";
+    $query .= " FROM v4nets WHERE";
     $query .= " v4net_addr >= ".mq($net_info['net']);
     $query .= " AND v4net_addr <= ".mq($net_info['net_last']);
     $query .= " AND v4net_mask <= ".mq($max_mask_len);
@@ -434,7 +438,9 @@ if($q['action'] == 'v4get_net') {
     $rows=return_query($query, 'aggr_net');
     $ret['aggr_nets']=$rows;
 
-    $query="SELECT * FROM v4rs WHERE";
+    $query="SELECT v4rs.*";
+    $query .= ", (SELECT BIT_OR(gr4r_rmask) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id AND gr4r_fk_group_id IN ($groups)) as rmask";
+    $query .= " FROM v4rs WHERE";
     $query .= " v4r_stop >= ".mq($net_info['net']);
     $query .= " AND v4r_start <= ".mq($net_info['net_last']);
     $query .= " AND v4r_fk_v4net_id IS NULL";

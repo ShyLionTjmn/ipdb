@@ -399,7 +399,6 @@ CREATE TABLE v4rs(
   v4r_start	INTEGER UNSIGNED NOT NULL,
   v4r_stop	INTEGER UNSIGNED NOT NULL,
   v4r_visible	TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  v4r_access	TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0-cosmetic or allow access for specific group (vXr_fk_vXnet_id should not be set), 1-deny ip manipulation except if group has 16 in rmask in gnXrs table (vXr_fk_vXnet_id should be set)',
   v4r_name	VARCHAR(128) NOT NULL DEFAULT '',
   v4r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   v4r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
@@ -419,7 +418,6 @@ CREATE TABLE v6rs(
   v6r_start	VARBINARY(16) NOT NULL,
   v6r_stop	VARBINARY(16) NOT NULL,
   v6r_visible	TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  v6r_access	TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0-cosmetic or allow access for specific group (vXr_fk_vXnet_id should not be set), 1-deny ip manipulation except if group has 16 in rmask in gnXrs table (vXr_fk_vXnet_id should be set)',
   v6r_name	VARCHAR(128) NOT NULL DEFAULT '',
   v6r_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   v6r_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as elm.css( ic_style )',
@@ -435,58 +433,58 @@ CREATE TABLE v6rs(
 );
 
 CREATE TABLE gn4rs(
-  gn4rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  gn4rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
-  gn4rs_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
-  gn4rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies, 32-manage access, 64-add/del/edit ranges, 128-drop net, 256-edit net name/desr, 512-take nets (for ranges! ignore for nets!)',
+  gn4r_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gn4r_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  gn4r_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
+  gn4r_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies, 32-manage access, 64-add/del/edit ranges, 128-drop net, 256-edit net name/desr, 512-reserved for ranges, 1024-reserved for ranges',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
-  PRIMARY KEY (gn4rs_id),
-  UNIQUE KEY uk_ids(gn4rs_fk_group_id,gn4rs_fk_v4net_id),
-  FOREIGN KEY (gn4rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (gn4rs_fk_v4net_id) REFERENCES v4nets(v4net_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  PRIMARY KEY (gn4r_id),
+  UNIQUE KEY uk_ids(gn4r_fk_group_id,gn4r_fk_v4net_id),
+  FOREIGN KEY (gn4r_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gn4r_fk_v4net_id) REFERENCES v4nets(v4net_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc		TINYINT COMMENT 'v4 net group rights. rmasks from multiple groups membership is ORed'
 );
 
 CREATE TABLE gn6rs(
-  gn6rs_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  gn6rs_fk_group_id	BIGINT UNSIGNED NOT NULL,
-  gn6rs_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
-  gn6rs_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies, 32-manage access, 64-add/del/edit ranges, 128-drop net, 256-edit net name/desr, 512-take nets (for ranges! ignore for nets!)',
+  gn6r_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gn6r_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  gn6r_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
+  gn6r_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit IPs, 8-free IPs, 16-ignore range denies, 32-manage access, 64-add/del/edit ranges, 128-drop net, 256-edit net name/desr, 512-reserved for ranges, 1024-reserved for ranges',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
-  PRIMARY KEY (gn6rs_id),
-  UNIQUE KEY uk_ids(gn6rs_fk_group_id,gn6rs_fk_v6net_id),
-  FOREIGN KEY (gn6rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (gn6rs_fk_v6net_id) REFERENCES v6nets(v6net_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  PRIMARY KEY (gn6r_id),
+  UNIQUE KEY uk_ids(gn6r_fk_group_id,gn6r_fk_v6net_id),
+  FOREIGN KEY (gn6r_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gn6r_fk_v6net_id) REFERENCES v6nets(v6net_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc		TINYINT COMMENT 'v6 net group rights. rmasks from multiple groups membership is ORed'
 );
 
 CREATE TABLE gr4rs(
-  gr4rs_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  gr4rs_fk_group_id     BIGINT UNSIGNED NOT NULL,
-  gr4rs_fk_v4r_id     BIGINT UNSIGNED NOT NULL,
-  gr4rs_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view names, 2-view other info and IPs, 512-take nets',
+  gr4r_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gr4r_fk_group_id     BIGINT UNSIGNED NOT NULL,
+  gr4r_fk_v4r_id     BIGINT UNSIGNED NOT NULL,
+  gr4r_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view names, 2-view other info and IPs, 512-take nets, 1024-deny ip taking(range must be linked with network, overrided by 16)',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
-  PRIMARY KEY (gr4rs_id),
-  UNIQUE KEY uk_ids(gr4rs_fk_group_id,gr4rs_fk_v4r_id),
-  FOREIGN KEY (gr4rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (gr4rs_fk_v4r_id) REFERENCES v4rs(v4r_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  PRIMARY KEY (gr4r_id),
+  UNIQUE KEY uk_ids(gr4r_fk_group_id,gr4r_fk_v4r_id),
+  FOREIGN KEY (gr4r_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gr4r_fk_v4r_id) REFERENCES v4rs(v4r_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc            TINYINT COMMENT 'v4 range group rights'
 );
 
 CREATE TABLE gr6rs(
-  gr6rs_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  gr6rs_fk_group_id     BIGINT UNSIGNED NOT NULL,
-  gr6rs_fk_v6r_id     BIGINT UNSIGNED NOT NULL,
-  gr6rs_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view names, 2-view other info and IPs, 512-take nets',
+  gr6r_id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gr6r_fk_group_id     BIGINT UNSIGNED NOT NULL,
+  gr6r_fk_v6r_id     BIGINT UNSIGNED NOT NULL,
+  gr6r_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view names, 2-view other info and IPs, 512-take nets, 1024-deny ip taking(range must be linked with network, overrided by 16)',
   `ts`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   fk_user_id    BIGINT UNSIGNED,
-  PRIMARY KEY (gr6rs_id),
-  UNIQUE KEY uk_ids(gr6rs_fk_group_id,gr6rs_fk_v6r_id),
-  FOREIGN KEY (gr6rs_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (gr6rs_fk_v6r_id) REFERENCES v6rs(v6r_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  PRIMARY KEY (gr6r_id),
+  UNIQUE KEY uk_ids(gr6r_fk_group_id,gr6r_fk_v6r_id),
+  FOREIGN KEY (gr6r_fk_group_id) REFERENCES groups(group_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (gr6r_fk_v6r_id) REFERENCES v6rs(v6r_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc            TINYINT COMMENT 'v6 range group rights'
 );
 
