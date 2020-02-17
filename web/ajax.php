@@ -40,6 +40,7 @@ function len2mask($m) {
   return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
 };
 
+/*
 function get_v4net_rights($netrow) {
   $ret = 0;
 
@@ -54,6 +55,7 @@ function get_v4net_rights($netrow) {
 
   return $ret;
 };
+*/
 
 function get_closest_v4netinfo($n, $m) {
   # validate n and m prior call !!
@@ -348,7 +350,9 @@ if($q['action'] == 'v4get_net') {
 
   $net_info=get_closest_v4netinfo($q['net'], $q['mask']);
 
-  $query="SELECT * FROM v4nets WHERE v4net_addr <= ".mq($net_info['net']);
+  $query="SELECT v4nets.*";
+  $query .=", (SELECT BIT_OR(gn4r_rmask) FROM gn4rs WHERE gn4r_fk_v4net_id=v4net_id AND gn4r_fk_group_id IN ($groups)) as rmask";
+  $query .=" FROM v4nets WHERE v4net_addr <= ".mq($net_info['net']);
   $query .= " AND v4net_last >= ".mq($net_info['net']);
   $query .= " AND v4net_mask <= ".mq($q['mask']);
 
@@ -358,17 +362,15 @@ if($q['action'] == 'v4get_net') {
 
   $row=return_one($query);
   if($row !== NULL) {
-    $net_rights=get_v4net_rights($row);
 
-    if(!has_nright($net_rights, NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
-    if(!has_nright($net_rights, NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
+    if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
+    if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
 
     $ret['net']=$row;
-    $ret['net']['net_rights']=$net_rights;
 
     $ret['type']="net";
 
-    if(!has_nright($net_rights, NR_VIEWOTHER)) {
+    if(!has_nright($row['rmask'], NR_VIEWOTHER)) {
       $ret['net']['noaccess']=TRUE;
     } else {
       $net_info=get_v4netinfo($row['v4net_addr'], $row['v4net_mask']);
@@ -417,11 +419,9 @@ if($q['action'] == 'v4get_net') {
 
     $nets=Array();
     foreach($rows as $row) {
-      $net_rights=get_v4net_rights($row);
-      $row['net_rights']=$net_rights;
 
-      if(!has_nright($net_rights, NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
-      if(!has_nright($net_rights, NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
+      if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
+      if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
 
 
       $nets[ $row['v4net_addr'] ] = $row;
@@ -448,7 +448,14 @@ if($q['action'] == 'v4get_net') {
   $ret['_queries'][] = $query;
     $ext_ranges=return_query($query);
     
-    $ret['ext_ranges']=$ext_ranges;
+    $ret['ext_ranges']=Array();
+
+    foreach($ext_ranges as $row) {
+      if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4r_name'] = 'hidden'; };
+      if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4r_descr'] = 'hidden'; };
+      $ret['ext_ranges'][] = $row;
+    };
+
 
   };
   ok_exit($ret);

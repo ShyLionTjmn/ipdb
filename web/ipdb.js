@@ -208,6 +208,18 @@ function clear_calc() {
   $("#calc_text").empty();
 };
 
+function validate_json(animate_good, animate_bad) {
+  let j=$(this).val();
+  try {
+    let res=JSON.parse(j);
+    if(animate_good != undefined) $(this).animateHighlight(animate_good, 200);
+    return true;
+  } catch(e) {
+    if(animate_bad != undefined) $(this).animateHighlight(animate_bad, 200);
+    return false;
+  };
+};
+
 function validate_v4range() {
   let start_input=$("INPUT#v4range_start");
   let stop_input=$("INPUT#v4range_stop");
@@ -326,11 +338,41 @@ function v4_global_range_dialog(v4r_id, donefunc) {
    )
    .append( $(TR)
      .append( $(TD).css({"text-align": "right"})
-       .append( $(LABEL).text("Стиль (JSON):") )
+       .append( $(LABEL).text("Стиль линии/текста (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_style").prop({"placeholder": "JSON строка для .css()"})
-         .on("change input", validate_json)
+       .append( $(INPUT).id("v4range_style").prop({"placeholder": "{\"color\": \"red\"}"})
+         .on("change input", function() { validate_json.call(this, "lightgreen", "red"); })
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Значек:")
+         .dotted("ui-icon-xxx - Класс jQuery UI icon\n&#NNNN; - HTML Unicode символ\nURL - Ссылка на .png, .jpg, .jpeg, .ico, .gif")
+       )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_icon").prop({"placeholder": "ui-icon-info"})
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Стиль значка (JSON):") )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_icon_style").prop({"placeholder": "{\"color\": \"red\"}"})
+         .on("change input", function() { validate_json.call(this, "lightgreen", "red"); })
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Права доступа:") )
+     )
+     .append( $(TD)
+       .append( $(DIV).id("v4range_rights") 
        )
      )
    )
@@ -339,6 +381,13 @@ function v4_global_range_dialog(v4r_id, donefunc) {
   table.appendTo( dialog );
 
   dialog.dialog(d);
+
+  if(v4r_id != undefined) {
+    let query={"action": "v4_get_range", "range_id": v4r_id};
+    run_query(query, function(data) {
+    });
+  } else {
+  };
 
 };
 
@@ -412,7 +461,7 @@ function v4ranges_calc_show(ranges, ranges_list) {
        .css(s_ranges_spacing)
        .title( ranges[r]['v4r_descr'] )
       ;
-    } else if(String(ranges[r]['v4r_icon']).match(/^&#[0-9a-fA-F]+;$/)) {
+    } else if(String(ranges[r]['v4r_icon']).match(/^&#[xX]?[0-9a-fA-F]+;$/)) {
       icon=$(LABEL).html( ranges[r]['v4r_icon'] )
        .css( JSON.parse(ranges[r]['v4r_icon_style']) )
        .css(s_ranges_spacing)
@@ -434,6 +483,8 @@ function v4ranges_calc_show(ranges, ranges_list) {
     };
 
     let row=$(DIV).css({"display": "table-row"})
+     .addClass("row")
+     .data("data", ranges[r])
      .append( $(DIV).css({"display": "table-cell"})
        .append( icon )
      )
@@ -460,6 +511,44 @@ function v4ranges_calc_show(ranges, ranges_list) {
        )
      )*/
     ;
+
+    let can_edit=has_right(R_SUPER);
+    if(can_edit) {
+      row
+       .append( $(DIV).css({"display": "table-cell"})
+         .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+           .css({"white-space": "pre", "margin-left": "0.5em"})
+           .title("Изменить")
+           .click(function() {
+             let _d=$(this).closest(".row").data("data");
+             if(_d == "") { error_at(); return; };
+             let _id=_d['v4r_id'];
+             if(_id == undefined) { error_at(); return; };
+
+             $(".range_btn").show();
+             v4_global_range_dialog(_id, function() { process_R(); });
+           })
+         )
+       )
+       .append( $(DIV).css({"display": "table-cell"})
+         .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
+           .css({"white-space": "pre", "margin-left": "0.5em"})
+           .title("Удалить")
+           .click(function() {
+             let _d=$(this).closest(".row").data("data");
+             if(_d == "") { error_at(); return; };
+             let _id=_d['v4r_id'];
+             if(_id == undefined) { error_at(); return; };
+
+             show_confirm("Подтвердите удаление диапазона "+v4long2ip(_d['v4r_start'])+" - "+v4long2ip(_d['v4r_stop'])+"\n"+_d['v4r_name'], function() {
+               let query={"action": "v4_del_range", "range_id": _id};
+               run_query(query, function() { process_R(); });
+             });
+           })
+         )
+       )
+      ;
+    };
     row.appendTo( table_div );
   };
   table_div.appendTo( calc_cont );
