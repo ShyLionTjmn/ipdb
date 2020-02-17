@@ -139,6 +139,16 @@ function v4oct2long(i3, i2, i1, i0) {
   ret += Number(i0);
   return ret >>> 0;
 };
+
+function v4ip2long(ip) {
+  let m=String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if(m.length != 6 || Number(m[1]) > 255 || Number(m[2]) > 255 || Number(m[3]) > 255 || Number(m[4]) > 255) {
+    return false;
+  } else {
+    return(v4oct2long(m[1], m[2], m[3], m[4]));
+  };
+};
+
 /*
 function v4oct2long(i3, i2, i1, i0) {
   let ret = (0xFF & i3) << 24;
@@ -198,6 +208,90 @@ function clear_calc() {
   $("#calc_text").empty();
 };
 
+function validate_v4range() {
+  let start_input=$("INPUT#v4range_start");
+  let stop_input=$("INPUT#v4range_stop");
+
+  if(start_input.length != 1 || stop_input.length != 1) { error_at(); return; };
+
+  let start_ip=start_input.val();
+  let stop_ip=stop_input.val();
+
+  let start_long=v4ip2long(start_ip);
+  let stop_long=v4ip2long(stop_ip);
+  
+
+
+function v4_global_range_dialog(v4r_id, donefunc) {
+  if( $("#v4_global_range_dialog").length != 0) return;
+
+  $(".range_btn").show();
+
+  let title;
+
+  if(v4r_id == undefined) {
+    title = "Добавление глобального диапазона";
+  } else {
+    if(donefunc == undefined) {
+      title = "Просмотр глобального диапазона";
+    } else {
+      title = "Редактирование глобального диапазона";
+    };
+  };
+
+  let dialog=$(DIV).id("v4_global_range_dialog")
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css("white-space", "pre")
+   //.appendTo("BODY")
+   .appendTo("#contents")
+  ;
+
+  let d={
+    modal:false,
+    maxHeight:1000,
+    maxWidth:1000,
+    minWidth:600,
+    buttons: [],
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    }
+  };
+
+  d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+  let table=$(TABLE);
+
+  table
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "left"})
+       .append( $(LABEL).text("Начало:") )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_start").prop({"placeholder": "x.x.x.x"})
+         .on("change input", validate_v4range())
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "left"})
+       .append( $(LABEL).text("Окончание:") )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_stop").prop({"placeholder": "x.x.x.x"})
+         .on("change input", validate_v4range())
+       )
+     )
+   )
+  ;
+
+  table.appendTo( dialog );
+
+  dialog.dialog(d);
+
+};
+
 function v4ranges_calc_show(ranges, ranges_list) {
   clear_calc();
 
@@ -238,12 +332,22 @@ function v4ranges_calc_show(ranges, ranges_list) {
       ;
     };
 
-    if(has_right(R_SUPER) || (Number(ranges[r]['rmask']) & RR_TAKE_NET) > 0) {
+    if((Number(ranges[r]['rmask']) & RR_TAKE_NET) > 0) {
       attributes
        .append( $(LABEL).addClass("ui-icon")
          .addClass("ui-icon-unlocked")
          .css(s_ranges_spacing)
          .title("Разрешено занимать сети")
+       )
+      ;
+    };
+
+    if((Number(ranges[r]['rmask']) & RR_DENY_TAKE_IP) > 0) {
+      attributes
+       .append( $(LABEL).addClass("ui-icon")
+         .addClass("ui-icon-locked")
+         .css(s_ranges_spacing)
+         .title("Запрещено занимать/редактировать IP обычным пользователям")
        )
       ;
     };
@@ -554,6 +658,19 @@ function v4nav(data) {
     ;
   };
 
+  if(has_right(R_SUPER)) {
+    r_th
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .css(s_ranges_spacing)
+       .css({"color": color_table_buttons})
+       .title("Добавить диапазон")
+       .click(function() {
+         v4_global_range_dialog(undefined, function() { process_R(); });
+       })
+     )
+    ;
+  };
+
   for(let o=first_octet; o <= last_octet; o++) {
     rows_octets[octet_index] = o;
 
@@ -697,21 +814,32 @@ function v4nav(data) {
 
       if(taken) {
         if(view) {
-          td
-           .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bullets")
-             .addClass("ui-button")
-             .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
-             .css({"margin-left": "0.2em", "margin-right": "0.2em"})
-             .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
-             .data({"net": row_net, "masklen": i})
-             .click(function() {
-               let _net=$(this).data("net");
-               let _masklen=$(this).data("masklen");
-               $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
-               v4get_net();
-             })
-           )
-          ;
+          if(has_right(R_VIEWANY) || (data['nets'][row_net]['rmask'] & NR_VIEWOTHER) > 0) {
+            td
+             .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bullets")
+               .addClass("ui-button")
+               .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
+               .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+               .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
+               .data({"net": row_net, "masklen": i})
+               .click(function() {
+                 let _net=$(this).data("net");
+                 let _masklen=$(this).data("masklen");
+                 $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+                 v4get_net();
+               })
+             )
+            ;
+          } else {
+            td
+             .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-locked")
+               .addClass("ui-button")
+               .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
+               .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+               .title("Доступ к просмотру сети "+row_ip_text+"/"+i+" запрещен")
+             )
+            ;
+          };
         } else {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
@@ -782,9 +910,16 @@ function v4nav(data) {
     let net_td=$(TD);
 
     if(data['nets'][ row_net ] !== undefined) {
-      net_td.text(data['nets'][ row_net ]['v4net_name'])
-       .title(data['nets'][ row_net ]['v4net_descr'])
-      ;
+      if(data['nets'][ row_net ]['v4net_name'] == 'hidden') {
+        net_td.text("Скрыто")
+         .title("У вас нет прав на просмотр сети")
+         .css({"color": "gray"})
+        ;
+      } else {
+        net_td.text(data['nets'][ row_net ]['v4net_name'])
+         .title(data['nets'][ row_net ]['v4net_descr'])
+        ;
+      };
     } else if(data['aggr_nets'][ row_net ] !== undefined) {
       net_td.text("... " + data['aggr_nets'][ row_net ]['aggr_count'] + " " + nets2lang(false, 'ru', data['aggr_nets'][ row_net ]['aggr_count']));
     };
