@@ -142,7 +142,7 @@ function v4oct2long(i3, i2, i1, i0) {
 
 function v4ip2long(ip) {
   let m=String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if(m.length != 6 || Number(m[1]) > 255 || Number(m[2]) > 255 || Number(m[3]) > 255 || Number(m[4]) > 255) {
+  if(m == null || m.length != 5 || Number(m[1]) > 255 || Number(m[2]) > 255 || Number(m[3]) > 255 || Number(m[4]) > 255) {
     return false;
   } else {
     return(v4oct2long(m[1], m[2], m[3], m[4]));
@@ -212,7 +212,7 @@ function validate_v4range() {
   let start_input=$("INPUT#v4range_start");
   let stop_input=$("INPUT#v4range_stop");
 
-  if(start_input.length != 1 || stop_input.length != 1) { error_at(); return; };
+  if(start_input.length != 1 || stop_input.length != 1) { error_at(); return false; };
 
   let start_ip=start_input.val();
   let stop_ip=stop_input.val();
@@ -220,12 +220,25 @@ function validate_v4range() {
   let start_long=v4ip2long(start_ip);
   let stop_long=v4ip2long(stop_ip);
   
+  let valid=true;
+
+  if(start_long === false) {
+    start_input.animateHighlight(); valid=false;
+  };
+  if(stop_long === false) {
+    stop_input.animateHighlight(); valid=false;
+  };
+
+  if(valid && (start_long > stop_long)) {
+    start_input.add(stop_input).animateHighlight(); valid=false;
+  };
+
+  return valid;
+};
 
 
 function v4_global_range_dialog(v4r_id, donefunc) {
   if( $("#v4_global_range_dialog").length != 0) return;
-
-  $(".range_btn").show();
 
   let title;
 
@@ -243,8 +256,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
    .addClass("dialog_start")
    .prop("title", title)
    .css("white-space", "pre")
-   //.appendTo("BODY")
-   .appendTo("#contents")
+   .appendTo("BODY")
   ;
 
   let d={
@@ -254,6 +266,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     minWidth:600,
     buttons: [],
     close: function() {
+      $(".range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
     }
@@ -265,22 +278,59 @@ function v4_global_range_dialog(v4r_id, donefunc) {
 
   table
    .append( $(TR)
-     .append( $(TD).css({"text-align": "left"})
+     .append( $(TD).css({"text-align": "right"})
        .append( $(LABEL).text("Начало:") )
      )
      .append( $(TD)
        .append( $(INPUT).id("v4range_start").prop({"placeholder": "x.x.x.x"})
-         .on("change input", validate_v4range())
+         .on("change input", validate_v4range)
        )
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "left"})
+     .append( $(TD).css({"text-align": "right"})
        .append( $(LABEL).text("Окончание:") )
      )
      .append( $(TD)
        .append( $(INPUT).id("v4range_stop").prop({"placeholder": "x.x.x.x"})
-         .on("change input", validate_v4range())
+         .on("change input", validate_v4range)
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Наименование:") )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_name").prop({"placeholder": "Краткое наименование"})
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Описание:") )
+     )
+     .append( $(TD)
+       .append( $(TEXTAREA).id("v4range_descr")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Скрытый:") )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_invisible").prop({"type": "checkbox"})
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .append( $(LABEL).text("Стиль (JSON):") )
+     )
+     .append( $(TD)
+       .append( $(INPUT).id("v4range_style").prop({"placeholder": "JSON строка для .css()"})
+         .on("change input", validate_json)
        )
      )
    )
@@ -315,8 +365,9 @@ function v4ranges_calc_show(ranges, ranges_list) {
 
     if(Number(ranges[r]['v4r_visible']) > 0) {
       attributes
-       .append( $(LABEL).addClass("ui-icon")
-         .addClass("ui-icon-blank")
+       .append( $(LABEL).text(" ")
+        // .addClass("ui-icon")
+        // .addClass("ui-icon-blank")
          .css(s_ranges_spacing)
        )
       ;
@@ -568,8 +619,8 @@ function v4nav(data) {
    )
   ;
 
-  for(let i=masklen_start; i <= masklen_stop; i++) {
-    $(TH).text("/"+i)
+  for(let cur_masklen=masklen_start; cur_masklen <= masklen_stop; cur_masklen++) {
+    $(TH).text("/"+cur_masklen)
      .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
      .appendTo(htr)
     ;
@@ -665,6 +716,7 @@ function v4nav(data) {
        .css({"color": color_table_buttons})
        .title("Добавить диапазон")
        .click(function() {
+         $(".range_btn").show();
          v4_global_range_dialog(undefined, function() { process_R(); });
        })
      )
@@ -713,19 +765,18 @@ function v4nav(data) {
        .title( v4long2ip(row_last) )
      )
     ;
-    for(let i=masklen_start; i <= masklen_stop; i++) {
-      let cell_text="";
-      let cell_style={"color": color_table_buttons};
+    for(let cur_masklen=masklen_start; cur_masklen <= masklen_stop; cur_masklen++) {
+      let cell_style={};
 
-      let mask_net = (row_net & v4len2mask[i]) >>> 0;
-      let mask_net_last = (mask_net | (~v4len2mask[i] >>> 0)) >>> 0;
+      let mask_net = (row_net & v4len2mask[cur_masklen]) >>> 0;
+      let mask_net_last = (mask_net | (~v4len2mask[cur_masklen] >>> 0)) >>> 0;
 
 
       let taken=false;
 
       let view = false;
       if(data['nets'][ row_net ] != undefined &&
-         data['nets'][ row_net ]['v4net_mask'] == i
+         data['nets'][ row_net ]['v4net_mask'] == cur_masklen
       ) {
         taken = true;
         last_net = data['nets'][ mask_net ];
@@ -737,7 +788,7 @@ function v4nav(data) {
       if(!taken && last_net != undefined &&
          row_net >= last_net['v4net_addr'] &&
          row_net <= last_net['v4net_last'] &&
-         i >= last_net['v4net_mask']
+         cur_masklen >= last_net['v4net_mask']
       ) {
         taken = true;
       };
@@ -794,15 +845,15 @@ function v4nav(data) {
         };
       };
 
-      let navigatable = (row_net == mask_net) && !taken && (i < 32);
+      let navigatable = (row_net == mask_net) && !taken && (cur_masklen < 32);
 
       if(taken) {
         cell_style['background-color']=color_taken;
       };
 
       let td=$(TD)
-       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray", "padding-left": "0.5em", "padding-right": "0.5em"})
-       .data({"net": row_net, "masklen": i})
+       .css({"border-bottom": "1px solid gray", "border-left": "1px solid gray", "min-width": "4.5em", "position": "relative"})
+       .data({"net": row_net, "masklen": cur_masklen})
        .click(function(e) {
          if(e.target != this && !$(e.target).hasClass("ui-icon-blank")) return;
          let _net = $(this).data("net");
@@ -812,16 +863,53 @@ function v4nav(data) {
        })
       ;
 
+      if(has_right(R_SUPER)) {
+        if(cur_masklen == masklen_start) {
+          let range_start=v4long2ip(row_net);
+          td
+           .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-caret-1-nw")
+             .addClass("ui-button")
+             .addClass("range_btn")
+             .css({"position": "absolute", "top": 0, "left": 0, "font-size": "49%"})
+             .hide()
+             .data("range_start", range_start)
+             .title("Установить начало диапазона: "+range_start)
+             .click(function() {
+               let _addr=$(this).data("range_start");
+               $("INPUT#v4range_start").val(_addr).trigger("input");
+             })
+           )
+          ;
+        };
+        if(cur_masklen == masklen_stop) {
+          let range_stop=v4long2ip(row_last);
+          td
+           .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-caret-1-se")
+             .addClass("ui-button")
+             .addClass("range_btn")
+             .css({"position": "absolute", "bottom": 0, "right": 0, "font-size": "49%"})
+             .hide()
+             .data("range_stop", range_stop)
+             .title("Установить окончание диапазона: "+range_stop)
+             .click(function() {
+               let _addr=$(this).data("range_stop");
+               $("INPUT#v4range_stop").val(_addr).trigger("input");
+             })
+           )
+          ;
+        };
+      };
+
       if(taken) {
         if(view) {
           if(has_right(R_VIEWANY) || (data['nets'][row_net]['rmask'] & NR_VIEWOTHER) > 0) {
             td
-             .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-bullets")
+             .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets")
                .addClass("ui-button")
                .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
-               .css({"margin-left": "0.2em", "margin-right": "0.2em"})
-               .title("Перейти к просмотру сети "+row_ip_text+"/"+i)
-               .data({"net": row_net, "masklen": i})
+               .css({"position": "absolute", "left": "2.1em", "top": "0.2em"})
+               .title("Перейти к просмотру сети "+row_ip_text+"/"+cur_masklen)
+               .data({"net": row_net, "masklen": cur_masklen})
                .click(function() {
                  let _net=$(this).data("net");
                  let _masklen=$(this).data("masklen");
@@ -832,36 +920,41 @@ function v4nav(data) {
             ;
           } else {
             td
-             .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-locked")
+             .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-locked")
                .addClass("ui-button")
                .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
-               .css({"margin-left": "0.2em", "margin-right": "0.2em"})
-               .title("Доступ к просмотру сети "+row_ip_text+"/"+i+" запрещен")
+               .css({"position": "absolute", "left": "2.1em", "top": "0.2em"})
+               .title("Доступ к просмотру сети "+row_ip_text+"/"+cur_masklen+" запрещен")
              )
             ;
           };
         } else {
+          /*
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
              .css({"padding-left": "0.2em", "padding-right": "0.2em"})
            )
           ;
+          */
           td.title("Входит в сеть "+last_net['net_text']+"/"+last_net['v4net_mask']);
         };
+        /*
         td
          .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
            .css({"padding-left": "0.2em", "padding-right": "0.2em"})
          )
         ;
+        */
       } else {
         if(takable) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-cart")
              .addClass("ui-button")
              .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
-             .css({"margin-left": "0.2em", "margin-right": "0.2em"})
-             .title("Занять сеть "+row_ip_text+"/"+i)
-             .data({"net": row_net, "masklen": i})
+             //.css({"margin-left": "0.2em", "margin-right": "0.2em"})
+             .css({"position": "absolute", "left": "1.1em", "top": "0.2em"})
+             .title("Занять сеть "+row_ip_text+"/"+cur_masklen)
+             .data({"net": row_net, "masklen": cur_masklen})
              .click(function() {
                let _net=$(this).data("net");
                let _masklen=$(this).data("masklen");
@@ -869,20 +962,23 @@ function v4nav(data) {
            )
           ;
         } else {
+          /*
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
              .css({"padding-left": "0.2em", "padding-right": "0.2em"})
            )
           ;
+          */
         };
         if(navigatable) {
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-sitemap")
              .addClass("ui-button")
              .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": color_table_buttons})
-             .css({"margin-left": "0.2em", "margin-right": "0.2em"})
-             .title("Навигация по подсетям "+row_ip_text+"/"+i)
-             .data({"net": row_net, "masklen": i})
+             //.css({"margin-left": "0.2em", "margin-right": "0.2em"})
+             .css({"position": "absolute", "left": "3.1em", "top": "0.2em"})
+             .title("Навигация по подсетям "+row_ip_text+"/"+cur_masklen)
+             .data({"net": row_net, "masklen": cur_masklen})
              .click(function() {
                let _net=$(this).data("net");
                let _masklen=$(this).data("masklen");
@@ -892,11 +988,13 @@ function v4nav(data) {
            )
           ;
         } else {
+          /*
           td
            .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-blank")
              .css({"padding-left": "0.2em", "padding-right": "0.2em"})
            )
           ;
+          */
         };
       };
 
@@ -944,7 +1042,6 @@ function v4nav(data) {
 
       let r_elm=$(LABEL)
        .css(s_ranges_spacing)
-       .css(JSON.parse(range['v4r_style']))
       ;
 
       if(row_net > Number(range['v4r_stop']) || row_last < Number(range['v4r_start'])) {
@@ -955,6 +1052,7 @@ function v4nav(data) {
 
         r_elm
          .title(ranges2lang(true, "ru", 1)+": "+v4long2ip(range['v4r_start'])+" - "+v4long2ip(range['v4r_stop'])+"\n"+range['v4r_name']+"\nНажмите для более подробной информации")
+         .css(JSON.parse(range['v4r_style']))
          .data("ranges", [ r ])
          .click(function() {
            let _ranges_list=$(this).data("ranges");
