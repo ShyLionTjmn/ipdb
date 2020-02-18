@@ -258,13 +258,21 @@ function clear_calc() {
   $("#calc_text").empty();
 };
 
-function validate_json(animate_good, animate_bad) {
-  let j=$(this).val();
+function validate_json(j) {
   try {
-    let res=JSON.parse(j);
-    if(animate_good != undefined) $(this).animateHighlight(animate_good, 200);
+    JSON.parse(j);
     return true;
   } catch(e) {
+    return false;
+  };
+};
+
+function validate_json_elm(animate_good, animate_bad) {
+  let j=$(this).val();
+  if(validate_json(j)) {
+    if(animate_good != undefined) $(this).animateHighlight(animate_good, 200);
+    return true;
+  } else {
     if(animate_bad != undefined) $(this).animateHighlight(animate_bad, 200);
     return false;
   };
@@ -432,9 +440,12 @@ function group_right_div(gr, mask, opt) {
        .toggle(gr == undefined)
        .click(function() {
          let row=$(this).closest(".group_rights_div");
-         show_confirm("Подтвердите удаление группы из списка", function() {
-           row.remove();
-         });
+         let f=function() { row.remove(); };
+         if(row.find(".group").data("id") == undefined) {
+           f();
+         } else {
+           show_confirm("Подтвердите удаление группы из списка", f);
+         };
        })
      )
     ;
@@ -484,7 +495,74 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     d['buttons'].push({
       "text": (v4r_id == undefined?"Создать":"Сохранить"),
       "click": function() {
-        alert(v4r_id);
+        let groups=Array();
+        let highlight=undefined;
+        let hl_count=0;
+        let groups_rights={};
+        $(this).find(".group_rights_div").each(function() {
+          let gr_id=$(this).find(".group").data("id");
+          if(gr_id == undefined) {
+            if(highlight == undefined) {
+              highlight = $(this).find(".group");
+            } else {
+              highlight.add( $(this).find(".group") );
+            };
+          } else {
+            if(in_array(groups, gr_id)) { error_at(); throw("Error"); };
+            groups.push(gr_id);
+
+            let rmask=0;
+            $(this).find(".right").each(function() {
+              let val=$(this).data("val");
+              rmask = (rmask | Number(val)) >>> 0;
+            });
+
+            groups_rights[gr_id]=rmask;
+          };
+        });
+        if(highlight != undefined) {
+          highlight.animateHighlight();
+          return;
+        };
+
+        if(!validate_v4range()) return;
+
+        let range_start=$("INPUT#v4range_start").val();
+        let range_stop=$("INPUT#v4range_stop").val();
+
+        let range_name=$("INPUT#v4range_name").val();
+        let range_descr=$("TEXTINPUT#v4range_descr").val();
+
+        let range_style=$("INPUT#v4range_style").val();
+        if(!validate_json(range_style)) {
+          $("INPUT#v4range_style").animateHighlight();
+          return;
+        };
+
+        let range_icon=$("INPUT#v4range_icon").val();
+        let range_icon_style=$("INPUT#v4range_icon_style").val();
+        if(!validate_json(range_icon_style)) {
+          $("INPUT#v4range_icon_style").animateHighlight();
+          return;
+        };
+
+        let query={"range_start": v4ip2long(range_start), "range_stop": v4ip2long(range_stop),
+                   "range_name": range_name, "range_descr": range_descr,
+                   "range_visible": $("INPUT#v4range_invisible").is(":checked")?0:1,
+                   "range_style": range_style, "range_icon": range_icon, "range_icon_style": range_icon_style,
+                   "groups_rights": groups_rights
+        };
+
+        if(v4r_id == undefined) {
+          query['action'] = "v4_add_global_range";
+        } else {
+          query['action'] = "v4_edit_global_range";
+          query['range_id'] = v4r_id;
+        };
+
+        run_query(query, function(data) {
+          if(donefunc != undefined) donefunc(data);
+        });
       }
     });
   };
@@ -548,7 +626,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
      )
      .append( $(TD)
        .append( $(INPUT).id("v4range_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
-         .on("change input", function() { validate_json.call(this, "lightgreen", "red"); })
+         .on("change input", function() { validate_json_elm.call(this, "lightgreen", "red"); })
        )
      )
    )
@@ -569,7 +647,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
      )
      .append( $(TD)
        .append( $(INPUT).id("v4range_icon_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
-         .on("change input", function() { validate_json.call(this, "lightgreen", "red"); })
+         .on("change input", function() { validate_json_elm.call(this, "lightgreen", "red"); })
        )
      )
    )

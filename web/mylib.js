@@ -500,3 +500,15 @@ function require_param(key, check) {
     };
   };
 };
+
+function in_array(arr, val) {
+  if(arr == undefined) return false;
+  for(let i=0; i < arr.length; i++) {
+    if(arr[i] == val) return true;
+  };
+  return false;
+};
+
+function push_once(arr, val) {
+  if(arr != undefined && !in_array(arr, val)) arr.push(val);
+};
