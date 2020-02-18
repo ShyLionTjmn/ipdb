@@ -298,8 +298,15 @@ function validate_v4range() {
   return valid;
 };
 
+function groups_list(select_gr_id, exclude_list, opt, donefunc) {
+  return;
+};
+
 function group_right_div(gr, mask, opt) {
-  let ret=$(DIV).css({"white-space": "pre"}).addClass("group_rights_div");
+  let ret=$(DIV)
+   .css({"white-space": "pre", "margin-bottom": "0.2em"})
+   .addClass("group_rights_div")
+  ;
   let rigths_span=$(SPAN);
 
   for(let i=0; i < group_rights.length; i++) {
@@ -309,7 +316,6 @@ function group_right_div(gr, mask, opt) {
         let r_label=$(LABEL).addClass("right")
          .toggle(is_set || gr == undefined)
          .css({"border": "1px solid gray", "padding-left": "0.1em", "padding-right": "0.1em", "margin-left": "0.3em"})
-         .css(is_set?{"background-color": "lightgreen", "color": "black"}:{"background-color": "lightgray", "color": "gray"})
          .text(group_rights[i]['label_text'])
          .title(group_rights[i]['label_descr'])
          .data("right", group_rights[i]['right'])
@@ -318,12 +324,12 @@ function group_right_div(gr, mask, opt) {
            if(! $(this).hasClass("editable")) return;
            let val=$(this).data("val");
            let right=$(this).data("right");
-           if(val == 0) {
-             $(this).data("val", right).css({"background-color": "lightgreen", "color": "black"});
-           } else {
-             $(this).data("val", 0).css({"background-color": "lightgray", "color": "gray"});
-           };
+           $(this).data("val", (val == 0)?right:0).trigger("set");
          })
+         .on("set", function() {
+           $(this).css(($(this).data("val") == 0)?{"background-color": "lightgray", "color": "gray"}:{"background-color": "lightgreen", "color": "black"});
+         })
+         .trigger("set")
         ;
         if(gr == undefined) r_label.addClass("editable");
 
@@ -333,33 +339,102 @@ function group_right_div(gr, mask, opt) {
   };
 
   ret.append(rigths_span);
-  ret.append( $(LABEL).text(gr['group_name']).css({"margin-left": "1em"}) );
+  ret
+   .append( $(LABEL)
+     .addClass("group")
+     .data("id", (gr != undefined)?gr['group_id']:undefined)
+     .text((gr != undefined)?gr['group_name']:"Группа не выбрана")
+     .css({"margin-left": "1em"})
+   )
+  ;
 
   if(opt != undefined && opt['allow_edit'] == true) {
     ret
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bars").addClass("ui-button").addClass("unedit_btn")
+       .css({"color": color_table_buttons})
+       .css({"margin-left": "0.3em", "margin-right": "0.3em"})
+       .title("Выбрать группу")
+       .toggle(gr == undefined)
+       .click(function() {
+         let row=$(this).closest(".group_rights_div");
+         let set_group=row.find(".group").data("id");
+         let exclude_list=Array();
+         row.parent().find(".group_rights_div").find(".group").each(function() {
+           let gr_id=$(this).data("id");
+           if(gr_id != undefined && gr_id != set_group && String(gr_id).match(/^\d+$/)) exclude_list.push(gr_id);
+         });
+         groups_list(gr_id, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
+           row.find(".group").data("id", group['group_id']).text(group['group_name']).trigger("set");
+         });
+       })
+     )
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-gears").addClass("ui-button").addClass("edit_btn")
        .css({"color": color_table_buttons})
        .css({"margin-left": "0.3em"})
        .title("Изменить")
        .toggle(gr != undefined)
        .click(function() {
-         $(this).closest(".group_rights_div").find(
+         let row=$(this).closest(".group_rights_div");
+         row.find(".right").each(function() {
+           $(this).data("val_save", $(this).data("val")).addClass("editable").show();
+         });
+         row.css({"background-color": "yellow"});
+         row.find(".unedit_btn").show();
+         row.find(".edit_btn").hide();
+         
        })
      )
-     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button").addClass("cancel_btn")
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button").addClass("unedit_btn")
        .css({"color": color_table_buttons})
        .css({"margin-left": "0.3em"})
        .title("Отмена")
        .toggle(gr == undefined)
        .click(function() {
+         let row=$(this).closest(".group_rights_div");
+         row.find(".right").each(function() {
+           let saved_val=$(this).data("val_save");
+           $(this).data("val", saved_val).removeClass("editable").trigger("set").toggle(saved_val != 0);
+         });
+         row.css({"background-color": "initial"});
+         row.find(".edit_btn").show();
+         row.find(".unedit_btn").hide();
        })
      )
-     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button").addClass("save_btn")
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-disk").addClass("ui-button").addClass("unedit_btn")
        .css({"color": color_table_buttons})
        .css({"margin-left": "0.3em"})
        .title("Установить. Внимание, изменения будут применены при сохранении в родительском окне!")
        .toggle(gr == undefined)
        .click(function() {
+         let row=$(this).closest(".group_rights_div");
+         let gr_id=row.find(".group").data("id");
+         if(gr_id == undefined || !String(gr_id).match(/^\d+$/)) {
+           row.find(".group").animateHighlight();
+           return;
+         };
+         row.find(".right").each(function() {
+           let val=$(this).data("val");
+           $(this).removeClass("editable").toggle(val != 0);
+         });
+         row.css({"background-color": "initial"});
+         row.find(".edit_btn").show();
+         row.find(".unedit_btn").hide();
+       })
+     )
+    ;
+  };
+  if(opt != undefined && opt['allow_edit'] == true) {
+    ret
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button").addClass("unedit_btn")
+       .css({"color": color_table_buttons})
+       .css({"margin-left": "0.7em"})
+       .title("Удалить группу из списка")
+       .toggle(gr == undefined)
+       .click(function() {
+         let row=$(this).closest(".group_rights_div");
+         show_confirm("Подтвердите удаление группы из списка", function() {
+           row.remove();
+         });
        })
      )
     ;
@@ -396,6 +471,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     maxHeight:1000,
     maxWidth:1000,
     minWidth:600,
+    width: "auto",
     buttons: [],
     close: function() {
       $(".range_btn").hide();
@@ -509,16 +585,19 @@ function v4_global_range_dialog(v4r_id, donefunc) {
            .css({"color": color_table_buttons})
            .title("Добавить группу")
            .click(function() {
+             let allow_add=true;
+             $("DIV#v4range_rights").find(".group_rights_div").find(".group")
+              .each(function() { if($(this).data("id") == undefined) { allow_add=false; return false; }; })
+             ;
+             if(allow_add) {
+               $("DIV#v4range_rights").append( group_right_div( undefined, (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, {"allow_edit": true, "allow_delete": true}) );
+             };
            })
          )
        )
      )
    )
   ;
-
-  if(has_right(R_SUPER)) {
-    table.find("#v4range_rights")
-  };
 
   table.appendTo( dialog );
 
