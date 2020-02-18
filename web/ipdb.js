@@ -21,6 +21,56 @@ const NR_EDIT_NET       = 1 << 8;
 const RR_TAKE_NET       = 1 << 9;
 const RR_DENY_TAKE_IP   = 1 << 10; //also deny editing
 
+const group_rights=Array(
+  { "right": NR_VIEWNAME,
+    "label_text": "Имен",
+    "label_descr": "Просмотр наименований объектов"
+  },
+  { "right": NR_VIEWOTHER,
+    "label_text": "Детл",
+    "label_descr": "Просмотр детальной информации об объектах"
+  },
+  { "right": NR_TAKE_IP,
+    "label_text": "ЗанIP",
+    "label_descr": "Занятие IP адреса в сети"
+  },
+  { "right": NR_EDIT_IP,
+    "label_text": "РедIP",
+    "label_descr": "Редактирование полей IP адреса"
+  },
+  { "right": NR_FREE_IP,
+    "label_text": "УдлIP",
+    "label_descr": "Освобождение IP адреса в сети"
+  },
+  { "right": NR_IGNORE,
+    "label_text": "Игнр",
+    "label_descr": "Игнорирование запрета от диапазона в сети"
+  },
+  { "right": NR_MAN_ACCESS,
+    "label_text": "УДост",
+    "label_descr": "Управление доступом к сети"
+  },
+  { "right": NR_MAN_RANGES,
+    "label_text": "УДиап",
+    "label_descr": "Управление диапазонами в сети"
+  },
+  { "right": NR_DROP_NET,
+    "label_text": "УдлСет",
+    "label_descr": "Удаление сети"
+  },
+  { "right": NR_EDIT_NET,
+    "label_text": "РедСет",
+    "label_descr": "Редактирование данных сети"
+  },
+  { "right": RR_TAKE_NET,
+    "label_text": "ЗанСет",
+    "label_descr": "Занятие сети"
+  },
+  { "right": RR_DENY_TAKE_IP,
+    "label_text": "ЗапрIP",
+    "label_descr": "Запрет на занятие/редактирование IP внутри диапазона"
+  },
+);
 
 
 const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
@@ -248,6 +298,43 @@ function validate_v4range() {
   return valid;
 };
 
+function group_right_div(gr, mask, opt) {
+  let ret=$(DIV).css({"white-space": "pre"}).addClass("group_rights_div");
+  let rigths_span=$(SPAN);
+
+  for(let i=0; i < group_rights.length; i++) {
+    if(((group_rights[i]['right'] & mask) >>> 0) > 0) {
+      let is_set = (gr != undefined && ((Number(gr['rmask']) & group_rights[i]['right']) >>> 0) > 0);
+      if(is_set || (opt != undefined && opt['allow_edit'] == true)) {
+        let r_label=$(LABEL)
+         .toggle(is_set || gr == undefined)
+         .css({"border": "1px solid gray", "padding-left": "0.1em", "padding-right": "0.1em", "margin-left": "0.3em"})
+         .css(is_set?{"background-color": "lightgreen", "color": "black"}:{"background-color": "lightgray", "color": "gray"})
+         .text(group_rights[i]['label_text'])
+         .title(group_rights[i]['label_descr'])
+         .data("right", group_rights[i]['right'])
+         .data("val", is_set?group_rights[i]['right']:0)
+         .click(function() {
+           if(! $(this).hasClass("editable")) return;
+           let val=$(this).data("val");
+           let right=$(this).data("right");
+           if(val == 0) {
+             $(this).data("val", right).css({"background-color": "lightgreen", "color": "black"});
+           } else {
+             $(this).data("val", 0).css({"background-color": "lightgray", "color": "gray"});
+           };
+         })
+        ;
+        if(gr == undefined) r_label.addClass("editable");
+        r_label.appendTo(rigths_span);
+      };
+    };
+  };
+
+  ret.append(rigths_span);
+  ret.append( $(LABEL).text(gr['group_name']).css({"margin-left": "1em"}) );
+  return ret;
+};
 
 function v4_global_range_dialog(v4r_id, donefunc) {
   if(v4r_id == undefined && donefunc == undefined) { error_at(); return; };
@@ -360,7 +447,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
    )
    .append( $(TR)
      .append( $(TD).css({"text-align": "right"})
-       .append( $(LABEL).text("Значек:")
+       .append( $(LABEL).text("Значёк:")
          .dotted("ui-icon-xxx - Класс jQuery UI icon\n&#NNNN; - HTML Unicode символ\nURL - Ссылка на .png, .jpg, .jpeg, .ico, .gif")
        )
      )
@@ -409,8 +496,8 @@ function v4_global_range_dialog(v4r_id, donefunc) {
   if(v4r_id != undefined) {
     let query={"action": "v4_get_range", "range_id": v4r_id};
     run_query(query, function(data) {
-      $("INPUT#v4range_start").val(v4long2ip(data['ok']['range_info']['v4r_start']);
-      $("INPUT#v4range_stop").val(v4long2ip(data['ok']['range_info']['v4r_stop']);
+      $("INPUT#v4range_start").val(v4long2ip(data['ok']['range_info']['v4r_start']));
+      $("INPUT#v4range_stop").val(v4long2ip(data['ok']['range_info']['v4r_stop']));
 
       if(data['ok']['range_info']['v4r_name'] == "hidden") {
         $("INPUT#v4range_name").val("Скрыто").css({"color": "gray"});
@@ -429,6 +516,10 @@ function v4_global_range_dialog(v4r_id, donefunc) {
       $("INPUT#v4range_style").val(data['ok']['range_info']['v4r_style']);
       $("INPUT#v4range_icon").val(data['ok']['range_info']['v4r_icon']);
       $("INPUT#v4range_icon_style").val(data['ok']['range_info']['v4r_icon_style']);
+
+      for(let i=0; i < data['ok']['range_group_rights'].length; i++) {
+        $("DIV#v4range_rights").append( group_right_div(data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
+      };
     });
   } else {
   };
