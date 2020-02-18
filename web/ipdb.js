@@ -306,7 +306,7 @@ function group_right_div(gr, mask, opt) {
     if(((group_rights[i]['right'] & mask) >>> 0) > 0) {
       let is_set = (gr != undefined && ((Number(gr['rmask']) & group_rights[i]['right']) >>> 0) > 0);
       if(is_set || (opt != undefined && opt['allow_edit'] == true)) {
-        let r_label=$(LABEL)
+        let r_label=$(LABEL).addClass("right")
          .toggle(is_set || gr == undefined)
          .css({"border": "1px solid gray", "padding-left": "0.1em", "padding-right": "0.1em", "margin-left": "0.3em"})
          .css(is_set?{"background-color": "lightgreen", "color": "black"}:{"background-color": "lightgray", "color": "gray"})
@@ -326,6 +326,7 @@ function group_right_div(gr, mask, opt) {
          })
         ;
         if(gr == undefined) r_label.addClass("editable");
+
         r_label.appendTo(rigths_span);
       };
     };
@@ -333,6 +334,36 @@ function group_right_div(gr, mask, opt) {
 
   ret.append(rigths_span);
   ret.append( $(LABEL).text(gr['group_name']).css({"margin-left": "1em"}) );
+
+  if(opt != undefined && opt['allow_edit'] == true) {
+    ret
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-gears").addClass("ui-button").addClass("edit_btn")
+       .css({"color": color_table_buttons})
+       .css({"margin-left": "0.3em"})
+       .title("Изменить")
+       .toggle(gr != undefined)
+       .click(function() {
+         $(this).closest(".group_rights_div").find(
+       })
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button").addClass("cancel_btn")
+       .css({"color": color_table_buttons})
+       .css({"margin-left": "0.3em"})
+       .title("Отмена")
+       .toggle(gr == undefined)
+       .click(function() {
+       })
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button").addClass("save_btn")
+       .css({"color": color_table_buttons})
+       .css({"margin-left": "0.3em"})
+       .title("Установить. Внимание, изменения будут применены при сохранении в родительском окне!")
+       .toggle(gr == undefined)
+       .click(function() {
+       })
+     )
+    ;
+  };
   return ret;
 };
 
