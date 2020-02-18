@@ -250,6 +250,7 @@ function validate_v4range() {
 
 
 function v4_global_range_dialog(v4r_id, donefunc) {
+  if(v4r_id == undefined && donefunc == undefined) { error_at(); return; };
   if( $("#v4_global_range_dialog").length != 0) return;
 
   let title;
@@ -265,6 +266,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
   };
 
   let dialog=$(DIV).id("v4_global_range_dialog")
+   .data("id", v4r_id)
    .addClass("dialog_start")
    .prop("title", title)
    .css("white-space", "pre")
@@ -284,7 +286,16 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     }
   };
 
-  d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
+  if(has_right(R_SUPER)) {
+    d['buttons'].push({
+      "text": (v4r_id == undefined?"Создать":"Сохранить"),
+      "click": function() {
+        alert(v4r_id);
+      }
+    });
+  };
+
+  d['buttons'].push({ "text": (donefunc != undefined && has_right(R_SUPER))?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
 
   let table=$(TABLE);
 
@@ -294,7 +305,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Начало:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_start").prop({"placeholder": "x.x.x.x"})
+       .append( $(INPUT).id("v4range_start").prop({"placeholder": "x.x.x.x", "readonly": !has_right(R_SUPER)})
          .on("change input", validate_v4range)
        )
      )
@@ -304,7 +315,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Окончание:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_stop").prop({"placeholder": "x.x.x.x"})
+       .append( $(INPUT).id("v4range_stop").prop({"placeholder": "x.x.x.x", "readonly": !has_right(R_SUPER)})
          .on("change input", validate_v4range)
        )
      )
@@ -314,7 +325,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Наименование:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_name").prop({"placeholder": "Краткое наименование"})
+       .append( $(INPUT).id("v4range_name").prop({"placeholder": "Краткое наименование", "readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -323,7 +334,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Описание:") )
      )
      .append( $(TD)
-       .append( $(TEXTAREA).id("v4range_descr")
+       .append( $(TEXTAREA).id("v4range_descr").prop({"readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -333,6 +344,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
      )
      .append( $(TD)
        .append( $(INPUT).id("v4range_invisible").prop({"type": "checkbox"})
+         .click(function() { return has_right(R_SUPER); })
        )
      )
    )
@@ -341,7 +353,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Стиль линии/текста (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_style").prop({"placeholder": "{\"color\": \"red\"}"})
+       .append( $(INPUT).id("v4range_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
          .on("change input", function() { validate_json.call(this, "lightgreen", "red"); })
        )
      )
@@ -353,7 +365,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_icon").prop({"placeholder": "ui-icon-info"})
+       .append( $(INPUT).id("v4range_icon").prop({"placeholder": "ui-icon-info", "readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -362,7 +374,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Стиль значка (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_icon_style").prop({"placeholder": "{\"color\": \"red\"}"})
+       .append( $(INPUT).id("v4range_icon_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
          .on("change input", function() { validate_json.call(this, "lightgreen", "red"); })
        )
      )
@@ -374,9 +386,21 @@ function v4_global_range_dialog(v4r_id, donefunc) {
      .append( $(TD)
        .append( $(DIV).id("v4range_rights") 
        )
+       .append( $(DIV)
+         .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+           .css({"color": color_table_buttons})
+           .title("Добавить группу")
+           .click(function() {
+           })
+         )
+       )
      )
    )
   ;
+
+  if(has_right(R_SUPER)) {
+    table.find("#v4range_rights")
+  };
 
   table.appendTo( dialog );
 
@@ -385,6 +409,26 @@ function v4_global_range_dialog(v4r_id, donefunc) {
   if(v4r_id != undefined) {
     let query={"action": "v4_get_range", "range_id": v4r_id};
     run_query(query, function(data) {
+      $("INPUT#v4range_start").val(v4long2ip(data['ok']['range_info']['v4r_start']);
+      $("INPUT#v4range_stop").val(v4long2ip(data['ok']['range_info']['v4r_stop']);
+
+      if(data['ok']['range_info']['v4r_name'] == "hidden") {
+        $("INPUT#v4range_name").val("Скрыто").css({"color": "gray"});
+      } else {
+        $("INPUT#v4range_name").val(data['ok']['range_info']['v4r_name']);
+      };
+
+      if(data['ok']['range_info']['v4r_descr'] == "hidden") {
+        $("TEXTAREA#v4range_descr").val("Скрыто").css({"color": "gray"});
+      } else {
+        $("TEXTAREA#v4range_descr").val(data['ok']['range_info']['v4r_descr']);
+      };
+
+      $("INPUT#v4range_invisible").prop("checked", Number(data['ok']['range_info']['v4r_visible']) == 0);
+
+      $("INPUT#v4range_style").val(data['ok']['range_info']['v4r_style']);
+      $("INPUT#v4range_icon").val(data['ok']['range_info']['v4r_icon']);
+      $("INPUT#v4range_icon_style").val(data['ok']['range_info']['v4r_icon_style']);
     });
   } else {
   };
@@ -513,23 +557,27 @@ function v4ranges_calc_show(ranges, ranges_list) {
     ;
 
     let can_edit=has_right(R_SUPER);
+
+    row
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+         .css({"white-space": "pre", "margin-left": "0.5em"})
+         .title(can_edit?"Изменить":"Просмотр")
+         .click(function() {
+           let _d=$(this).closest(".row").data("data");
+           if(_d == "") { error_at(); return; };
+           let _id=_d['v4r_id'];
+           if(_id == undefined) { error_at(); return; };
+
+           $(".range_btn").show();
+           v4_global_range_dialog(_id, can_edit?(function() { process_R(); }):undefined);
+         })
+       )
+     )
+    ;
+
     if(can_edit) {
       row
-       .append( $(DIV).css({"display": "table-cell"})
-         .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
-           .css({"white-space": "pre", "margin-left": "0.5em"})
-           .title("Изменить")
-           .click(function() {
-             let _d=$(this).closest(".row").data("data");
-             if(_d == "") { error_at(); return; };
-             let _id=_d['v4r_id'];
-             if(_id == undefined) { error_at(); return; };
-
-             $(".range_btn").show();
-             v4_global_range_dialog(_id, function() { process_R(); });
-           })
-         )
-       )
        .append( $(DIV).css({"display": "table-cell"})
          .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
            .css({"white-space": "pre", "margin-left": "0.5em"})

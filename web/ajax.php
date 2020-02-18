@@ -363,7 +363,7 @@ if($q['action'] == 'v4get_net') {
   $row=return_one($query);
   if($row !== NULL) {
 
-    if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
+    if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; $row['v4net_descr'] = 'hidden'; };
     if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
 
     $ret['net']=$row;
@@ -375,25 +375,41 @@ if($q['action'] == 'v4get_net') {
     } else {
       $net_info=get_v4netinfo($row['v4net_addr'], $row['v4net_mask']);
 
-      $query="SELECT * FROM v4rs WHERE";
+      $query="SELECT v4rs.*";
+      $query .= ", (SELECT BIT_OR(gr4r_rmask) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id AND gr4r_fk_group_id IN ($groups)) as rmask";
+      $query .= " FROM v4rs WHERE";
       $query .= " v4r_stop >= ".mq($row['v4net_addr']);
       $query .= " AND v4r_start <= ".mq($row['v4net_last']);
       $query .= " AND v4r_fk_v4net_id IS NULL";
 
-  $ret['_queries'][] = $query;
+      $ret['_queries'][] = $query;
       $ext_ranges=return_query($query);
 
-      $ret['ext_ranges']=$ext_ranges;
+      $ret['ext_ranges']=Array();
 
-      $query="SELECT * FROM v4rs WHERE";
+      foreach($ext_ranges as $row) {
+        if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4r_name'] = 'hidden'; $row['v4r_descr'] = 'hidden'; };
+        if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4r_descr'] = 'hidden'; };
+        $ret['ext_ranges'][] = $row;
+      };
+
+      $query="SELECT v4rs.*";
+      $query .= ", (SELECT BIT_OR(gr4r_rmask) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id AND gr4r_fk_group_id IN ($groups)) as rmask";
+      $query .= " FROM v4rs WHERE";
       $query .= " v4r_stop >= ".mq($row['v4net_addr']);
       $query .= " AND v4r_start <= ".mq($row['v4net_last']);
       $query .= " AND v4r_fk_v4net_id = ".mq($row['v4net_id']);
 
-  $ret['_queries'][] = $query;
+      $ret['_queries'][] = $query;
       $int_ranges=return_query($query);
 
-      $ret['int_ranges']=$int_ranges;
+      $ret['int_ranges']=Array();
+
+      foreach($int_ranges as $row) {
+        if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4r_name'] = 'hidden'; $row['v4r_descr'] = 'hidden'; };
+        if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4r_descr'] = 'hidden'; };
+        $ret['int_ranges'][] = $row;
+      };
     };
 
     ok_exit($ret);
@@ -414,13 +430,14 @@ if($q['action'] == 'v4get_net') {
     $query .= " AND v4net_addr <= ".mq($net_info['net_last']);
     $query .= " AND v4net_mask <= ".mq($max_mask_len);
     $query .= " ORDER BY v4net_addr ASC";
-  $ret['_queries'][] = $query;
+
+    $ret['_queries'][] = $query;
     $rows=return_query($query);
 
     $nets=Array();
     foreach($rows as $row) {
 
-      if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; };
+      if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; $row['v4net_descr'] = 'hidden'; };
       if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
 
 
@@ -434,8 +451,10 @@ if($q['action'] == 'v4get_net') {
     $query .= " AND v4net_mask > ".mq($max_mask_len);
     $query .= " GROUP BY aggr_net";
     $query .= " ORDER BY aggr_net ASC";
-  $ret['_queries'][] = $query;
+
+    $ret['_queries'][] = $query;
     $rows=return_query($query, 'aggr_net');
+
     $ret['aggr_nets']=$rows;
 
     $query="SELECT v4rs.*";
@@ -445,19 +464,48 @@ if($q['action'] == 'v4get_net') {
     $query .= " AND v4r_start <= ".mq($net_info['net_last']);
     $query .= " AND v4r_fk_v4net_id IS NULL";
      
-  $ret['_queries'][] = $query;
+    $ret['_queries'][] = $query;
     $ext_ranges=return_query($query);
     
     $ret['ext_ranges']=Array();
 
     foreach($ext_ranges as $row) {
-      if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4r_name'] = 'hidden'; };
+      if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4r_name'] = 'hidden'; $row['v4r_descr'] = 'hidden'; };
       if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4r_descr'] = 'hidden'; };
       $ret['ext_ranges'][] = $row;
     };
 
 
   };
+  ok_exit($ret);
+} else if($q['action'] == 'v4_get_range') {
+  require_p('range_id', "/^\d+$/");
+  $ret=Array();
+
+  $query="SELECT v4rs.*";
+  $query .= ", (SELECT BIT_OR(gr4r_rmask) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id AND gr4r_fk_group_id IN ($groups)) as rmask";
+  $query .= " FROM v4rs WHERE";
+  $query .= " v4r_id=".mq($q['range_id']);
+
+  $range_info=return_one($query, TRUE, "Range not found.");
+
+  if(!has_nright($range_info['rmask'], NR_VIEWNAME)) { $range_info['v4r_name'] = 'hidden'; $range_info['v4r_descr'] = 'hidden'; };
+  if(!has_nright($range_info['rmask'], NR_VIEWOTHER)) { $range_info['v4r_descr'] = 'hidden'; };
+
+  $ret['range_info']=$range_info;
+
+  $query="SELECT gr4r_rmask as rmask, group_id";
+  if(has_nright($range_info['rmask'], NR_VIEWOTHER)) {
+    $query .= ", group_name";
+  } else {
+    $query .= ", 'hidden' as group_name";
+  };
+  $query .= " FROM gr4rs INNER JOIN groups ON gr4r_fk_group_id=group_id";
+  $query .= " WHERE gr4r_fk_v4r_id=".mq($q['range_id']);
+  $query .= " ORDER BY group_name, group_id";
+
+  $ret['range_group_rights']=return_query($query);
+
   ok_exit($ret);
 } else {
   error_exit("Unknown action");
