@@ -495,6 +495,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     d['buttons'].push({
       "text": (v4r_id == undefined?"Создать":"Сохранить"),
       "click": function() {
+        let _this=this;
         let groups=Array();
         let highlight=undefined;
         let hl_count=0;
@@ -531,7 +532,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
         let range_stop=$("INPUT#v4range_stop").val();
 
         let range_name=$("INPUT#v4range_name").val();
-        let range_descr=$("TEXTINPUT#v4range_descr").val();
+        let range_descr=$("TEXTAREA#v4range_descr").val();
 
         let range_style=$("INPUT#v4range_style").val();
         if(!validate_json(range_style)) {
@@ -561,6 +562,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
         };
 
         run_query(query, function(data) {
+          $(_this).dialog("close");
           if(donefunc != undefined) donefunc(data);
         });
       }
@@ -920,6 +922,8 @@ function v4nav(data) {
   document.title="IPDB: "+page_title;
   saveQuery(page_title);
   $("#page_title").text(page_title);
+
+  let show_range_select= $("#v4_global_range_dialog").length == 1 && has_right(R_SUPER);
 
   let table=$(TABLE)
    .css({"border-collapse": "collapse", "font-size": "large", "border": "1px solid #222222"})
@@ -1287,7 +1291,7 @@ function v4nav(data) {
              .addClass("ui-button")
              .addClass("range_btn")
              .css({"position": "absolute", "top": 0, "left": 0, "font-size": "49%"})
-             .hide()
+             .toggle(show_range_select)
              .data("range_start", range_start)
              .title("Установить начало диапазона: "+range_start)
              .click(function() {
@@ -1304,7 +1308,7 @@ function v4nav(data) {
              .addClass("ui-button")
              .addClass("range_btn")
              .css({"position": "absolute", "bottom": 0, "right": 0, "font-size": "49%"})
-             .hide()
+             .toggle(show_range_select)
              .data("range_stop", range_stop)
              .title("Установить окончание диапазона: "+range_stop)
              .click(function() {
@@ -1474,6 +1478,14 @@ function v4nav(data) {
            let _ranges_list=$(this).data("ranges");
            let _ranges=$(this).closest("TABLE").data("ext_ranges");
            v4ranges_calc_show(_ranges, _ranges_list);
+         })
+         .dblclick(function(e) {
+           e.stopPropagation();
+           let _ranges_list=$(this).data("ranges");
+           let _ranges=$(this).closest("TABLE").data("ext_ranges");
+           let can_edit=has_right(R_SUPER);
+           if(can_edit) $(".range_btn").show();
+           v4_global_range_dialog(_ranges[_ranges_list[0]]['v4r_id'], can_edit?(function() { process_R(); }):undefined);
          })
         ;
       };

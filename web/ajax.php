@@ -125,7 +125,7 @@ function require_p($param_name, $param_check=null) {
   if(isset($param_check)) {
     if(is_array($param_check)) {
       switch($param_check['type']) {
-      case "v4addr":
+      case "v4long":
         if(!preg_match('/^\d+$/', $q[$param_name])) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
         if($q[$param_name] > 4294967295) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
         break;
@@ -139,6 +139,14 @@ function require_p($param_name, $param_check=null) {
       case "v6masklen":
         if(!preg_match('/^\d+$/', $q[$param_name])) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
         if($q[$param_name] > 128) { error_exit("Required param '$param_name' has bad value '".$q[$param_name]."'"); };
+        break;
+      case "num2num":
+        if(!is_array($q[$param_name])) { error_exit("Required param '$param_name' has bad type"); };
+        foreach($q[$param_name] as $key => $val) {
+          if(!preg_match('/^\d+$/', $key)) { error_exit("Required param '$param_name' has bad key '$key'"); };
+          if(!is_scalar($val)) { error_exit("Required param '$param_name' has bad key value type"); };
+          if(!preg_match('/^\d+$/', $val)) { error_exit("Required param '$param_name' has bad key value '$val'"); };
+        };
         break;
       default:
         error_exit("Prog error at ".__LINE__);
@@ -158,6 +166,10 @@ function has_right($right, $rightstr=NULL) {
   } else {
     return FALSE;
   };
+};
+
+function require_right($right) {
+  if(!has_right($right)) { error_exit("Недостаточно прав."); };
 };
 
 function has_nright($rmask, $right) {
@@ -344,7 +356,7 @@ if(!isset($_SESSION['user'])) {
 };
 
 if($q['action'] == 'v4get_net') {
-  require_p('net', [ "type" => "v4addr" ]);
+  require_p('net', [ "type" => "v4long" ]);
   require_p('mask', [ "type" => "v4masklen" ]);
   $ret=Array();
 
@@ -507,6 +519,88 @@ if($q['action'] == 'v4get_net') {
   $ret['range_group_rights']=return_query($query);
 
   ok_exit($ret);
+} else if($q['action'] == 'v4_edit_global_range') {
+  require_right(R_SUPER);
+  require_p('range_id', "/^\d+$/");
+  require_p('range_start', Array("type" => "v4long"));
+  require_p('range_stop', Array("type" => "v4long"));
+  if($q['range_start'] > $q['range_stop']) { error_exit("Invalid range"); };
+  require_p('range_name');
+  require_p('range_descr');
+  require_p('range_style');
+  require_p('range_icon');
+  require_p('range_icon_style');
+  require_p('range_visible', "/^[01]$/");
+  require_p('groups_rights',  Array("type" => "num2num"));
+
+  $query="UPDATE v4rs SET";
+  $query .= " v4r_start=".mq($q['range_start']);
+  $query .= ",v4r_stop=".mq($q['range_stop']);
+  $query .= ",v4r_name=".mq($q['range_name']);
+  $query .= ",v4r_descr=".mq($q['range_descr']);
+  $query .= ",v4r_visible=".mq($q['range_visible']);
+  $query .= ",v4r_style=".mq($q['range_style']);
+  $query .= ",v4r_icon=".mq($q['range_icon']);
+  $query .= ",v4r_icon_style=".mq($q['range_icon_style']);
+  $query .= " WHERE v4r_id=".mq($q['range_id']);
+
+  trans_start();
+
+  run_query($query);
+
+  $query="DELETE FROM gr4rs WHERE gr4r_fk_v4r_id=".mq($q['range_id']);
+  run_query($query);
+
+  foreach($q['groups_rights'] as $gr_id => $rmask) {
+    $query="INSERT INTO gr4rs SET";
+    $query .= " gr4r_fk_v4r_id=".mq($q['range_id']);
+    $query .= ",gr4r_fk_group_id=".mq($gr_id);
+    $query .= ",gr4r_rmask=".mq($rmask);
+    run_query($query);
+  };
+
+  ok_exit("done");
+
+} else if($q['action'] == 'v4_add_global_range') {
+  require_right(R_SUPER);
+  require_p('range_start', Array("type" => "v4long"));
+  require_p('range_stop', Array("type" => "v4long"));
+  if($q['range_start'] > $q['range_stop']) { error_exit("Invalid range"); };
+  require_p('range_name');
+  require_p('range_descr');
+  require_p('range_style');
+  require_p('range_icon');
+  require_p('range_icon_style');
+  require_p('range_visible', "/^[01]$/");
+  require_p('groups_rights',  Array("type" => "num2num"));
+
+  $query="INSERT INTO v4rs SET";
+  $query .= " v4r_start=".mq($q['range_start']);
+  $query .= ",v4r_stop=".mq($q['range_stop']);
+  $query .= ",v4r_name=".mq($q['range_name']);
+  $query .= ",v4r_descr=".mq($q['range_descr']);
+  $query .= ",v4r_visible=".mq($q['range_visible']);
+  $query .= ",v4r_style=".mq($q['range_style']);
+  $query .= ",v4r_icon=".mq($q['range_icon']);
+  $query .= ",v4r_icon_style=".mq($q['range_icon_style']);
+
+  trans_start();
+
+  run_query($query);
+
+  $id=mysqli_insert_id($db);
+  if($id == 0) { error_exit("Bad insert ID returned"); };
+
+  foreach($q['groups_rights'] as $gr_id => $rmask) {
+    $query="INSERT INTO gr4rs SET";
+    $query .= " gr4r_fk_v4r_id=".mq($id);
+    $query .= ",gr4r_fk_group_id=".mq($gr_id);
+    $query .= ",gr4r_rmask=".mq($rmask);
+    run_query($query);
+  };
+
+  ok_exit("done");
+
 } else {
   error_exit("Unknown action");
 };
