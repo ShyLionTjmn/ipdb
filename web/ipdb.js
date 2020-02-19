@@ -317,8 +317,49 @@ function validate_v4range() {
   return valid;
 };
 
+function group_edit(group_id, donefunc) {
+  if( $("#group_edit").length != 0) { error_at(); return; };
+  if(group_id == undefined && !has_right(R_SUPER)) { error_at(); return; };;
+
+  let dialog=$(DIV).id("group_edit")
+   .addClass("dialog_start")
+   .title(group_id == undefined?"Создание группы":(has_right(R_SUPER)?"Редактирование группы":"Просмотр группы"))
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1000,
+    minWidth:600,
+    //width: "auto",
+    buttons: [],
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    },
+  };
+
+  if(group_id == undefined || has_right(R_SUPER)) {
+    d['buttons'].push({ "text": (group_id == undefined)?"Создать":"Сохранить", "class": "confirm_btn", "click": function() {
+      $(this).dialog( "close" ); 
+      let ret;
+      if(donefunc != undefined) donefunc(ret);
+    }});
+  };
+
+  d['buttons'].push({ "text": (group_id == undefined || has_right(R_SUPER))?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
+
+  let table=$(TABLE);
+
+  table.appendTo(dialog);
+
+  dialog.dialog(d);
+};
+
 function groups_list_row(group, donefunc) {
-  let ret=$(TR)
+  let ret=$(TR).addClass("groups_list_row")
    .data("data", group)
    .css({"background-color": group['_presel']?"paleturquoise":"white"})
    .css({"margin-top": "0.3em"})
@@ -350,7 +391,11 @@ function groups_list_row(group, donefunc) {
   } else {
     sel_td
      .append( $(INPUT).prop({"type": "checkbox", "checked": group['_presel']})
+       .addClass("select_checkbox")
        .click(function() { return donefunc != undefined; })
+       .on("change", function() {
+         $(this).closest("TABLE").trigger("sel_change");
+       })
      )
     ;
   };
@@ -380,9 +425,33 @@ function groups_list_row(group, donefunc) {
   ;
 
   ret
-   .append( $(TD).prop("colspan", 99).text(group['group_name'])
+   .append( $(TD).text(group['group_name'])
    )
   ;
+
+  ret
+   .append( $(TD).text(group['users_count'])
+     .title("Пользователей в группе")
+     .css({"padding-left": "0.3em"})
+   )
+  ;
+
+  ret
+   .append( $(TD)
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+       .title(has_right(R_SUPER)?"Редактирование группы":"Просмотр группы")
+       .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
+       .click(function() {
+         let row=$(this).closest(".groups_list_row");
+         let prev_data=row.data("data");
+         group_edit(prev_data['group_id'], function(ret_data) {
+           alert(jstr(ret_data));
+         });
+       })
+     )
+   )
+  ;
+
   return ret;
 };
 
@@ -411,15 +480,48 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
-      $(".range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
+    },
+    open: function() {
+      if(opt != undefined && opt['return'] == "many" && donefunc != undefined && presel_list.length == 0) {
+        $(this).dialog("widget").find("BUTTON.confirm_btn").prop("disabled", true).css({"color": "gray"});
+      };
     }
+  };
+
+  if(opt != undefined && (opt['return'] == "any" || opt['return'] == "many") && donefunc != undefined) {
+    d['buttons'].push({ "text": "Подтвердить", "class": "confirm_btn", "click": function() {
+      let ret=Array();
+
+      $(this).find("TABLE").find("TBODY").find(".groups_list_row").each(function() {
+         if($(this).find("INPUT.select_checkbox").is(":checked")) {
+           ret.push( $(this).data("data") );
+         };
+      });
+
+      if(ret.length == 0 && opt['return'] == "many") return;
+
+      $(this).dialog( "close" ); 
+      donefunc(ret);
+    }});
   };
 
   d['buttons'].push({ "text": "Закрыть", "click": function() {$(this).dialog( "close" ); } });
 
   let table=$(TABLE);
+
+  if(opt != undefined && opt['return'] == "many" && donefunc != undefined) {
+    table
+     .on("sel_change", function() {
+       let sel_count=0;
+       $(this).find("TBODY").find(".groups_list_row").each(function() {
+         if($(this).find("INPUT.select_checkbox").is(":checked")) sel_count++;
+       });
+       $(this).closest(".dialog_start").dialog("widget").find("BUTTON.confirm_btn").prop("disabled", sel_count == 0).css({"color": sel_count == 0?"gray":"black"});
+     })
+    ;
+  };
 
   if(has_right(R_SUPER) && opt != undefined && opt['allow_add']) {
     table
@@ -476,7 +578,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
   });
 };
 
-function group_right_div(gr, mask, opt) {
+function group_net_right_div(gr, mask, opt) {
   let ret=$(DIV)
    .css({"white-space": "pre", "margin-bottom": "0.2em"})
    .addClass("group_rights_div")
@@ -841,7 +943,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
               .each(function() { if($(this).data("id") == undefined) { allow_add=false; return false; }; })
              ;
              if(allow_add) {
-               $("DIV#v4range_rights").append( group_right_div( undefined, (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, {"allow_edit": true, "allow_delete": true}) );
+               $("DIV#v4range_rights").append( group_net_right_div( undefined, (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, {"allow_edit": true, "allow_delete": true}) );
              };
            })
          )
@@ -879,7 +981,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
       $("INPUT#v4range_icon_style").val(data['ok']['range_info']['v4r_icon_style']);
 
       for(let i=0; i < data['ok']['range_group_rights'].length; i++) {
-        $("DIV#v4range_rights").append( group_right_div(data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
+        $("DIV#v4range_rights").append( group_net_right_div(data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
       };
     });
   } else {
@@ -2182,34 +2284,10 @@ $( document ).ready(function() {
         ;
 
         menu_bar
-         .append( $(SPAN).addClass("ui-button").text("Группы1")
+         .append( $(SPAN).addClass("ui-button").text("Группы")
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
-             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER) }, function(ret_data) {
-               $("#debug").text(jstr(ret_data));
-             });
-           })
-         )
-        ;
-
-        menu_bar
-         .append( $(SPAN).addClass("ui-button").text("ГруппыAny")
-           .css({"padding": "0px 0.3em", "margin-left": "10px"})
-           .click(function() {
-             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "return": "any" }, function(ret_data) {
-               $("#debug").text(jstr(ret_data));
-             });
-           })
-         )
-        ;
-
-        menu_bar
-         .append( $(SPAN).addClass("ui-button").text("ГруппыMany")
-           .css({"padding": "0px 0.3em", "margin-left": "10px"})
-           .click(function() {
-             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "return": "many" }, function(ret_data) {
-               $("#debug").text(jstr(ret_data));
-             });
+             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER) });
            })
          )
         ;
