@@ -22,6 +22,17 @@ const RR_TAKE_NET       = 1 << 9;
 const RR_DENY_TAKE_IP   = 1 << 10; //also deny editing
 
 const group_rights=Array(
+  { "right": R_SUPER,
+    "label_text": "Супер",
+    "label_descr": "Полный доступ к базе данных"
+  },
+  { "right": R_VIEWANY,
+    "label_text": "Прсмт",
+    "label_descr": "Просмотр любой информации"
+  },
+);
+
+const group_net_rights=Array(
   { "right": NR_VIEWNAME,
     "label_text": "Имен",
     "label_descr": "Просмотр наименований объектов"
@@ -309,11 +320,66 @@ function validate_v4range() {
 function groups_list_row(group, donefunc) {
   let ret=$(TR)
    .data("data", group)
-   .css({"background-color": group['_presel']?"lightgreen":"white"})
+   .css({"background-color": group['_presel']?"paleturquoise":"white"})
+   .css({"margin-top": "0.3em"})
   ;
-  ret
-   .append( $(TD).text("sel")
+  let sel_td=$(TD)
+   .css({"padding-right": "0.5em"})
+   .appendTo( ret )
+  ;
+
+  if(group['_sel'] == 'one') {
+    if(donefunc != undefined) {
+      sel_td
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-select").addClass("ui-button")
+         .title("Выбрать эту группу и вернуться на предыдущий экран")
+         .click(function() {
+           let data=$(this).closest("TR").data("data");
+           $(this).closest(".dialog_start").dialog("close");
+           donefunc(data);
+         })
+       )
+      ;
+    } else {
+      sel_td
+       .append( $(LABEL).addClass("ui-icon").addClass(group['_presel']?"ui-icon-check":"ui-icon-blank").addClass("ui-button")
+         .title(group['_presel']?"Эта группа выбрана":"")
+       )
+      ;
+    };
+  } else {
+    sel_td
+     .append( $(INPUT).prop({"type": "checkbox", "checked": group['_presel']})
+       .click(function() { return donefunc != undefined; })
+     )
+    ;
+  };
+
+  let r_td=$(TD)
+   .css({"padding-right": "0.5em"})
+   .appendTo(ret)
+  ;
+
+  for(let i=0; i < group_rights.length; i++) {
+    if(String(group['group_rights']).indexOf( group_rights[i]['right'] ) >= 0) {
+      r_td
+       .append( $(LABEL).text(group_rights[i]['label_text'])
+         .title( group_rights[i]['label_descr'] )
+         .css({"background-color": "lightgreen", "border": "1px solid gray", "margin-right": "0.3em"})
+       )
+      ;
+    };
+  };
+
+  let m_td=$(TD)
+   //.css({"padding-right": "0.5em"})
+   .append( $(LABEL).addClass("ui-icon").addClass( in_array(ud['user']['groups'].split(","), group['group_id'])?"ui-icon-user":"ui-icon-blank")
+     .title(in_array(ud['user']['groups'].split(","), group['group_id'])?"Вы входите в эту группу":"")
    )
+   .appendTo(ret)
+  ;
+
+  ret
    .append( $(TD).prop("colspan", 99).text(group['group_name'])
    )
   ;
@@ -323,10 +389,17 @@ function groups_list_row(group, donefunc) {
 function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
   if( $("#groups_list").length != 0) { error_at(); return; };
 
+  let presel_list;
+  if(typeof(select_gr_ids) == "object") {
+    presel_list = select_gr_ids;
+  } else {
+    presel_list = [select_gr_ids];
+  };
+
   let dialog=$(DIV).id("groups_list")
    .addClass("dialog_start")
    .title("Группы пользователей")
-   .css("white-space", "pre")
+   .css({"white-space": "pre", "font-size": "larger"})
    .appendTo("BODY")
   ;
 
@@ -335,7 +408,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     maxHeight:1000,
     maxWidth:1000,
     minWidth:600,
-    width: "auto",
+    //width: "auto",
     buttons: [],
     close: function() {
       $(".range_btn").hide();
@@ -375,7 +448,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
 
   run_query({"action": "get_groups"}, function(data) {
     for(let i=0; i < data['ok'].length; i++) {
-      let check=in_array(select_gr_ids, data['ok'][i]['group_id']);
+      let check=in_array(presel_list, data['ok'][i]['group_id']);
       data['ok'][i]['_presel'] = check;
     };
 
@@ -408,19 +481,24 @@ function group_right_div(gr, mask, opt) {
    .css({"white-space": "pre", "margin-bottom": "0.2em"})
    .addClass("group_rights_div")
   ;
+
+  if(gr == undefined) {
+    ret.css({"background-color": "yellow"});
+  };
+
   let rigths_span=$(SPAN);
 
-  for(let i=0; i < group_rights.length; i++) {
-    if(((group_rights[i]['right'] & mask) >>> 0) > 0) {
-      let is_set = (gr != undefined && ((Number(gr['rmask']) & group_rights[i]['right']) >>> 0) > 0);
+  for(let i=0; i < group_net_rights.length; i++) {
+    if(((group_net_rights[i]['right'] & mask) >>> 0) > 0) {
+      let is_set = (gr != undefined && ((Number(gr['rmask']) & group_net_rights[i]['right']) >>> 0) > 0);
       if(is_set || (opt != undefined && opt['allow_edit'] == true)) {
         let r_label=$(LABEL).addClass("right")
          .toggle(is_set || gr == undefined)
          .css({"border": "1px solid gray", "padding-left": "0.1em", "padding-right": "0.1em", "margin-left": "0.3em"})
-         .text(group_rights[i]['label_text'])
-         .title(group_rights[i]['label_descr'])
-         .data("right", group_rights[i]['right'])
-         .data("val", is_set?group_rights[i]['right']:0)
+         .text(group_net_rights[i]['label_text'])
+         .title(group_net_rights[i]['label_descr'])
+         .data("right", group_net_rights[i]['right'])
+         .data("val", is_set?group_net_rights[i]['right']:0)
          .click(function() {
            if(! $(this).hasClass("editable")) return;
            let val=$(this).data("val");
@@ -464,7 +542,7 @@ function group_right_div(gr, mask, opt) {
            let gr_id=$(this).data("id");
            if(gr_id != undefined && gr_id != set_group && String(gr_id).match(/^\d+$/)) exclude_list.push(gr_id);
          });
-         groups_list([set_group], exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
+         groups_list(set_group, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
            row.find(".group").data("id", group['group_id']).text(group['group_name']).trigger("set");
          });
        })
@@ -566,7 +644,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
    .data("id", v4r_id)
    .addClass("dialog_start")
    .prop("title", title)
-   .css("white-space", "pre")
+   .css({"white-space": "pre", "font-size": "larger"})
    .appendTo("BODY")
   ;
 
@@ -1083,7 +1161,7 @@ function v4nav(data) {
   let last_octet=last_ip_octets[octet_index];
 
   let top_left=$(TH).text("") //top-left corner
-   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "padding-left": "0.2em"})
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "padding-left": "0.2em"})
    .appendTo(htr)
   ;
 
@@ -1177,20 +1255,20 @@ function v4nav(data) {
 
   for(let cur_masklen=masklen_start; cur_masklen <= masklen_stop; cur_masklen++) {
     $(TH).text("/"+cur_masklen)
-     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
      .appendTo(htr)
     ;
   };
 
   //net name column
   $(TH)
-   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
    .appendTo(htr)
   ;
 
   //ranges column
   let r_th=$(TH)
-   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1000000, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
+   .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-left": "1px solid gray"})
    .appendTo(htr)
   ;
 
@@ -2102,6 +2180,40 @@ $( document ).ready(function() {
            })
          )
         ;
+
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("Группы1")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER) }, function(ret_data) {
+               $("#debug").text(jstr(ret_data));
+             });
+           })
+         )
+        ;
+
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("ГруппыAny")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "return": "any" }, function(ret_data) {
+               $("#debug").text(jstr(ret_data));
+             });
+           })
+         )
+        ;
+
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("ГруппыMany")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "return": "many" }, function(ret_data) {
+               $("#debug").text(jstr(ret_data));
+             });
+           })
+         )
+        ;
+
 
         process_R();
 
