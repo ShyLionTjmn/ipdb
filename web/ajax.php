@@ -506,12 +506,7 @@ if($q['action'] == 'v4get_net') {
 
   $ret['range_info']=$range_info;
 
-  $query="SELECT gr4r_rmask as rmask, group_id";
-  if(has_nright($range_info['rmask'], NR_VIEWOTHER)) {
-    $query .= ", group_name";
-  } else {
-    $query .= ", 'hidden' as group_name";
-  };
+  $query="SELECT gr4r_rmask as rmask, group_id, group_name";
   $query .= " FROM gr4rs INNER JOIN groups ON gr4r_fk_group_id=group_id";
   $query .= " WHERE gr4r_fk_v4r_id=".mq($q['range_id']);
   $query .= " ORDER BY group_name, group_id";
@@ -611,6 +606,8 @@ if($q['action'] == 'v4get_net') {
   run_query($query);
 
   ok_exit("done");
+} else if($q['action'] == 'get_groups') {
+  ok_exit(return_query("SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups ORDER BY group_name"));
 } else {
   error_exit("Unknown action");
 };

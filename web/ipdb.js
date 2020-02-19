@@ -306,8 +306,101 @@ function validate_v4range() {
   return valid;
 };
 
-function groups_list(select_gr_id, exclude_list, opt, donefunc) {
-  return;
+function groups_list_row(group, donefunc) {
+  let ret=$(TR)
+   .data("data", group)
+   .css({"background-color": group['_presel']?"lightgreen":"white"})
+  ;
+  ret
+   .append( $(TD).text("sel")
+   )
+   .append( $(TD).prop("colspan", 99).text(group['group_name'])
+   )
+  ;
+  return ret;
+};
+
+function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
+  if( $("#groups_list").length != 0) { error_at(); return; };
+
+  let dialog=$(DIV).id("groups_list")
+   .addClass("dialog_start")
+   .title("Группы пользователей")
+   .css("white-space", "pre")
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1000,
+    minWidth:600,
+    width: "auto",
+    buttons: [],
+    close: function() {
+      $(".range_btn").hide();
+      $(this).dialog("destroy");
+      $(this).remove();
+    }
+  };
+
+  d['buttons'].push({ "text": "Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+  let table=$(TABLE);
+
+  if(has_right(R_SUPER) && opt != undefined && opt['allow_add']) {
+    table
+     .append( $(THEAD)
+       .append( $(TR)
+         .append( $(TD)
+           .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+             .css({"color": "green"})
+             .click(function() {
+             })
+           )
+         )
+         .append( $(TD).prop("colspan", 99) )
+       )
+     )
+    ;
+  };
+
+  let tbody=$(TBODY)
+   .appendTo( table )
+  ;
+
+  table.appendTo(dialog);
+
+  dialog.dialog(d);
+
+  run_query({"action": "get_groups"}, function(data) {
+    for(let i=0; i < data['ok'].length; i++) {
+      let check=in_array(select_gr_ids, data['ok'][i]['group_id']);
+      data['ok'][i]['_presel'] = check;
+    };
+
+    data['ok'].sort(function(a, b) {
+      if(a['_presel'] != b['_presel']) {
+        if(a['_presel']) { return -1; } else { return 1; };
+      } else {
+        return String(a['group_name']).localeCompare(String(b['group_name']));
+      };
+    });
+
+    for(let i=0; i < data['ok'].length; i++) {
+      let group=data['ok'][i];
+      if(in_array(exclude_list, group['group_id'])) continue;
+
+      if(opt == undefined || opt['return'] == "one") {
+        group['_sel'] = "one";
+      } else {
+        group['_sel'] = "multi";
+      };
+
+      let row=groups_list_row(group, donefunc);
+      row.appendTo( tbody );
+    };
+  });
 };
 
 function group_right_div(gr, mask, opt) {
@@ -371,7 +464,7 @@ function group_right_div(gr, mask, opt) {
            let gr_id=$(this).data("id");
            if(gr_id != undefined && gr_id != set_group && String(gr_id).match(/^\d+$/)) exclude_list.push(gr_id);
          });
-         groups_list(set_group, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
+         groups_list([set_group], exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
            row.find(".group").data("id", group['group_id']).text(group['group_name']).trigger("set");
          });
        })
@@ -892,7 +985,7 @@ function v4calc_show(net, masklen, elm) {
   let calc_text = "";
 
   if(parent_net != net) {
-    calc_text += "Subnet: "+v4long2ip(net)+"/"+masklen;
+    calc_text += "IP: "+v4long2ip(net);
     calc_text += "\nParent net: "+v4long2ip(parent_net)+"/"+masklen;
   } else {
     calc_text += "Network: "+v4long2ip(net)+"/"+masklen;
@@ -901,7 +994,6 @@ function v4calc_show(net, masklen, elm) {
   calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[masklen]) >>> 0);
   if(parent_net != net) {
     calc_text += "\nParent Last IP: "+v4long2ip((parent_net | ~v4len2mask[masklen]) >>> 0);
-    calc_text += "\nSubnet Last IP: "+v4long2ip((net | ~v4len2mask[masklen]) >>> 0);
   } else {
     calc_text += "\nLast IP: "+v4long2ip((net | ~v4len2mask[masklen]) >>> 0);
   };
@@ -940,7 +1032,7 @@ function v4nav(data) {
   let show_range_select= $("#v4_global_range_dialog").length == 1 && has_right(R_SUPER);
 
   let table=$(TABLE)
-   .css({"border-collapse": "collapse", "font-size": "large", "border": "1px solid #222222"})
+   .css({"border-collapse": "collapse", "font-size": "large"})
    .data("ext_ranges", data['ext_ranges'])
    .appendTo(contents)
   ;
@@ -1007,7 +1099,8 @@ function v4nav(data) {
        .click(function() {
          let _net=$(this).data("net");
          let _masklen=$(this).data("masklen");
-         $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+         let hide_empty= $R['hide_empty'] == undefined ? "0":$R['hide_empty'];
+         $R={"action": "v4get_net", "net": _net, "masklen": _masklen, "hide_empty": hide_empty};
          v4get_net();
        })
      )
@@ -1032,7 +1125,8 @@ function v4nav(data) {
      .click(function() {
        let _net=$(this).data("net");
        let _masklen=$(this).data("masklen");
-       $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+       let hide_empty= $R['hide_empty'] == undefined ? "0":$R['hide_empty'];
+       $R={"action": "v4get_net", "net": _net, "masklen": _masklen, "hide_empty": hide_empty };
        v4get_net();
      })
    )
@@ -1049,6 +1143,34 @@ function v4nav(data) {
        let _net=$(this).data("net");
        let _masklen=$(this).data("masklen");
        v4calc_show(_net, _masklen, $(this).closest("TH"));
+     })
+   )
+  ;
+
+  let eye_color;
+  let eye_title;
+
+  if($R['hide_empty'] != "1") {
+    eye_color=color_table_buttons;
+    eye_title="Скрыть пустые строки";
+  } else {
+    eye_color="orange";
+    eye_title="Показать пустые строки";
+  };
+
+  top_left
+   .append( $(SPAN).addClass("ui-icon").addClass("ui-icon-eye")
+     .addClass("ui-button")
+     .css({"margin-left": "0.2em", "margin-right": "0.2em"})
+     .css({"padding-left": "0.2em", "padding-right": "0.2em", "color": eye_color})
+     .title(eye_title)
+     .data({"net": data['net_info']['net'], "masklen": data['net_info']['masklen']})
+     .click(function() {
+       let _net=$(this).data("net");
+       let _masklen=$(this).data("masklen");
+       let hide_empty= $R['hide_empty'] == "1" ? "0":"1";
+       $R={"action": "v4get_net", "net": _net, "masklen": _masklen, "hide_empty": hide_empty };
+       v4get_net();
      })
    )
   ;
@@ -1157,6 +1279,9 @@ function v4nav(data) {
     ;
   };
 
+  let bg_count=0;
+  let hidden_count=0;
+
   for(let o=first_octet; o <= last_octet; o++) {
     rows_octets[octet_index] = o;
 
@@ -1171,27 +1296,23 @@ function v4nav(data) {
       last_net = undefined;
     };
 
+    let row_hideable=true;
     let row_has_nets=false;
 
     for(n in data['nets']) {
       if(row_net >= data['nets'][n]['v4net_addr'] && row_net <= data['nets'][n]['v4net_last']) {
+        row_hideable=false;
         row_has_nets=true;
         break;
       };
     };
 
     if(data['aggr_nets'][ row_net ] != undefined) {
+      row_hideable=false;
       row_has_nets=true;
     };
 
-    let tr=$(TR).data('has_nets', row_has_nets);
-    if(!row_has_nets) tr.addClass("has_no_nets");
-
-    if(o % 2) {
-      tr.css({"background-color": color_odd});
-    } else {
-      tr.css({"background-color": color_even});
-    };
+    let tr=$(TR);
 
     tr
      .append( $(TD).text(row_ip_text)
@@ -1416,7 +1537,8 @@ function v4nav(data) {
              .click(function() {
                let _net=$(this).data("net");
                let _masklen=$(this).data("masklen");
-               $R={"action": "v4get_net", "net": _net, "masklen": _masklen};
+               let hide_empty= $R['hide_empty'] == undefined ? "0":$R['hide_empty'];
+               $R={"action": "v4get_net", "net": _net, "masklen": _masklen, "hide_empty": hide_empty };
                v4get_net();
              })
            )
@@ -1481,6 +1603,10 @@ function v4nav(data) {
       if(row_net > Number(range['v4r_stop']) || row_last < Number(range['v4r_start'])) {
         r_elm.html(" ");
       } else {
+        if(row_net <= Number(range['v4r_start']) || row_last >= Number(range['v4r_stop'])) {
+          row_hideable=false;
+        };
+          
         data['ext_ranges'][r]['_hit'] = true;
         r_elm.range_symbol(row_net, row_last, Number(range['v4r_start']), Number(range['v4r_stop']));
 
@@ -1526,6 +1652,8 @@ function v4nav(data) {
       if(row_inside_ranges.length == 0) {
         r_elm.html(" ");
       } else {
+        row_hideable=false;
+
         r_elm.html("&#x25c0;") // ◀, range is inside row net
          .title(row_inside_ranges.length+" "+ranges2lang(false, "ru", outer_ranges.length)+" внутри подсети.\nНажмите для более подробной информации")
          .data("ranges", row_inside_ranges)
@@ -1546,8 +1674,32 @@ function v4nav(data) {
      )
     ;
 
+    if(row_hideable) {
+      tr.addClass("hideable").toggle( $R['hide_empty'] != "1" );
+    };
+
+    if(!row_hideable || $R['hide_empty'] != "1" ) {
+      bg_count++;
+    } else {
+      hidden_count++;
+    };
+
+    if(bg_count % 2) {
+      tr.css({"background-color": color_odd});
+    } else {
+      tr.css({"background-color": color_even});
+    };
 
     tr.appendTo(tbody);
+  };
+
+  if(hidden_count > 0) {
+    $(TR)
+     .append( $(TD).prop("colspan", "99").css({"text-align": "center"})
+       .append( $(SPAN).text( hidden_count+" пустых строк скрыто") )
+     )
+     .appendTo(tbody);
+    ;
   };
 
 
@@ -1651,7 +1803,8 @@ function ipv4() {
            .title("Перейти к навигации по подсетям")
            .css({"padding-left": "0.5em", "padding-right": "0.5em", "margin-left": "1em"})
            .click(function() {
-             $R={ "action": "v4get_net", "net": 0, "masklen": 0 };
+             let hide_empty= $R['hide_empty'] == undefined ? "0":$R['hide_empty'];
+             $R={ "action": "v4get_net", "net": 0, "masklen": 0, "hide_empty": hide_empty };
              v4get_net();
            })
          )
