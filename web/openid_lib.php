@@ -216,6 +216,9 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
       if(isset($id_token['name']) && $user['user_name'] != $id_token['name']) {
         $updates['user_name']=$id_token['name'];
       };
+      if(isset($id_token['preferred_username']) && $user['user_username'] != $id_token['preferred_username']) {
+        $updates['user_username']=$id_token['preferred_username'];
+      };
       if(isset($id_token['email']) && $user['user_email'] != $id_token['email']) {
         $updates['user_email']=$id_token['email'];
       };
@@ -258,6 +261,9 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
       if(isset($id_token['name'])) {
         $query .= ",user_name=".mq($id_token['name']);
       };
+      if(isset($id_token['preferred_username'])) {
+        $query .= ",user_username=".mq($id_token['preferred_username']);
+      };
       if(isset($id_token['email'])) {
         $query .= ",user_email=".mq($id_token['email']);
       };
@@ -290,6 +296,7 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
   $_SESSION['refresh_expire']=$refresh_token['exp'];
   $_SESSION['user']=$user;
   $_SESSION['refresh_token']=$refresh_token_str;
+  $_SESSION['id_token']=$id_token;
 
   return(Array("ok" => "good"));
 };

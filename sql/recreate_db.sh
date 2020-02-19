@@ -24,7 +24,7 @@ fi
 echo "deleting all tables"
 $MYSQL -B -N -e 'SHOW TABLES' | sed 's/.*/DROP TABLE &;/' | $MYSQL --init-command="SET FOREIGN_KEY_CHECKS=0;" || on_error
 
-for f in /devel/ipdb/sql/schema.sql /devel/ipdb/sql/schema_populate_ru.sql /devel/ipdb/sql/local_data.sql /devel/ipdb/sql/test_nets.sql /devel/ipdb/sql/test_ranges
+for f in /devel/ipdb/sql/schema.sql /devel/ipdb/sql/schema_populate_ru.sql /devel/ipdb/sql/local_data.sql /devel/ipdb/sql/test_nets.sql /devel/ipdb/sql/test_ranges.sql
 do
   echo "Importing $f"
   $MYSQL < $f || on_error

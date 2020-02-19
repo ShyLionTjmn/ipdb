@@ -3,7 +3,7 @@
 DB_USER=`cat /devel/ipdb/sql/.mysql_user`
 DB_PASS=`cat /devel/ipdb/sql/.mysql_password`
 
-DUMP_CMD="mysqldump -u $DB_USER --password=$DB_PASS --skip-extended-insert --order-by-primary --skip-add-drop-table --skip-comments --skip-set-charset --skip-add-locks --no-create-info --skip-triggers"
+DUMP_CMD="mysqldump -u $DB_USER --password=$DB_PASS --skip-extended-insert --complete-insert --order-by-primary --skip-add-drop-table --skip-comments --skip-set-charset --skip-add-locks --no-create-info --skip-triggers"
 
 PREFIX=""
 

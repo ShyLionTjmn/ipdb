@@ -288,8 +288,6 @@ if(isset($_SESSION['user'])) {
       if($rights === NULL) { $rights = ""; };
       #used by has_right !
       $_SESSION['user']['rights'] = $rights;
-
-
     };
   };
 };
@@ -321,6 +319,7 @@ if($q['action'] == 'check_auth') {
     );
     $ret['user']['v4favs']=$v4favs;
     $ret['user']['g4favs']=$g4favs;
+    #$ret['user']['id_token']=$_SESSION['id_token'];
     ok_exit($ret);
   };
 };
@@ -607,7 +606,42 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit("done");
 } else if($q['action'] == 'get_groups') {
-  ok_exit(return_query("SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups ORDER BY group_name"));
+  $ret=return_query("SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups ORDER BY group_name");
+  if(!has_right(R_VIEWANY)) {
+    foreach($ret as $key => $value) {
+      $ret[$key]['group_name'] = "hidden";
+    };
+  };
+  ok_exit($ret);
+} else if($q['action'] == 'get_group') {
+  require_p('group_id');
+
+  $ret=return_one("SELECT * FROM groups WHERE group_id=".mq($q['group_id']), TRUE, "Группа не существует");
+  if(!has_right(R_VIEWANY)) {
+    $ret['group_name'] = "hidden";
+  };
+
+  $query = "SELECT users.*, aps.ap_off FROM (users INNER JOIN ugs ON ug_fk_user_id=user_id";
+  $query .= ") INNER JOIN aps ON ap_id=user_fk_ap_id";
+  $query .= " WHERE ug_fk_group_id=".mq($q['group_id']);
+  $query .= " ORDER BY user_name";
+
+  $ret['group_users']=return_query($query);
+
+  if(!has_right(R_VIEWANY)) {
+    foreach($ret['group_users'] as $key => $value) {
+      if($value['user_id'] != $_SESSION['user']['user_id']) {
+        $ret['group_users'][$key]['user_name'] = "hidden";
+        $ret['group_users'][$key]['user_username'] = "hidden";
+        $ret['group_users'][$key]['user_phone'] = "hidden";
+        $ret['group_users'][$key]['user_email'] = "hidden";
+        $ret['group_users'][$key]['user_sub'] = "hidden";
+        $ret['group_users'][$key]['user_last_login'] = "hidden";
+      };
+    };
+  };
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action");
 };

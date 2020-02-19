@@ -317,6 +317,19 @@ function validate_v4range() {
   return valid;
 };
 
+function get_users_list_row(user) {
+  let ret=$(DIV).addClass("user_list_row")
+   .data("data", user)
+   .css({"white-space": "pre"})
+  ;
+
+  ret
+   .append( $(SPAN).text(user['user_name']) )
+  ;
+
+  return ret;
+};
+
 function group_edit(group_id, donefunc) {
   if( $("#group_edit").length != 0) { error_at(); return; };
   if(group_id == undefined && !has_right(R_SUPER)) { error_at(); return; };;
@@ -418,10 +431,10 @@ function group_edit(group_id, donefunc) {
 
   table
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "vertical-align": "top"})
        .text("Пользователи:")
      )
-     .append( $(TD)
+     .append( $(TD).css({"vertical-align": "top"})
        .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
          .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
          .title("Добавить пользователя в группу")
@@ -436,7 +449,7 @@ function group_edit(group_id, donefunc) {
          })
        )
      )
-     .append( $(TD)
+     .append( $(TD).css({"vertical-align": "top"})
        .append( $(DIV).addClass("users_list") )
      )
    )
@@ -445,13 +458,15 @@ function group_edit(group_id, donefunc) {
   table.appendTo(dialog);
 
   if(group_id != undefined) {
-    run_query({"action": "get_group"}, function(data) {
+    run_query({"action": "get_group", "group_id": group_id}, function(data) {
       table.find("INPUT.group_name").val(data['ok']['group_name']);
       if( data['ok']['group_name'] == 'default' || Number(data['ok']['group_default']) == 1 ) {
         table.find("INPUT.group_name").prop("readonly", true).title("Запрещается переименовывать группу по умолчанию.");
-        table.find(".group_default").append( $(LABEL).addClass("ui-icon").addClass("ui-icon-locked")
-         .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em"})
-         .title("Группа по умолчанию. Автоматически назначается пользователям без группы и вновь регистрирующимся.")
+        table
+         .find(".group_default").append( $(LABEL).addClass("ui-icon").addClass("ui-icon-locked")
+           .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em"})
+           .title("Группа по умолчанию. Автоматически назначается пользователям без группы и вновь регистрирующимся.")
+         )
         ;
       };
       for(let i=0; i < group_rights.length; i++) {
@@ -460,6 +475,22 @@ function group_edit(group_id, donefunc) {
         } else {
           table.find(".right_"+group_rights[i]['right']).data("save_value", false);
         };
+      };
+
+      let users_div=table.find(".users_list");
+      let hidden_count=0;
+
+      for(let i=0; i < data['ok']['group_users'].length; i++) {
+        let user=data['ok']['group_users'][i];
+        if(Number(user['user_state']) != 1) hidden_count++;
+
+        user['_allow_groups_change'] = false;
+        if(has_right(R_SUPER)) {
+          user['_show_minus'] = true;
+          user['_allow_edit'] = true;
+        };
+
+        users_div.append( get_users_list_row(user) )
       };
     });
   };

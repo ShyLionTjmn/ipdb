@@ -74,6 +74,7 @@ CREATE TABLE users (
   user_fk_ap_id	BIGINT UNSIGNED,
   user_sub	VARCHAR(256) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL DEFAULT '',
   user_name	VARCHAR(256) NOT NULL DEFAULT '',
+  user_username	VARCHAR(256) NOT NULL DEFAULT '',
   user_email	VARCHAR(256) NOT NULL DEFAULT '',
   user_phone	VARCHAR(256) NOT NULL DEFAULT '',
   user_state	INTEGER NOT NULL DEFAULT -1 COMMENT '-2: deleted, -1: auto-added, 0: disabled, 1: enabled',
