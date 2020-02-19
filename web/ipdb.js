@@ -371,7 +371,7 @@ function group_right_div(gr, mask, opt) {
            let gr_id=$(this).data("id");
            if(gr_id != undefined && gr_id != set_group && String(gr_id).match(/^\d+$/)) exclude_list.push(gr_id);
          });
-         groups_list(gr_id, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
+         groups_list(set_group, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
            row.find(".group").data("id", group['group_id']).text(group['group_name']).trigger("set");
          });
        })
@@ -870,7 +870,7 @@ function v4ranges_calc_show(ranges, ranges_list) {
              if(_id == undefined) { error_at(); return; };
 
              show_confirm("Подтвердите удаление диапазона "+v4long2ip(_d['v4r_start'])+" - "+v4long2ip(_d['v4r_stop'])+"\n"+_d['v4r_name'], function() {
-               let query={"action": "v4_del_range", "range_id": _id};
+               let query={"action": "v4_delete_global_range", "range_id": _id};
                run_query(query, function() { process_R(); });
              });
            })
@@ -887,10 +887,24 @@ function v4ranges_calc_show(ranges, ranges_list) {
 function v4calc_show(net, masklen, elm) {
   clear_calc();
 
-  let calc_text="Network: "+v4long2ip(net)+"/"+masklen;
+  let parent_net=(net & v4len2mask[masklen]) >>> 0;
+
+  let calc_text = "";
+
+  if(parent_net != net) {
+    calc_text += "Subnet: "+v4long2ip(net)+"/"+masklen;
+    calc_text += "\nParent net: "+v4long2ip(parent_net)+"/"+masklen;
+  } else {
+    calc_text += "Network: "+v4long2ip(net)+"/"+masklen;
+  };
   calc_text += "\nMask: "+v4long2ip(v4len2mask[masklen]);
   calc_text += "\nWildcard: "+ v4long2ip( (~v4len2mask[masklen]) >>> 0);
-  calc_text += "\nLast IP: "+v4long2ip((net | ~v4len2mask[masklen]) >>> 0);
+  if(parent_net != net) {
+    calc_text += "\nParent Last IP: "+v4long2ip((parent_net | ~v4len2mask[masklen]) >>> 0);
+    calc_text += "\nSubnet Last IP: "+v4long2ip((net | ~v4len2mask[masklen]) >>> 0);
+  } else {
+    calc_text += "\nLast IP: "+v4long2ip((net | ~v4len2mask[masklen]) >>> 0);
+  };
 
   $("#calc_text").text(calc_text);
   $("#calc").show();

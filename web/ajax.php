@@ -601,6 +601,16 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit("done");
 
+} else if($q['action'] == 'v4_delete_global_range') {
+  require_right(R_SUPER);
+  require_p('range_id', "/^\d+$/");
+
+  $query = "DELETE FROM v4rs";
+  $query .= " WHERE v4r_id=".mq($q['range_id']);
+
+  run_query($query);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action");
 };

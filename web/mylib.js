@@ -339,7 +339,7 @@ function run_query(query, successfunc) {
           $("#debug").text(JSON.stringify(data, null, 2));
         };
         if(data["ok"]["no_auth"] != undefined) {
-          showLoginWindow(data["no_auth"], "Истекло время неактивности сеанса, необходимо пройти авторизацию.");
+          showLoginWindow(data["ok"]["no_auth"], "Истекло время неактивности сеанса, необходимо пройти авторизацию.");
           return;
         };
         if(successfunc != null) {
