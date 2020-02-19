@@ -372,26 +372,26 @@ if($q['action'] == 'v4get_net') {
 
   $ret['_queries'][] = $query;
 
-  $row=return_one($query);
-  if($row !== NULL) {
+  $netrow=return_one($query);
+  if($netrow !== NULL) {
 
-    if(!has_nright($row['rmask'], NR_VIEWNAME)) { $row['v4net_name'] = 'hidden'; $row['v4net_descr'] = 'hidden'; };
-    if(!has_nright($row['rmask'], NR_VIEWOTHER)) { $row['v4net_descr'] = 'hidden'; };
+    if(!has_nright($netrow['rmask'], NR_VIEWNAME)) { $netrow['v4net_name'] = 'hidden'; $netrow['v4net_descr'] = 'hidden'; };
+    if(!has_nright($netrow['rmask'], NR_VIEWOTHER)) { $netrow['v4net_descr'] = 'hidden'; };
 
-    $ret['net']=$row;
+    $ret['net']=$netrow;
 
     $ret['type']="net";
 
-    if(!has_nright($row['rmask'], NR_VIEWOTHER)) {
+    if(!has_nright($netrow['rmask'], NR_VIEWOTHER)) {
       $ret['net']['noaccess']=TRUE;
     } else {
-      $net_info=get_v4netinfo($row['v4net_addr'], $row['v4net_mask']);
+      $net_info=get_v4netinfo($netrow['v4net_addr'], $netrow['v4net_mask']);
 
       $query="SELECT v4rs.*";
       $query .= ", (SELECT BIT_OR(gr4r_rmask) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id AND gr4r_fk_group_id IN ($groups)) as rmask";
       $query .= " FROM v4rs WHERE";
-      $query .= " v4r_stop >= ".mq($row['v4net_addr']);
-      $query .= " AND v4r_start <= ".mq($row['v4net_last']);
+      $query .= " v4r_stop >= ".mq($netrow['v4net_addr']);
+      $query .= " AND v4r_start <= ".mq($netrow['v4net_last']);
       $query .= " AND v4r_fk_v4net_id IS NULL";
 
       $ret['_queries'][] = $query;
@@ -408,9 +408,9 @@ if($q['action'] == 'v4get_net') {
       $query="SELECT v4rs.*";
       $query .= ", (SELECT BIT_OR(gr4r_rmask) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id AND gr4r_fk_group_id IN ($groups)) as rmask";
       $query .= " FROM v4rs WHERE";
-      $query .= " v4r_stop >= ".mq($row['v4net_addr']);
-      $query .= " AND v4r_start <= ".mq($row['v4net_last']);
-      $query .= " AND v4r_fk_v4net_id = ".mq($row['v4net_id']);
+      $query .= " v4r_stop >= ".mq($netrow['v4net_addr']);
+      $query .= " AND v4r_start <= ".mq($netrow['v4net_last']);
+      $query .= " AND v4r_fk_v4net_id = ".mq($netrow['v4net_id']);
 
       $ret['_queries'][] = $query;
       $int_ranges=return_query($query);

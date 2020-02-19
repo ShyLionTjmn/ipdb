@@ -333,6 +333,7 @@ function group_edit(group_id, donefunc) {
     maxHeight:1000,
     maxWidth:1000,
     minWidth:600,
+    minHeight:500,
     //width: "auto",
     buttons: [],
     close: function() {
@@ -351,9 +352,117 @@ function group_edit(group_id, donefunc) {
 
   d['buttons'].push({ "text": (group_id == undefined || has_right(R_SUPER))?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
 
-  let table=$(TABLE);
+  let table=$(TABLE)
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Имя группы:")
+     )
+     .append( $(TD) )
+     .append( $(TD)
+       .append( $(INPUT).addClass("group_name")
+         .prop({"readonly": !has_right(R_SUPER)})
+       )
+       .append( $(LABEL).addClass("group_default").css({"margin-left": "0.5em"}) )
+     )
+   )
+  ;
+
+  let r_td=$(TD).addClass("group_rights");
+
+  for(let i=0; i < group_rights.length; i++) {
+    r_td
+     .append( $(LABEL).text(group_rights[i]['label_text'])
+       .addClass("right")
+       .addClass("right_"+group_rights[i]['right'])
+       .data("right", group_rights[i]['right'])
+       .title( group_rights[i]['label_descr'] )
+       .css({"background-color": "lightgray", "color": "gray", "border": "1px solid gray", "margin-right": "0.3em", "font-size": "smaller"})
+       .click( !has_right(R_SUPER)?function() {} : function() {
+         if($(this).hasClass("on")) {
+           $(this).removeClass("on").css({"background-color": "lightgray", "color": "gray"});
+         } else {
+           $(this).addClass("on").css({"background-color": "lightgreen", "color": "black"});
+         };
+       })
+     )
+    ;
+  };
+
+  if(group_id != undefined && has_right(R_SUPER)) {
+    r_td
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button")
+       .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
+       .title("Вернуть права к первоначальному виду")
+       .click(function() {
+         $(this).closest(".dialog_start").find(".right").each(function() {
+           if($(this).data("save_value") === true) {
+             $(this).addClass("on").css({"background-color": "lightgreen", "color": "black"});
+           } else if($(this).data("save_value") === false) {
+             $(this).removeClass("on").css({"background-color": "lightgray", "color": "gray"});
+           };
+         })
+       })
+     )
+    ;
+  };
+
+  table
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Права:")
+     )
+     .append( $(TD) )
+     .append( r_td )
+   )
+  ;
+
+  table
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Пользователи:")
+     )
+     .append( $(TD)
+       .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+         .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
+         .title("Добавить пользователя в группу")
+         .click(function() {
+         })
+       )
+       .append( $(BR) )
+       .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button")
+         .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
+         .title("Вернуть перечень пользователей к первоначальному виду")
+         .click(function() {
+         })
+       )
+     )
+     .append( $(TD)
+       .append( $(DIV).addClass("users_list") )
+     )
+   )
+  ;
 
   table.appendTo(dialog);
+
+  if(group_id != undefined) {
+    run_query({"action": "get_group"}, function(data) {
+      table.find("INPUT.group_name").val(data['ok']['group_name']);
+      if( data['ok']['group_name'] == 'default' || Number(data['ok']['group_default']) == 1 ) {
+        table.find("INPUT.group_name").prop("readonly", true).title("Запрещается переименовывать группу по умолчанию.");
+        table.find(".group_default").append( $(LABEL).addClass("ui-icon").addClass("ui-icon-locked")
+         .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em"})
+         .title("Группа по умолчанию. Автоматически назначается пользователям без группы и вновь регистрирующимся.")
+        ;
+      };
+      for(let i=0; i < group_rights.length; i++) {
+        if(String(data['ok']['group_rights']).indexOf( group_rights[i]['right'] ) >= 0 ) {
+          table.find(".right_"+group_rights[i]['right']).addClass("on").css({"background-color": "lightgreen", "color": "black"}).data("save_value", true);
+        } else {
+          table.find(".right_"+group_rights[i]['right']).data("save_value", false);
+        };
+      };
+    });
+  };
 
   dialog.dialog(d);
 };
@@ -410,7 +519,7 @@ function groups_list_row(group, donefunc) {
       r_td
        .append( $(LABEL).text(group_rights[i]['label_text'])
          .title( group_rights[i]['label_descr'] )
-         .css({"background-color": "lightgreen", "border": "1px solid gray", "margin-right": "0.3em"})
+         .css({"background-color": "lightgreen", "border": "1px solid gray", "margin-right": "0.3em", "font-size": "smaller"})
        )
       ;
     };
@@ -477,6 +586,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     maxHeight:1000,
     maxWidth:1000,
     minWidth:600,
+    minHeight:500,
     //width: "auto",
     buttons: [],
     close: function() {
