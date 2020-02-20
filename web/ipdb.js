@@ -317,14 +317,90 @@ function validate_v4range() {
   return valid;
 };
 
+function user_state_elm(state) {
+  let state_icon;
+  let state_text;
+  let state_color;
+
+  if(Number(state) == 1) {
+    state_icon="ui-icon-circle-check";
+    state_text="Пользователь включен";
+    state_color="green";
+  } else if(Number(state) == 0) {
+    state_icon="ui-icon-locked";
+    state_text="Пользователь отключен";
+    state_color="dimgray";
+  } else if(Number(state) == -1) {
+    state_icon="ui-icon-circle-plus";
+    state_text="Пользователь добавлен автоматически. Требуется активация.";
+    state_color="magenta";
+  } else if(Number(state) == -2) {
+    state_icon="ui-icon-circle-plus";
+    state_text="Пользователь отключен и скрыт.";
+    state_color="tomato";
+  } else {
+    state_icon="ui-icon-circle-help";
+    state_text="Неизвестный статус!.";
+    state_color="red";
+  };
+
+  return $(LABEL).addClass("ui-icon").addClass(state_icon).css({"color": state_color}).title(state_text).data("text", state_text);
+};
+
 function get_users_list_row(user) {
   let ret=$(DIV).addClass("user_list_row")
    .data("data", user)
-   .css({"white-space": "pre"})
+   .css({"display": "table-row", "white-space": "pre"})
+  ;
+
+  if(user['_show_minus']) {
+    ret
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-minusthick").addClass("ui-button")
+         .css({"color": "coral"})
+         .title("Убрать из списка")
+         .click(function() {
+           let _cont=$(this).closest(".user_list_row").parent();
+           $(this).closest(".user_list_row").remove();
+           _cont.trigger("list_change");
+         })
+       )
+     )
+    ;
+  };
+
+  let state_elm=user_state_elm(user['user_state']);
+
+  ret
+   .append( $(DIV).css({"display": "table-cell"})
+     .append( state_elm )
+   )
   ;
 
   ret
-   .append( $(SPAN).text(user['user_name']) )
+   .append( $(DIV).css({"display": "table-cell"})
+     .append( $(SPAN).text(user['user_name']) )
+   )
+  ;
+
+  ret
+   .append( $(DIV).css({"display": "table-cell"})
+     .append( $(LABEL).addClass("ui-icon").addClass('ui-icon-bullets').addClass("ui-button")
+       .css({"color": color_table_buttons})
+       .title("Свойства пользователя")
+       .click(function() {
+         let row=$(this).closest(".user_list_row");
+         let _cont=row.parent();
+         let _data=row.data("data");
+         user_edit(_data['user_id'], function(ret_data) {
+           ret_data['_show_minus'] = _data['_show_minus'];
+           ret_data['_allow_groups_change'] = _data['_allow_groups_change'];
+           row.replaceWith( get_users_list_row(ret_data) );
+           _cont.trigger("list_change");
+         });
+       })
+     )
+   )
   ;
 
   return ret;
@@ -482,12 +558,11 @@ function group_edit(group_id, donefunc) {
 
       for(let i=0; i < data['ok']['group_users'].length; i++) {
         let user=data['ok']['group_users'][i];
-        if(Number(user['user_state']) != 1) hidden_count++;
+        if(Number(user['user_state']) <  -1) hidden_count++;
 
         user['_allow_groups_change'] = false;
         if(has_right(R_SUPER)) {
           user['_show_minus'] = true;
-          user['_allow_edit'] = true;
         };
 
         users_div.append( get_users_list_row(user) )
