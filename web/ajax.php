@@ -621,7 +621,7 @@ if($q['action'] == 'v4get_net') {
     $ret['group_name'] = "hidden";
   };
 
-  $query = "SELECT users.*, aps.ap_off FROM (users INNER JOIN ugs ON ug_fk_user_id=user_id";
+  $query = "SELECT users.*, aps.ap_off, aps.ap_name FROM (users INNER JOIN ugs ON ug_fk_user_id=user_id";
   $query .= ") INNER JOIN aps ON ap_id=user_fk_ap_id";
   $query .= " WHERE ug_fk_group_id=".mq($q['group_id']);
   $query .= " ORDER BY user_name";

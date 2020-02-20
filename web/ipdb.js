@@ -317,25 +317,25 @@ function validate_v4range() {
   return valid;
 };
 
-function user_state_elm(state) {
+function user_state_elm(user) {
   let state_icon;
   let state_text;
   let state_color;
 
-  if(Number(state) == 1) {
+  if(Number(user['user_state']) == 1) {
     state_icon="ui-icon-circle-check";
     state_text="Пользователь включен";
     state_color="green";
-  } else if(Number(state) == 0) {
+  } else if(Number(user['user_state']) == 0) {
     state_icon="ui-icon-locked";
     state_text="Пользователь отключен";
     state_color="dimgray";
-  } else if(Number(state) == -1) {
+  } else if(Number(user['user_state']) == -1) {
     state_icon="ui-icon-circle-plus";
     state_text="Пользователь добавлен автоматически. Требуется активация.";
     state_color="magenta";
-  } else if(Number(state) == -2) {
-    state_icon="ui-icon-circle-plus";
+  } else if(Number(user['user_state']) == -2) {
+    state_icon="ui-icon-eye";
     state_text="Пользователь отключен и скрыт.";
     state_color="tomato";
   } else {
@@ -344,7 +344,163 @@ function user_state_elm(state) {
     state_color="red";
   };
 
+  if(Number(user['ap_off']) != 0) {
+    state_text += "\nОтключена служба авторизации для этого пользователя.";
+    state_color="gray";
+  };
+
   return $(LABEL).addClass("ui-icon").addClass(state_icon).css({"color": state_color}).title(state_text).data("text", state_text);
+};
+
+function user_edit(user_id, donefunc) {
+  if( $("#user_edit").length != 0) { error_at(); return; };
+  if(user_id == undefined) { error_at(); return; };;
+
+  let dialog=$(DIV).id("user_edit")
+   .addClass("dialog_start")
+   .title(has_right(R_SUPER)?"Редактирование пользователя":"Просмотр пользователя")
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1000,
+    minWidth:600,
+    minHeight:500,
+    //width: "auto",
+    buttons: [],
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    },
+  };
+
+  if(has_right(R_SUPER)) {
+    d['buttons'].push({ "text": "Сохранить", "class": "confirm_btn", "click": function() {
+      $(this).dialog( "close" ); 
+      let ret;
+      if(donefunc != undefined) donefunc(ret);
+    }});
+  };
+
+  d['buttons'].push({ "text": has_right(R_SUPER)?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
+
+  let table=$(TABLE)
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Имя:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("user_name")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Логин:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("user_username")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Служба авторизации:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("ap_state")
+         .addClass("ui-icon")
+         .css({"marin-left": "0.3em", "margin-right": "0.3em"})
+       )
+       .append( $(LABEL).addClass("user_name")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Крайний вход:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("user_name")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("E-mail:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("user_name")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("Телефон:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("user_name")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right"})
+       .text("OpenId sub:")
+     )
+     .append( $(TD)
+       .append( $(LABEL).addClass("user_name")
+       )
+     )
+   )
+   .append( $(TR)
+     .append( $(TD).css({"text-align": "right", "vertical-align": "top"})
+       .text("Состояние:")
+     )
+     .append( $(TD).addClass("states_list").css({"font-size": "small", "vertical-align": "top"})
+       .append( $(LABEL).prop("for", "state_on")
+         .css({"margin-bottom": "0.4em", "margin-right": "0.3em"})
+         .text("Включен")
+         .title("Пользователь включен.")
+       )
+       .append( $(INPUT).prop({"name": "state", "id": "state_on", "type": "radio"})
+       )
+       .append( $(LABEL).prop("for", "state_off")
+         .css({"margin-bottom": "0.4em", "margin-right": "0.3em"})
+         .text("Отключен")
+         .title("Пользователь отключен.")
+       )
+       .append( $(BR) )
+       .append( $(INPUT).prop({"name": "state", "id": "state_off", "type": "radio"})
+       )
+       .append( $(LABEL).prop("for", "state_del")
+         .css({"margin-bottom": "0.4em", "margin-right": "0.3em"})
+         .text("Скрыт")
+         .title("Пользователь отключен и скрыт.")
+       )
+       .append( $(INPUT).prop({"name": "state", "id": "state_del", "type": "radio"})
+       )
+       .append( $(LABEL).prop("for", "state_added")
+         .css({"margin-bottom": "0.4em", "margin-right": "0.3em"})
+         .text("Авт.Доб.")
+         .title("Пользователь добавлен автоматически и требует активации.")
+       )
+       .append( $(INPUT).prop({"name": "state", "id": "state_added", "type": "radio"})
+       )
+     )
+   )
+  ;
+
+
+  table.appendTo(dialog);
+
+  table.find("INPUT").checkboxradio();
+  //run_query({"action": "get_user", "user_id": user_id}, function(data) {
+  //});
+
+  dialog.dialog(d);
 };
 
 function get_users_list_row(user) {
@@ -369,7 +525,7 @@ function get_users_list_row(user) {
     ;
   };
 
-  let state_elm=user_state_elm(user['user_state']);
+  let state_elm=user_state_elm(user);
 
   ret
    .append( $(DIV).css({"display": "table-cell"})
@@ -377,9 +533,20 @@ function get_users_list_row(user) {
    )
   ;
 
+  let text_color="black";
+  let text_title=user['user_username']+" @ "+user['ap_name'];
+
+  if(Number(user['ap_off']) != 0) {
+    text_color="gray";
+    text_title += "\nОтключена служба авторизации для этого пользователя.";
+  };
+
   ret
    .append( $(DIV).css({"display": "table-cell"})
-     .append( $(SPAN).text(user['user_name']) )
+     .append( $(SPAN).text(user['user_name'])
+       .title(text_title)
+       .css({"color": text_color})
+     )
    )
   ;
 
@@ -402,6 +569,10 @@ function get_users_list_row(user) {
      )
    )
   ;
+
+  if(Number(user['user_state']) < -1 || Number(user['ap_off']) != 0) {
+    ret.addClass('hide');
+  };
 
   return ret;
 };
