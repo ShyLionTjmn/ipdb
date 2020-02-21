@@ -527,12 +527,49 @@ function user_edit(user_id, opt, donefunc) {
        .css({"color": "green"})
        .title("Добавить в группу")
        .click(function() {
+         let _cont=$(this).closest(".dialog_start").find(".groups_list");
+         let exclude_list=Array();
+
+         _cont.find(".groups_list_row").each(function() {
+           let _data=$(this).data("data");
+           exclude_list.push( _data['group_id'] );
+         });
+
+         groups_list([], exclude_list, { "return": "many", 'allow_user_info_btn': false }, function(ret_data) {
+           for(let i=0; i < ret_data.length; i++) {
+             let group=ret_data[i];
+             group['_minus'] = true;
+             group['_sel'] = undefined;
+             group['_no_user_info_btn'] = true;
+             let row=groups_list_row(group);
+             row.appendTo( _cont );
+           };
+         });
+       })
+     )
+     .append( !(opt != undefined && opt['allow_groups_change'])?$(LABEL):$(LABEL)
+       .addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button")
+       .css({"color": color_table_buttons, "margin-left": "0.5em" })
+       .title("Восстановить начальный список")
+       .click(function() {
+         let _cont=$(this).closest(".dialog_start").find(".groups_list");
+         let prev_list=_cont.data("redo_data");
+         if(prev_list == undefined) { error_at(); return; };
+
+         _cont.empty();
+
+         for(let i=0; i < prev_list.length; i++) {
+           let group=prev_list[i];
+           let row=groups_list_row(group);
+           row.appendTo( _cont );
+         };
+
        })
      )
    )
   ;
 
-  let groups_list=$(TABLE).addClass("groups_list")
+  let groups_table=$(TABLE).addClass("groups_list")
    .appendTo( dialog )
   ;
 
@@ -578,11 +615,19 @@ function user_edit(user_id, opt, donefunc) {
     table.find(".states_list").find("INPUT").checkboxradio("refresh");
 
     for(let i=0; i < data['ok']['user_groups'].length; i++) {
-      let group=data['ok']['user_groups'][i];
-      group['_no_user_info_btn'] = true;
-      let row=groups_list_row(group);
-      row.appendTo( groups_list );
+      data['ok']['user_groups'][i]['_no_user_info_btn'] = true;
+      if(has_right(R_SUPER)) {
+        data['ok']['user_groups'][i]['_minus'] = true;
+      };
     };
+
+    for(let i=0; i < data['ok']['user_groups'].length; i++) {
+      let group=data['ok']['user_groups'][i];
+      let row=groups_list_row(group);
+      row.appendTo( groups_table );
+    };
+    
+    groups_table.data("redo_data", data['ok']['user_groups']);
   });
 
   dialog.dialog(d);
@@ -1069,6 +1114,8 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       } else {
         group['_sel'] = "multi";
       };
+
+      group['_no_user_info_btn'] = (opt != undefined && opt['allow_user_info_btn'] === false);
 
       let row=groups_list_row(group, donefunc);
       row.appendTo( tbody );
