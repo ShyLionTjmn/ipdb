@@ -352,7 +352,7 @@ function user_state_elm(user) {
   return $(LABEL).addClass("ui-icon").addClass(state_icon).css({"color": state_color}).title(state_text).data("text", state_text);
 };
 
-function user_edit(user_id, donefunc) {
+function user_edit(user_id, opt, donefunc) {
   if( $("#user_edit").length != 0) { error_at(); return; };
   if(user_id == undefined) { error_at(); return; };;
 
@@ -389,7 +389,7 @@ function user_edit(user_id, donefunc) {
 
   let table=$(TABLE)
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("Имя:")
      )
      .append( $(TD)
@@ -398,7 +398,7 @@ function user_edit(user_id, donefunc) {
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("Логин:")
      )
      .append( $(TD)
@@ -407,7 +407,7 @@ function user_edit(user_id, donefunc) {
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("Служба авторизации:")
      )
      .append( $(TD)
@@ -415,48 +415,48 @@ function user_edit(user_id, donefunc) {
          .addClass("ui-icon")
          .css({"marin-left": "0.3em", "margin-right": "0.3em"})
        )
-       .append( $(LABEL).addClass("user_name")
+       .append( $(LABEL).addClass("ap_name")
        )
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("Крайний вход:")
      )
      .append( $(TD)
-       .append( $(LABEL).addClass("user_name")
+       .append( $(LABEL).addClass("user_last_login")
        )
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("E-mail:")
      )
      .append( $(TD)
-       .append( $(LABEL).addClass("user_name")
+       .append( $(LABEL).addClass("user_email")
        )
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("Телефон:")
      )
      .append( $(TD)
-       .append( $(LABEL).addClass("user_name")
+       .append( $(LABEL).addClass("user_phone")
        )
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right"})
+     .append( $(TD).css({"text-align": "right", "padding-right": "1em"})
        .text("OpenId sub:")
      )
      .append( $(TD)
-       .append( $(LABEL).addClass("user_name")
+       .append( $(LABEL).addClass("user_sub")
        )
      )
    )
    .append( $(TR)
-     .append( $(TD).css({"text-align": "right", "vertical-align": "top"})
+     .append( $(TD).css({"text-align": "right", "vertical-align": "top", "padding-right": "1em"})
        .text("Состояние:")
      )
      .append( $(TD).addClass("states_list").css({"font-size": "small", "vertical-align": "top"})
@@ -517,9 +517,66 @@ function user_edit(user_id, donefunc) {
 
   table.appendTo(dialog);
 
-  table.find("INPUT").checkboxradio();
-  //run_query({"action": "get_user", "user_id": user_id}, function(data) {
-  //});
+  dialog
+   .append( $(DIV)
+     .append( $(LABEL).text("Группы пользователя: ")
+     )
+     .append( !(opt != undefined && opt['allow_groups_change'])?$(LABEL):$(LABEL)
+       .addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .css({"color": color_table_buttons})
+       .title("Добавить в группу")
+       .click(function() {
+       })
+     )
+   )
+  ;
+
+  dialog
+   .append( $(DIV).addClass("groups_list")
+   )
+  ;
+
+  table.find("INPUT").checkboxradio({"disabled": !has_right(R_SUPER)});
+
+  run_query({"action": "get_user", "user_id": user_id}, function(data) {
+    table.find(".user_name").text(data['ok']['user_name']);
+    table.find(".user_username").text(data['ok']['user_username']);
+    table.find(".ap_name").text(data['ok']['ap_name']);
+    if(Number(data['ok']['ap_off']) != 0) {
+      table.find(".ap_state").addClass("ui-icon-alert")
+       .title("Служба авторизации отключена")
+       .css({"color": "red"})
+      ;
+    } else {
+      table.find(".ap_state").addClass("ui-icon-check")
+       .title("Служба авторизации включена")
+       .css({"color": "green"})
+      ;
+    };
+    table.find(".user_email").text(data['ok']['user_email']);
+    table.find(".user_phone").text(data['ok']['user_phone']);
+    table.find(".user_sub").text(data['ok']['user_sub']);
+    table.find(".user_last_login").text(data['ok']['user_last_login']);
+
+    switch(Number(data['ok']['user_state'])) {
+    case 1:
+      table.find(".states_list").find("#state_on").prop("checked", true);
+      break;
+    case 0:
+      table.find(".states_list").find("#state_off").prop("checked", true);
+      break;
+    case -1:
+      table.find(".states_list").find("#state_added").prop("checked", true);
+      break;
+    case -2:
+      table.find(".states_list").find("#state_del").prop("checked", true);
+      break;
+    default:
+      error_at();
+    };
+
+    table.find(".states_list").find("INPUT").checkboxradio("refresh");
+  });
 
   dialog.dialog(d);
 };
@@ -580,7 +637,7 @@ function get_users_list_row(user) {
          let row=$(this).closest(".user_list_row");
          let _cont=row.parent();
          let _data=row.data("data");
-         user_edit(_data['user_id'], function(ret_data) {
+         user_edit(_data['user_id'], {}, function(ret_data) {
            ret_data['_show_minus'] = _data['_show_minus'];
            ret_data['_allow_groups_change'] = _data['_allow_groups_change'];
            row.replaceWith( get_users_list_row(ret_data) );
@@ -2637,7 +2694,7 @@ $( document ).ready(function() {
          .css({"margin-right": "0.5em"})
          .css(s_blocks_color)
          .click(function() {
-           user_edit(ud['user']['user_id']);
+           user_edit(ud['user']['user_id'], {'allow_groups_change': true});
            clear_calc();
            let calc_cont=$("#calc_text");
            calc_cont

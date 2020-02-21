@@ -36,6 +36,8 @@ const NR_EDIT_NET	= 1 << 8;
 const RR_TAKE_NET	= 1 << 9;
 const RR_DENY_TAKE_IP	= 1 << 10; //also deny editing
 
+const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
+
 function len2mask($m) {
   return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
 };
@@ -631,13 +633,33 @@ if($q['action'] == 'v4get_net') {
   if(!has_right(R_VIEWANY)) {
     foreach($ret['group_users'] as $key => $value) {
       if($value['user_id'] != $_SESSION['user']['user_id']) {
-        $ret['group_users'][$key]['user_name'] = "hidden";
-        $ret['group_users'][$key]['user_username'] = "hidden";
-        $ret['group_users'][$key]['user_phone'] = "hidden";
-        $ret['group_users'][$key]['user_email'] = "hidden";
-        $ret['group_users'][$key]['user_sub'] = "hidden";
-        $ret['group_users'][$key]['user_last_login'] = "hidden";
+        foreach(user_hide as $field) {
+          $ret['group_users'][$key][$field] = "hidden";
+        };
       };
+    };
+  };
+
+  ok_exit($ret);
+} else if($q['action'] == 'get_user') {
+  require_p('user_id');
+
+  $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']), TRUE, "Пользователь не существует");
+  if(!has_right(R_VIEWANY)) {
+    foreach(user_hide as $field) {
+      $ret[$field] = "hidden";
+    };
+  };
+
+  $query = "SELECT groups.* FROM groups INNER JOIN ugs ON ug_fk_group_id=group_id";
+  $query .= " WHERE ug_fk_user_id=".mq($q['user_id']);
+  $query .= " ORDER BY group_name";
+
+  $ret['user_groups']=return_query($query);
+
+  if(!has_right(R_VIEWANY)) {
+    foreach($ret['user_groups'] as $key => $value) {
+      $ret['user_groups'][$key]['group_name'] = "hidden";
     };
   };
 
