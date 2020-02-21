@@ -522,7 +522,7 @@ function user_edit(user_id, opt, donefunc) {
    .append( $(DIV)
      .append( $(LABEL).text("Группы пользователя: ")
      )
-     .append( !(opt != undefined && opt['allow_groups_change'])?$(LABEL):$(LABEL)
+     .append( (opt == undefined || !opt['allow_groups_change'] || !has_right(R_SUPER)) ? $(LABEL) : $(LABEL)
        .addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
        .css({"color": "green"})
        .title("Добавить в группу")
@@ -547,7 +547,7 @@ function user_edit(user_id, opt, donefunc) {
          });
        })
      )
-     .append( !(opt != undefined && opt['allow_groups_change'])?$(LABEL):$(LABEL)
+     .append( (opt == undefined || !opt['allow_groups_change'] || !has_right(R_SUPER)) ? $(LABEL) : $(LABEL)
        .addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button")
        .css({"color": color_table_buttons, "margin-left": "0.5em" })
        .title("Восстановить начальный список")
@@ -709,6 +709,98 @@ function get_users_list_row(user) {
   return ret;
 };
 
+function users_list(exclude_list, opt, donefunc) {
+  if(!has_right(R_VIEWANY)) { error_at(); return; };
+
+  if( $("#users_list").length != 0) { error_at(); return; };
+
+  let dialog=$(DIV).id("users_list")
+   .data("opt", opt)
+   .addClass("dialog_start")
+   .title("Пользователи")
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1000,
+    minWidth:600,
+    minHeight:500,
+    //width: "auto",
+    buttons: [],
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    },
+    open: function() {
+      $(this).dialog("widget").find("BUTTON.confirm_btn").prop("disabled", true).css({"color": "gray"});
+    }
+  };
+
+  if(donefunc != undefined) {
+    d['buttons'].push({ "text": "Подтвердить", "class": "confirm_btn", "click": function() {
+      let ret=Array();
+
+      $(this).find(".users_list").find(".user_list_row").each(function() {
+         if($(this).find("INPUT.select_checkbox").is(":checked")) {
+           ret.push( $(this).data("data") );
+         };
+      });
+
+      if(ret.length == 0) return;
+
+      $(this).dialog( "close" ); 
+      donefunc(ret);
+    }});
+  };
+
+  d['buttons'].push({ "text": "Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+  let table=$(DIV).css({"display": "table"}).addClass("users_list");
+
+  if(donefunc != undefined) {
+    table
+     .on("sel_change", function() {
+       let sel_count=0;
+       $(this).find(".user_list_row").each(function() {
+         if($(this).find("INPUT.select_checkbox").is(":checked")) sel_count++;
+       });
+       $(this).closest(".dialog_start").dialog("widget").find("BUTTON.confirm_btn").prop("disabled", sel_count == 0).css({"color": sel_count == 0?"gray":"black"});
+     })
+    ;
+  };
+
+  table.appendTo(dialog);
+
+  dialog.dialog(d);
+
+  run_query({"action": "get_users"}, function(data) {
+
+    data['ok'].sort(function(a, b) {
+      if(a['user_state'] != b['user_state']) {
+        return Number(b['user_state']) - Number(a['user_state']);
+      } else {
+        return String(a['user_name']).localeCompare(String(b['user_name']));
+      };
+    });
+
+    for(let i=0; i < data['ok'].length; i++) {
+      let user=data['ok'][i];
+      if(in_array(exclude_list, user['user_id'])) continue;
+
+      user['_sel'] = "multi";
+
+      user['_no_user_info_btn'] = (opt != undefined && opt['allow_user_info_btn'] === false);
+      user['_allow_edit'] = (opt != undefined && opt['allow_edit']);
+
+      let row=users_list_row(user, donefunc);
+      row.appendTo( tbody );
+    };
+  });
+};
+
 function group_edit(group_id, opt, donefunc) {
   if(group_id == undefined && !has_right(R_SUPER)) { error_at(); return; };
 
@@ -832,11 +924,49 @@ function group_edit(group_id, opt, donefunc) {
          .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
          .title("Вернуть перечень пользователей к первоначальному виду")
          .click(function() {
+           let _cont=$(this).closest(".dialog_start").find(".users_list");
+           let _initial_list=_cont.data("redo_data");
+           if(_initial_list == undefined) { error_at(); return; };
+
+           _cont.empty();
+
+           for(let i=0; i < _initial_list.length; i++) {
+             _cont.append( get_users_list_row( _initial_list[i] ) );
+           };
+
+           _cont.trigger("list_change");
+         })
+       )
+       .append( $(BR) )
+       .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-eye").addClass("ui-button")
+         .addClass("show_deleted")
+         .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
+         .title("Показать скрытых пользователей")
+         .click(function() {
+           let _cont=$(this).closest(".dialog_start").find(".users_list");
+           if($(this).hasClass("on")) {
+             $(this).removeClass("on").css({"color": color_table_buttons});
+           } else {
+             $(this).addClass("on").css({"color": "coral"});
+           };
+           _cont.trigger("list_change");
          })
        )
      )
      .append( $(TD).css({"vertical-align": "top"})
-       .append( $(DIV).addClass("users_list") )
+       .append( $(DIV).addClass("users_list")
+         .on("list_change", function() {
+           let to_hide=$(this).find(".hide");
+           let eye=$(this).closest(".dialog_start").find(".show_deleted");
+           if(to_hide.length == 0) {
+             eye.hide();
+           } else {
+             eye.show();
+           };
+           let show_deleted=eye.hasClass("on");
+           to_hide.toggle(show_deleted);
+         })
+       )
      )
    )
   ;
@@ -864,21 +994,26 @@ function group_edit(group_id, opt, donefunc) {
       };
 
       let users_div=table.find(".users_list");
-      let hidden_count=0;
+
+      for(let i=0; i < data['ok']['group_users'].length; i++) {
+        data['ok']['group_users'][i]['_allow_groups_change'] = false;
+        if(has_right(R_SUPER) && allow_group_edit) {
+          data['ok']['group_users'][i]['_show_minus'] = true;
+        };
+
+        data['ok']['group_users'][i]['_show_info_btn'] = (opt == undefined || opt['allow_user_info_btn']);
+      };
 
       for(let i=0; i < data['ok']['group_users'].length; i++) {
         let user=data['ok']['group_users'][i];
-        if(Number(user['user_state']) <  -1) hidden_count++;
-
-        user['_allow_groups_change'] = false;
-        if(has_right(R_SUPER) && allow_group_edit) {
-          user['_show_minus'] = true;
-        };
-
-        user['_show_info_btn'] = (opt == undefined || opt['allow_user_info_btn']);
-
-        users_div.append( get_users_list_row(user) )
+        let row=get_users_list_row(user);
+        users_div.append( row );
       };
+
+      users_div
+       .data("redo_data", data['ok']['group_users'])
+       .trigger("list_change")
+      ;
     });
   };
 
@@ -1109,13 +1244,14 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       let group=data['ok'][i];
       if(in_array(exclude_list, group['group_id'])) continue;
 
-      if(opt == undefined || opt['return'] == "one") {
+      if(opt != undefined && opt['return'] == "one") {
         group['_sel'] = "one";
-      } else {
+      } else if(opt != undefined && opt['return'] != undefined) {
         group['_sel'] = "multi";
       };
 
       group['_no_user_info_btn'] = (opt != undefined && opt['allow_user_info_btn'] === false);
+      group['_allow_edit'] = (opt != undefined && opt['allow_edit']);
 
       let row=groups_list_row(group, donefunc);
       row.appendTo( tbody );
@@ -1189,7 +1325,7 @@ function group_net_right_div(gr, mask, opt) {
            let gr_id=$(this).data("id");
            if(gr_id != undefined && gr_id != set_group && String(gr_id).match(/^\d+$/)) exclude_list.push(gr_id);
          });
-         groups_list(set_group, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one"}, function(group) {
+         groups_list(set_group, exclude_list, {"allow_add": true, "allow_edit": true, "return": "one", 'allow_user_info_btn': false}, function(group) {
            row.find(".group").data("id", group['group_id']).text(group['group_name']).trigger("set");
          });
        })
@@ -2833,7 +2969,7 @@ $( document ).ready(function() {
          .append( $(SPAN).addClass("ui-button").text("Группы")
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
-             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER) });
+             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "allow_user_info_btn": false });
            })
          )
         ;

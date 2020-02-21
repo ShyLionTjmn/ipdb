@@ -641,6 +641,10 @@ if($q['action'] == 'v4get_net') {
   };
 
   ok_exit($ret);
+} else if($q['action'] == 'get_users') {
+  require_right(R_VIEWANY);
+  $ret=return_query("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id");
+  ok_exit($ret);
 } else if($q['action'] == 'get_user') {
   require_p('user_id');
 
