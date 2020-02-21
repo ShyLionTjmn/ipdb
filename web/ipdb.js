@@ -4,6 +4,7 @@ var ud;
 var $R={};
 var page_root;
 
+var _debug_opts=true;
 
 const R_SUPER='r_super';
 const R_VIEWANY='r_viewany';
@@ -365,6 +366,10 @@ function user_edit(user_id, opt, donefunc) {
    .appendTo("BODY")
   ;
 
+  if(_debug_opts) {
+    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+  };
+
   let d={
     modal:true,
     maxHeight:1000,
@@ -616,7 +621,7 @@ function user_edit(user_id, opt, donefunc) {
 
     for(let i=0; i < data['ok']['user_groups'].length; i++) {
       data['ok']['user_groups'][i]['_no_user_info_btn'] = true;
-      if(has_right(R_SUPER)) {
+      if(has_right(R_SUPER) && opt != undefined && opt['allow_groups_change']) {
         data['ok']['user_groups'][i]['_minus'] = true;
       };
     };
@@ -639,6 +644,16 @@ function get_users_list_row(user) {
    .css({"display": "table-row", "white-space": "pre"})
   ;
 
+  if(_debug_opts) {
+    ret
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"})
+         .title(jstr(user))
+       )
+     )
+   ;
+  };
+
   if(user['_show_minus']) {
     ret
      .append( $(DIV).css({"display": "table-cell"})
@@ -653,13 +668,24 @@ function get_users_list_row(user) {
        )
      )
     ;
+  } else if(user['_sel'] == "multi") {
+    ret
+     .append( $(DIV).css({"display": "table-cell"})
+       .append( $(INPUT).addClass("select_checkbox")
+         .prop({"type": "checkbox"})
+         .on("change", function() {
+           $(this).closest(".user_list_row").parent().trigger("sel_change");
+         })
+       )
+     )
+    ;
   };
 
   let state_elm=user_state_elm(user);
 
   ret
    .append( $(DIV).css({"display": "table-cell"})
-     .append( state_elm )
+     .append( state_elm.css({"margin-left": "0.3em"}) )
    )
   ;
 
@@ -675,7 +701,7 @@ function get_users_list_row(user) {
    .append( $(DIV).css({"display": "table-cell"})
      .append( $(SPAN).text(user['user_name'])
        .title(text_title)
-       .css({"color": text_color})
+       .css({"color": text_color, "margin-left": "0.3em"})
      )
    )
   ;
@@ -684,13 +710,13 @@ function get_users_list_row(user) {
     ret
      .append( $(DIV).css({"display": "table-cell"})
        .append( $(LABEL).addClass("ui-icon").addClass('ui-icon-bullets').addClass("ui-button")
-         .css({"color": color_table_buttons})
+         .css({"color": color_table_buttons, "margin-left": "0.3em"})
          .title("Свойства пользователя")
          .click(function() {
            let row=$(this).closest(".user_list_row");
            let _cont=row.parent();
            let _data=row.data("data");
-           user_edit(_data['user_id'], {}, function(ret_data) {
+           user_edit(_data['user_id'], { "allow_groups_change": _data['_allow_groups_change'] }, function(ret_data) {
              ret_data['_show_minus'] = _data['_show_minus'];
              ret_data['_allow_groups_change'] = _data['_allow_groups_change'];
              row.replaceWith( get_users_list_row(ret_data) );
@@ -721,6 +747,10 @@ function users_list(exclude_list, opt, donefunc) {
    .css({"white-space": "pre", "font-size": "larger"})
    .appendTo("BODY")
   ;
+
+  if(_debug_opts) {
+    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+  };
 
   let d={
     modal:true,
@@ -790,13 +820,16 @@ function users_list(exclude_list, opt, donefunc) {
       let user=data['ok'][i];
       if(in_array(exclude_list, user['user_id'])) continue;
 
-      user['_sel'] = "multi";
+      if(opt != undefined && opt['show_sel'] != undefined) {
+        user['_sel'] = opt['show_sel'];
+      };
 
-      user['_no_user_info_btn'] = (opt != undefined && opt['allow_user_info_btn'] === false);
-      user['_allow_edit'] = (opt != undefined && opt['allow_edit']);
+      user['_show_info_btn'] = (opt != undefined && opt['allow_user_info_btn']);
+      user['_allow_groups_change'] = (opt != undefined && opt['allow_user_group_change']);
+      //user['_allow_edit'] = (opt != undefined && opt['allow_edit']);
 
-      let row=users_list_row(user, donefunc);
-      row.appendTo( tbody );
+      let row=get_users_list_row(user);
+      row.appendTo( table );
     };
   });
 };
@@ -818,6 +851,10 @@ function group_edit(group_id, opt, donefunc) {
    .css({"white-space": "pre", "font-size": "larger"})
    .appendTo("BODY")
   ;
+
+  if(_debug_opts) {
+    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+  };
 
   let d={
     modal:true,
@@ -917,6 +954,22 @@ function group_edit(group_id, opt, donefunc) {
          .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
          .title("Добавить пользователя в группу")
          .click(function() {
+           let _opt=$(this).closest(".dialog_start").data("opt");
+           let exclude_list=Array();
+           let _cont=$(this).closest(".dialog_start").find(".users_list");
+           _cont.find(".user_list_row").each(function() {
+             let _data=$(this).data("data");
+             exclude_list.push(_data['user_id']);
+           });
+           users_list(exclude_list, {'show_sel': "multi", 'allow_user_info_btn': true, 'allow_user_group_change': false }, function(ret_data) {
+             for(let i=0; i < ret_data.length; i++) {
+               ret_data[i]['_allow_groups_change'] = false;
+               ret_data[i]['_show_minus'] = true;
+               ret_data[i]['_show_info_btn'] = (_opt == undefined || _opt['allow_user_info_btn']);
+               _cont.append( get_users_list_row( ret_data[i] ) );
+             };
+             _cont.trigger("list_change");
+           });
          })
        )
        .append( $(BR) )
@@ -945,9 +998,9 @@ function group_edit(group_id, opt, donefunc) {
          .click(function() {
            let _cont=$(this).closest(".dialog_start").find(".users_list");
            if($(this).hasClass("on")) {
-             $(this).removeClass("on").css({"color": color_table_buttons});
+             $(this).removeClass("on").css({"color": color_table_buttons}).title("Показать скрытых пользователей");
            } else {
-             $(this).addClass("on").css({"color": "coral"});
+             $(this).addClass("on").css({"color": "coral"}).title("Не показывать скрытых пользователей");
            };
            _cont.trigger("list_change");
          })
@@ -1030,6 +1083,14 @@ function groups_list_row(group, donefunc) {
    .css({"padding-right": "0.5em"})
    .appendTo( ret )
   ;
+
+  if(_debug_opts) {
+    sel_td
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small", "margin-right": "0.1em"})
+       .title(jstr(group))
+     )
+   ;
+  };
 
   if(group['_sel'] == 'one') {
     if(donefunc != undefined) {
@@ -1149,6 +1210,10 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
    .appendTo("BODY")
   ;
 
+  if(_debug_opts) {
+    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+  };
+
   let d={
     modal:true,
     maxHeight:1000,
@@ -1264,6 +1329,10 @@ function group_net_right_div(gr, mask, opt) {
    .css({"white-space": "pre", "margin-bottom": "0.2em"})
    .addClass("group_rights_div")
   ;
+
+  if(_debug_opts) {
+    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+  };
 
   if(gr == undefined) {
     ret.css({"background-color": "yellow"});
@@ -2974,12 +3043,17 @@ $( document ).ready(function() {
          )
         ;
 
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("Пользователи")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             users_list([], { "allow_user_info_btn": true, "allow_user_group_change": has_right(R_SUPER) });
+           })
+         )
+        ;
 
         process_R();
-
       };
-
     };
   });
-
 });
