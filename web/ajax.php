@@ -124,6 +124,15 @@ function require_p($param_name, $param_check=null) {
   if(!isset($q[$param_name])) {
     error_exit("Required param '$param_name' is missing");
   };
+  optional_p($param_name, $param_check);
+};
+
+function optional_p($param_name, $param_check=null) {
+  global $q;
+  if(!isset($q[$param_name])) {
+    return;
+  };
+
   if(isset($param_check)) {
     if(is_array($param_check)) {
       switch($param_check['type']) {
@@ -146,6 +155,28 @@ function require_p($param_name, $param_check=null) {
         if(!is_array($q[$param_name])) { error_exit("Required param '$param_name' has bad type"); };
         foreach($q[$param_name] as $key => $val) {
           if(!preg_match('/^\d+$/', $key)) { error_exit("Required param '$param_name' has bad key '$key'"); };
+          if(!is_scalar($val)) { error_exit("Required param '$param_name' has bad key value type"); };
+          if(!preg_match('/^\d+$/', $val)) { error_exit("Required param '$param_name' has bad key value '$val'"); };
+        };
+        break;
+      case "num_any":
+        if(!is_array($q[$param_name])) { error_exit("Required param '$param_name' has bad type"); };
+        if( $q[$param_name] === Array() ) { return; };
+        if( array_keys($q[$param_name]) !== range(0, count($q[$param_name]) - 1) ) {
+          error_exit("Required param '$param_name' is not sequential array");
+        };
+        foreach($q[$param_name] as $val) {
+          if(!is_scalar($val)) { error_exit("Required param '$param_name' has bad key value type"); };
+          if(!preg_match('/^\d+$/', $val)) { error_exit("Required param '$param_name' has bad key value '$val'"); };
+        };
+        break;
+      case "num_many":
+        if(!is_array($q[$param_name])) { error_exit("Required param '$param_name' has bad type"); };
+        if( $q[$param_name] === Array() ) { error_exit("Required param '$param_name' is empty array"); };
+        if( array_keys($q[$param_name]) !== range(0, count($q[$param_name]) - 1) ) {
+          error_exit("Required param '$param_name' is not sequential array");
+        };
+        foreach($q[$param_name] as $val) {
           if(!is_scalar($val)) { error_exit("Required param '$param_name' has bad key value type"); };
           if(!preg_match('/^\d+$/', $val)) { error_exit("Required param '$param_name' has bad key value '$val'"); };
         };
@@ -649,7 +680,7 @@ if($q['action'] == 'v4get_net') {
   require_p('user_id');
 
   $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']), TRUE, "Пользователь не существует");
-  if(!has_right(R_VIEWANY)) {
+  if(!has_right(R_VIEWANY) && $_SESSION['user']['user_id'] != $q['user_id']) {
     foreach(user_hide as $field) {
       $ret[$field] = "hidden";
     };
@@ -668,6 +699,12 @@ if($q['action'] == 'v4get_net') {
   };
 
   ok_exit($ret);
+} else if($q['action'] == 'save_user') {
+  require_right(R_SUPER);
+  require_p('user_id');
+  optional_p('user_state', "/^(?:-[21]|[01])$/");
+  require_p('user_groups', Array("type" => "num_many"));
+
 } else {
   error_exit("Unknown action");
 };

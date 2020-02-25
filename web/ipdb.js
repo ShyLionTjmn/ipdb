@@ -360,6 +360,7 @@ function user_edit(user_id, opt, donefunc) {
 
   let dialog=$(DIV).id("user_edit"+user_id)
    .data("opt", opt)
+   .data("id", user_id)
    .addClass("dialog_start")
    .title(has_right(R_SUPER)?"Редактирование пользователя":"Просмотр пользователя")
    .css({"white-space": "pre", "font-size": "larger"})
@@ -374,7 +375,7 @@ function user_edit(user_id, opt, donefunc) {
     modal:true,
     maxHeight:1000,
     maxWidth:1000,
-    minWidth:600,
+    minWidth:800,
     minHeight:500,
     //width: "auto",
     buttons: [],
@@ -386,9 +387,39 @@ function user_edit(user_id, opt, donefunc) {
 
   if(has_right(R_SUPER)) {
     d['buttons'].push({ "text": "Сохранить", "class": "confirm_btn", "click": function() {
-      $(this).dialog( "close" ); 
-      let ret;
-      if(donefunc != undefined) donefunc(ret);
+      let _id=$(this).data("id");
+      if(_id == undefined) { error_at(); return; };
+
+      let query={"action": "save_user", "user_id": _id};
+
+      let new_state=$(this).find("input.state_radio:checked").val();
+      if(new_state == undefined || !String(new_state).match(/^(?:-[12]|[01])$/)) { error_at(); return; };
+
+      if(_id != ud['user']['user_id']) {
+        query['user_state'] = new_state;
+      };
+
+      let groups=Array();
+
+      $(this).find(".groups_list").find(".groups_list_row").each(function() {
+        let group=$(this).data("data");
+        if(group == undefined || group['group_id'] == undefined) { error_at(); return false; };
+        groups.push( group['group_id'] );
+      });
+
+      if(groups.length == 0) {
+        $(this).find(".ui-icon-plusthick").animateHighlight();
+        return;
+      };
+
+      query['user_groups']=groups;
+
+      let _dialog=$(this);
+
+      run_query(query, function(ret_data) {
+        _dialog.dialog("close");
+        if(donefunc != undefined) donefunc(ret_data['ok']);
+      });
     }});
   };
 
@@ -478,6 +509,8 @@ function user_edit(user_id, opt, donefunc) {
                .title("Пользователь включен.")
              )
              .append( $(INPUT).prop({"name": "state", "id": "state_on", "type": "radio"})
+               .addClass("state_radio")
+               .val(1)
              )
            )
            .append( $(TD)
@@ -489,6 +522,8 @@ function user_edit(user_id, opt, donefunc) {
                .title("Пользователь отключен.")
              )
              .append( $(INPUT).prop({"name": "state", "id": "state_off", "type": "radio"})
+               .addClass("state_radio")
+               .val(0)
              )
            )
          )
@@ -502,6 +537,8 @@ function user_edit(user_id, opt, donefunc) {
                .title("Пользователь добавлен автоматически и требует активации.")
              )
              .append( $(INPUT).prop({"name": "state", "id": "state_added", "type": "radio"})
+               .addClass("state_radio")
+               .val(-1)
              )
            )
            .append( $(TD)
@@ -513,6 +550,8 @@ function user_edit(user_id, opt, donefunc) {
                .title("Пользователь отключен и скрыт.")
              )
              .append( $(INPUT).prop({"name": "state", "id": "state_del", "type": "radio"})
+               .addClass("state_radio")
+               .val(-2)
              )
            )
          )
