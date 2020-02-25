@@ -1395,7 +1395,7 @@ function group_net_right_div(gr, mask, opt) {
   ;
 
   if(_debug_opts) {
-    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+    ret.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"}).title(jstr(gr)+"\n"+jstr(mask)+"\n"+jstr(opt)) );
   };
 
   if(gr == undefined) {

@@ -399,7 +399,8 @@ if(!isset($_SESSION['user'])) {
   };
 };
 
-$this_user_id=$_SESSION['user']['user_id'];
+$this_user_id = $_SESSION['user']['user_id'];
+$set_fk_user_id = "fk_user_id=".mq($this_user_id);
 
 if($q['action'] == 'v4get_net') {
   require_p('net', [ "type" => "v4long" ]);
@@ -574,6 +575,13 @@ if($q['action'] == 'v4get_net') {
   require_p('range_visible', "/^[01]$/");
   require_p('groups_rights',  Array("type" => "num2num"));
 
+  trans_start();
+
+  $query="SELECT v4rs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gr4r_fk_group_id, ':', gr4r_rmask)) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id ORDER BY gr4r_fk_group_id) as groups_rights";
+  $query .= " FROM v4rs WHERE v4r_id=".mq($q['range_id']);
+  $prev_row=return_one($query, TRUE, "Диапазон не существует");
+
   $query="UPDATE v4rs SET";
   $query .= " v4r_start=".mq($q['range_start']);
   $query .= ",v4r_stop=".mq($q['range_stop']);
@@ -583,9 +591,9 @@ if($q['action'] == 'v4get_net') {
   $query .= ",v4r_style=".mq($q['range_style']);
   $query .= ",v4r_icon=".mq($q['range_icon']);
   $query .= ",v4r_icon_style=".mq($q['range_icon_style']);
+  $query .= ",ts=CURRENT_TIMESTAMP()";
+  $query .= ",$set_fk_user_id";
   $query .= " WHERE v4r_id=".mq($q['range_id']);
-
-  trans_start();
 
   run_query($query);
 
@@ -597,8 +605,16 @@ if($q['action'] == 'v4get_net') {
     $query .= " gr4r_fk_v4r_id=".mq($q['range_id']);
     $query .= ",gr4r_fk_group_id=".mq($gr_id);
     $query .= ",gr4r_rmask=".mq($rmask);
+    $query .= ",$set_fk_user_id";
     run_query($query);
   };
+
+  $query="SELECT v4rs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gr4r_fk_group_id, ':', gr4r_rmask)) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id ORDER BY gr4r_fk_group_id) as groups_rights";
+  $query .= " FROM v4rs WHERE v4r_id=".mq($q['range_id']);
+  $new_row=return_one($query, TRUE, "Диапазон не существует");
+
+  audit_log("v4rs,gr4rs", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
 
@@ -624,6 +640,7 @@ if($q['action'] == 'v4get_net') {
   $query .= ",v4r_style=".mq($q['range_style']);
   $query .= ",v4r_icon=".mq($q['range_icon']);
   $query .= ",v4r_icon_style=".mq($q['range_icon_style']);
+  $query .= ",$set_fk_user_id";
 
   trans_start();
 
@@ -637,19 +654,35 @@ if($q['action'] == 'v4get_net') {
     $query .= " gr4r_fk_v4r_id=".mq($id);
     $query .= ",gr4r_fk_group_id=".mq($gr_id);
     $query .= ",gr4r_rmask=".mq($rmask);
+    $query .= ",$set_fk_user_id";
     run_query($query);
   };
 
+  $query="SELECT v4rs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gr4r_fk_group_id, ':', gr4r_rmask)) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id ORDER BY gr4r_fk_group_id) as groups_rights";
+  $query .= " FROM v4rs WHERE v4r_id=".mq($id);
+  $new_row=return_one($query, TRUE, "Диапазон не существует");
+
+  audit_log("v4rs,gr4rs", $q['action'], [], $new_row);
   ok_exit("done");
 
 } else if($q['action'] == 'v4_delete_global_range') {
   require_right(R_SUPER);
   require_p('range_id', "/^\d+$/");
 
+  trans_start();
+
+  $query="SELECT v4rs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gr4r_fk_group_id, ':', gr4r_rmask)) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id ORDER BY gr4r_fk_group_id) as groups_rights";
+  $query .= " FROM v4rs WHERE v4r_id=".mq($q['range_id']);
+  $prev_row=return_one($query, TRUE, "Диапазон не существует");
+
   $query = "DELETE FROM v4rs";
   $query .= " WHERE v4r_id=".mq($q['range_id']);
 
   run_query($query);
+
+  audit_log("v4rs,gr4rs", $q['action'], $prev_row, []);
 
   ok_exit("done");
 } else if($q['action'] == 'get_groups') {
@@ -732,7 +765,7 @@ if($q['action'] == 'v4get_net') {
 
   $query="UPDATE users SET";
   $query .= " ts=CURRENT_TIMESTAMP()";
-  $query .= ",fk_user_id=".mq($this_user_id);
+  $query .= ",$set_fk_user_id";
 
   if(isset($q['user_state'])) {
     $query .= ",user_state=".mq($q['user_state']);
