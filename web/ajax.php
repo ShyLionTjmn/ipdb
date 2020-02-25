@@ -783,6 +783,11 @@ if($q['action'] == 'v4get_net') {
   $query .= " group_id IN(".join(",", $q['user_groups']).")";
   run_query($query);
 
+  $rstr=return_single("SELECT GROUP_CONCAT(group_rights) FROM groups INNER JOIN ugs ON ug_fk_group_id=group_id WHERE ug_fk_user_id=".mq($this_user_id), TRUE);
+  if(!has_right(R_SUPER, $rstr)) {
+    error_exit("Операция приведет к потере права суперпользователя\nтекущим администратором. Операция отменена");
+  };
+
   $query="SELECT users.*, aps.ap_off, aps.ap_name";
   $query .= ", (SELECT GROUP_CONCAT(ug_fk_group_id) FROM ugs WHERE ug_fk_user_id=user_id ORDER BY ug_fk_group_id) as user_groups";
   $query .= " FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']);
@@ -793,8 +798,114 @@ if($q['action'] == 'v4get_net') {
   $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']));
   
   ok_exit($ret);
+} else if($q['action'] == 'save_group') {
+  require_right(R_SUPER);
+  require_p('group_id', "/^\d+$/");
+  require_p('group_name', "/\S+/");
+  require_p('group_rights', "/^(?:[a-z0-9_]+(?:,[a-z0-9_]+)*)?$/");
+  require_p('group_users', Array("type" => "num_any"));
+
+  trans_start();
+
+  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
+  $prev_row=return_one($query, TRUE, "Группа не существует");
+
+  $query="UPDATE groups SET";
+  $query .= " ts=CURRENT_TIMESTAMP()";
+  $query .= ",$set_fk_user_id";
+  $query .= ",group_name=".mq($q['group_name']);
+  $query .= ",group_rights=".mq($q['group_rights']);
+  $query .= " WHERE group_id=".mq($q['group_id']);
+
+  run_query($query);
+
+  run_query("DELETE FROM ugs WHERE ug_fk_group_id=".mq($q['group_id']));
+
+  foreach($q['group_users'] as $user_id) {
+    $query = "INSERT INTO ugs SET";
+    $query .= " $set_fk_user_id";
+    $query .= ",ug_fk_group_id=".mq($q['group_id']);
+    $query .= ",ug_fk_user_id=".mq($user_id);
+    run_query($query);
+  };
+
+  #check if self R_SUPER right is lost
+  
+  $rstr=return_single("SELECT GROUP_CONCAT(group_rights) FROM groups INNER JOIN ugs ON ug_fk_group_id=group_id WHERE ug_fk_user_id=".mq($this_user_id), TRUE);
+  if(!has_right(R_SUPER, $rstr)) {
+    error_exit("Операция приведет к потере права суперпользователя\nтекущим администратором. Операция отменена");
+  };
+
+  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
+  $new_row=return_one($query, TRUE, "Группа не существует");
+
+  audit_log("groups,ugs", $q['action'], $prev_row, $new_row);
+
+  $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($q['group_id']);
+
+  ok_exit(return_one($query, TRUE, "Группа не существует"));
+} else if($q['action'] == 'add_group') {
+  require_right(R_SUPER);
+  require_p('group_name', "/\S+/");
+  require_p('group_rights', "/^(?:[a-z0-9_]+(?:,[a-z0-9_]+)*)?$/");
+  require_p('group_users', Array("type" => "num_any"));
+
+  trans_start();
+
+  $query="INSERT INTO groups SET";
+  $query .= " ts=CURRENT_TIMESTAMP()";
+  $query .= ",$set_fk_user_id";
+  $query .= ",group_name=".mq($q['group_name']);
+  $query .= ",group_rights=".mq($q['group_rights']);
+
+  run_query($query);
+
+  $id=mysqli_insert_id();
+  if($id == 0) { error_exit("Bad insert ID returned"); };
+
+
+  foreach($q['group_users'] as $user_id) {
+    $query = "INSERT INTO ugs SET";
+    $query .= " $set_fk_user_id";
+    $query .= ",ug_fk_group_id=".mq($id);
+    $query .= ",ug_fk_user_id=".mq($user_id);
+    run_query($query);
+  };
+
+  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($qid);
+  $new_row=return_one($query, TRUE, "Группа не существует");
+
+  audit_log("groups,ugs", $q['action'], [], $new_row);
+
+  $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($qid);
+
+  ok_exit(return_one($query, TRUE, "Группа не существует"));
+} else if($q['action'] == 'delete_group') {
+  require_right(R_SUPER);
+  require_p('group_id', "/^\d+$/");
+
+  trans_start();
+
+  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
+  $prev_row=return_one($query, TRUE, "Группа не существует");
+
+  $query="DELETE FROM groups";
+  $query .= " WHERE group_id=".mq($q['group_id']);
+
+  run_query($query);
+
+  #check if self R_SUPER right is lost
+  
+  $rstr=return_single("SELECT GROUP_CONCAT(group_rights) FROM groups INNER JOIN ugs ON ug_fk_group_id=group_id WHERE ug_fk_user_id=".mq($this_user_id), TRUE);
+  if(!has_right(R_SUPER, $rstr)) {
+    error_exit("Операция приведет к потере права суперпользователя\nтекущим администратором. Операция отменена");
+  };
+
+  audit_log("groups,ugs", $q['action'], $prev_row, []);
+
+  ok_exit("done");
 } else {
-  error_exit("Unknown action");
+  error_exit("Unknown action '".$q['action']."'");
 };
 
 ?>

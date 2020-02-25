@@ -701,7 +701,7 @@ function user_edit(user_id, opt, donefunc) {
   dialog.dialog(d);
 };
 
-function get_users_list_row(user) {
+function users_list_row(user) {
   let ret=$(DIV).addClass("user_list_row")
    .data("data", user)
    .css({"display": "table-row", "white-space": "pre"})
@@ -783,7 +783,7 @@ function get_users_list_row(user) {
              ret_data['_show_minus'] = _data['_show_minus'];
              ret_data['_allow_groups_change'] = _data['_allow_groups_change'];
              ret_data['_show_info_btn'] = _data['_show_info_btn'];
-             row.replaceWith( get_users_list_row(ret_data) );
+             row.replaceWith( users_list_row(ret_data) );
              _cont.trigger("list_change");
            });
          })
@@ -892,7 +892,7 @@ function users_list(exclude_list, opt, donefunc) {
       user['_allow_groups_change'] = (opt != undefined && opt['allow_user_group_change']);
       //user['_allow_edit'] = (opt != undefined && opt['allow_edit']);
 
-      let row=get_users_list_row(user);
+      let row=users_list_row(user);
       row.appendTo( table );
     };
   });
@@ -910,6 +910,7 @@ function group_edit(group_id, opt, donefunc) {
 
   let dialog=$(DIV).id(id)
    .data("opt", opt)
+   .data("id", group_id)
    .addClass("dialog_start")
    .title(group_id == undefined?"Создание группы":(has_right(R_SUPER) && allow_group_edit ?"Редактирование группы":"Просмотр группы"))
    .css({"white-space": "pre", "font-size": "larger"})
@@ -936,9 +937,47 @@ function group_edit(group_id, opt, donefunc) {
 
   if(group_id == undefined || (has_right(R_SUPER) && allow_group_edit)) {
     d['buttons'].push({ "text": (group_id == undefined)?"Создать":"Сохранить", "class": "confirm_btn", "click": function() {
-      $(this).dialog( "close" ); 
-      let ret;
-      if(donefunc != undefined) donefunc(ret);
+      let _dialog=$(this);
+
+      let group_name=$(this).find(".group_name").val().trim();
+      if(! group_name.match(/\S+/)) { $(this).find(".group_name").animateHighlight(); return; };
+
+      let query={"group_name": group_name};
+
+      let group_users=Array();
+
+      $(this).find(".users_list").find(".user_list_row").each(function() {
+        let user=$(this).data("data");
+        if(user == undefined || user['user_id'] == undefined) { error_at(); throw("Error"); };
+        group_users.push(user['user_id']);
+      });
+
+      query['group_users']=group_users;
+
+      let rights=Array();
+      let rights_table=$(this).find(".group_rights");
+
+      for(let i=0; i < group_rights.length; i++) {
+        let r_elm=rights_table.find(".right_"+group_rights[i]['right']);
+        if(r_elm.length != 1) { error_at(); return; };
+        if(r_elm.hasClass("on")) push_once(rights, r_elm.data("right"));
+      };
+
+      query['group_rights']=rights.join(',');
+
+      let _id=$(this).data("id");
+
+      if(_id == undefined) {
+        query['action'] = 'add_group';
+      } else {
+        query['action'] = 'save_group';
+        query['group_id'] = _id;
+      };
+
+      run_query(query, function(ret_data) {
+        _dialog.dialog( "close" ); 
+        if(donefunc != undefined) donefunc(ret_data['ok']);
+      });
     }});
   };
 
@@ -1030,7 +1069,7 @@ function group_edit(group_id, opt, donefunc) {
                ret_data[i]['_allow_groups_change'] = false;
                ret_data[i]['_show_minus'] = true;
                ret_data[i]['_show_info_btn'] = (_opt == undefined || _opt['allow_user_info_btn']);
-               _cont.append( get_users_list_row( ret_data[i] ) );
+               _cont.append( users_list_row( ret_data[i] ) );
              };
              _cont.trigger("list_change");
            });
@@ -1048,7 +1087,7 @@ function group_edit(group_id, opt, donefunc) {
            _cont.empty();
 
            for(let i=0; i < _initial_list.length; i++) {
-             _cont.append( get_users_list_row( _initial_list[i] ) );
+             _cont.append( users_list_row( _initial_list[i] ) );
            };
 
            _cont.trigger("list_change");
@@ -1123,7 +1162,7 @@ function group_edit(group_id, opt, donefunc) {
 
       for(let i=0; i < data['ok']['group_users'].length; i++) {
         let user=data['ok']['group_users'][i];
-        let row=get_users_list_row(user);
+        let row=users_list_row(user);
         users_div.append( row );
       };
 
@@ -1140,6 +1179,7 @@ function group_edit(group_id, opt, donefunc) {
 function groups_list_row(group, donefunc) {
   let ret=$(TR).addClass("groups_list_row")
    .data("data", group)
+   .data("donefunc", donefunc)
    .css({"background-color": group['_presel']?"paleturquoise":"white"})
    .css({"margin-top": "0.3em"})
   ;
@@ -1244,9 +1284,15 @@ function groups_list_row(group, donefunc) {
        .click(function() {
          let row=$(this).closest(".groups_list_row");
          let prev_data=row.data("data");
+         let _donefunc=row.data("donefunc");
          group_edit(prev_data['group_id'], { "allow_edit": prev_data['_allow_edit'], "allow_user_info_btn": !prev_data['_no_user_info_btn'] }, function(ret_data) {
            //copy '_xxx' keys from prev_data
-           alert(jstr(ret_data));
+           for(let key in prev_data) {
+             if(key.indexOf('_') === 0) {
+               ret_data[key] = prev_data[key];
+             };
+           };
+           row.replaceWith( groups_list_row(ret_data, _donefunc) );
          });
        })
      )
