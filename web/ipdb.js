@@ -658,7 +658,11 @@ function user_edit(user_id, opt, donefunc) {
     table.find(".user_email").text(data['ok']['user_email']);
     table.find(".user_phone").text(data['ok']['user_phone']);
     table.find(".user_sub").text(data['ok']['user_sub']);
-    table.find(".user_last_login").text(data['ok']['user_last_login']);
+    if(data['ok']['user_last_login'] != 'hidden') {
+      table.find(".user_last_login").text(from_unix_time(data['ok']['user_last_login']));
+    } else {
+      table.find(".user_last_login").text('Скрыто').css({"color": "gray"});
+    };
 
     switch(Number(data['ok']['user_state'])) {
     case 1:
@@ -1283,6 +1287,7 @@ function groups_list_row(group, donefunc) {
        .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": color_table_buttons})
        .click(function() {
          let row=$(this).closest(".groups_list_row");
+         let table=row.closest("TABLE");
          let prev_data=row.data("data");
          let _donefunc=row.data("donefunc");
          group_edit(prev_data['group_id'], { "allow_edit": prev_data['_allow_edit'], "allow_user_info_btn": !prev_data['_no_user_info_btn'] }, function(ret_data) {
@@ -1293,11 +1298,36 @@ function groups_list_row(group, donefunc) {
              };
            };
            row.replaceWith( groups_list_row(ret_data, _donefunc) );
+           table.trigger("list_change");
          });
        })
      )
    )
   ;
+
+  if(has_right(R_SUPER) && group['_allow_delete']) {
+    ret
+     .append( $(TD)
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
+         .title("Удаление группы")
+         .css({"padding-left": "0.2em", "padding-right": "0.2em", "margin-left": "0.5em", "color": "coral"})
+         .click(function() {
+           let row=$(this).closest(".groups_list_row");
+           let table=row.closest("TABLE");
+           let prev_data=row.data("data");
+           show_confirm_checkbox("Подтвердите удаление группы "+prev_data['group_name']
+             +".\nВНИМАНИЕ! Группа и все связаные с нею права доступа\nбудут удалены сразу и без возможности восстановления!",
+           function() {
+             run_query({"action": "delete_group", "group_id": prev_data['group_id']}, function() {
+               row.remove();
+               table.trigger("list_change");
+             });
+           });
+         })
+       )
+     )
+    ;
+  };
 
   return ret;
 };
@@ -1314,6 +1344,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
 
   let dialog=$(DIV).id("groups_list")
    .data("opt", opt)
+   .data("donefunc", donefunc)
    .addClass("dialog_start")
    .title("Группы пользователей")
    .css({"white-space": "pre", "font-size": "larger"})
@@ -1382,8 +1413,28 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
        .append( $(TR)
          .append( $(TD)
            .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+             .title("Создать группу")
              .css({"color": "green"})
              .click(function() {
+               let _opt=$(this).closest(".dialog_start").data("opt");
+               let _donefunc=$(this).closest(".dialog_start").data("donefunc");
+               let _table=$(this).closest(".dialog_start").find("TABLE");
+               let _allow_edit=true;
+               let _allow_user_info_btn = (_opt == undefined || opt['allow_user_info_btn'] === true);
+               group_edit(undefined, { "allow_edit": _allow_edit, "allow_user_info_btn": _allow_user_info_btn}, function(ret_data) {
+                 if(_opt != undefined && _opt['return'] == "one") {
+                   ret_data['_sel'] = "one";
+                 } else if(_opt != undefined && _opt['return'] != undefined) {
+                   ret_data['_sel'] = "multi";
+                 };       
+
+                 ret_data['_no_user_info_btn'] = (_opt != undefined && _opt['allow_user_info_btn'] === false);
+                 ret_data['_allow_edit'] = (_opt != undefined && _opt['allow_edit']);
+                 ret_data['_allow_delete'] = (_opt != undefined && _opt['allow_delete']);
+
+                 table.find("TBODY").append( groups_list_row(ret_data, _donefunc) );
+                 table.trigger("list_change");
+               })
              })
            )
          )
@@ -1427,6 +1478,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
 
       group['_no_user_info_btn'] = (opt != undefined && opt['allow_user_info_btn'] === false);
       group['_allow_edit'] = (opt != undefined && opt['allow_edit']);
+      group['_allow_delete'] = (opt != undefined && opt['allow_delete']);
 
       let row=groups_list_row(group, donefunc);
       row.appendTo( tbody );
@@ -3150,7 +3202,7 @@ $( document ).ready(function() {
          .append( $(SPAN).addClass("ui-button").text("Группы")
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
-             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "allow_user_info_btn": false });
+             groups_list([], [], { "allow_add": has_right(R_SUPER), "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER), "allow_user_info_btn": false });
            })
          )
         ;

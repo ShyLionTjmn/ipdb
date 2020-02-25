@@ -118,7 +118,9 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
   global $DEFAULT_MAX_AUTO_ADD_ALLOWED;
   global $MAX_TOKEN_AGE;
 
-  $time=time();
+  $dt=new DateTime();
+  $now=$dt->getTimestamp();
+  $time=$now;
 
   if(!isset($_SESSION['openid_redirect_uri']) ||
      !isset($_SESSION['openid_nonce']) ||
@@ -208,7 +210,7 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
   if($user !== NULL) {
   
     if($just_logged_in) {
-      run_query("UPDATE users SET ts=ts, user_last_login=NOW() WHERE user_id=".mq($user['user_id']));
+      run_query("UPDATE users SET user_last_login=$now WHERE user_id=".mq($user['user_id']));
     };
 
     if($user['user_state'] == 1) {
@@ -257,7 +259,7 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
       $query="INSERT INTO users SET";
       $query .= " user_fk_ap_id=".mq($ap['ap_id']);
       $query .= ",user_sub=".mq($id_token['sub']);
-      $query .= ",user_last_login=NOW()";
+      $query .= ",user_last_login=$now";
       if(isset($id_token['name'])) {
         $query .= ",user_name=".mq($id_token['name']);
       };

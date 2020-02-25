@@ -9,7 +9,8 @@ require("db_utils.php");
 require("openid_lib.php");
 require("myphplib.php");
 
-$time=time();
+$dt=new DateTime();
+$time=$dt->getTimestamp();
 
 $IPDB_CHARSET="utf8mb4";
 
@@ -227,6 +228,7 @@ function audit_log($tables, $operation, $prev_row, $new_row) {
   $query .= ",al_query=".mq(jstr($q));
   $query .= ",al_prev_data=".mq(jstr($prev_row));
   $query .= ",al_new_data=".mq(jstr($new_row));
+  $query .= ",ts=$time";
   run_query($query);
 };
 
@@ -323,7 +325,7 @@ if(isset($_SESSION['user'])) {
       $_SESSION['user'] = $user;
       $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
       if($groups === NULL) {
-        run_query("INSERT INTO ugs SET ug_fk_group_id=(SELECT group_id FROM groups WHERE group_default=1 LIMIT 1), ug_fk_user_id=".mq($_SESSION['user']['user_id']));
+        run_query("INSERT INTO ugs SET ts=$time, ug_fk_group_id=(SELECT group_id FROM groups WHERE group_default=1 LIMIT 1), ug_fk_user_id=".mq($_SESSION['user']['user_id']));
         $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
       };
       if($groups === NULL || $groups === "") { eror_exit("User is not in any group"); };
@@ -591,7 +593,7 @@ if($q['action'] == 'v4get_net') {
   $query .= ",v4r_style=".mq($q['range_style']);
   $query .= ",v4r_icon=".mq($q['range_icon']);
   $query .= ",v4r_icon_style=".mq($q['range_icon_style']);
-  $query .= ",ts=CURRENT_TIMESTAMP()";
+  $query .= ",ts=$time";
   $query .= ",$set_fk_user_id";
   $query .= " WHERE v4r_id=".mq($q['range_id']);
 
@@ -606,6 +608,7 @@ if($q['action'] == 'v4get_net') {
     $query .= ",gr4r_fk_group_id=".mq($gr_id);
     $query .= ",gr4r_rmask=".mq($rmask);
     $query .= ",$set_fk_user_id";
+    $query .= ",ts=$time";
     run_query($query);
   };
 
@@ -641,6 +644,7 @@ if($q['action'] == 'v4get_net') {
   $query .= ",v4r_icon=".mq($q['range_icon']);
   $query .= ",v4r_icon_style=".mq($q['range_icon_style']);
   $query .= ",$set_fk_user_id";
+  $query .= ",ts=$time";
 
   trans_start();
 
@@ -655,6 +659,7 @@ if($q['action'] == 'v4get_net') {
     $query .= ",gr4r_fk_group_id=".mq($gr_id);
     $query .= ",gr4r_rmask=".mq($rmask);
     $query .= ",$set_fk_user_id";
+    $query .= ",ts=$time";
     run_query($query);
   };
 
@@ -764,7 +769,7 @@ if($q['action'] == 'v4get_net') {
   $prev_row=return_one($query, TRUE, "Пользователь не существует");
 
   $query="UPDATE users SET";
-  $query .= " ts=CURRENT_TIMESTAMP()";
+  $query .= " ts=$time";
   $query .= ",$set_fk_user_id";
 
   if(isset($q['user_state'])) {
@@ -778,8 +783,8 @@ if($q['action'] == 'v4get_net') {
   $query="DELETE FROM ugs WHERE ug_fk_user_id=".mq($q['user_id']);
   run_query($query);
 
-  $query="INSERT INTO ugs(fk_user_id,ug_fk_user_id,ug_fk_group_id)";
-  $query .= " SELECT ".mq($this_user_id).", ".mq($q['user_id']).", group_id FROM groups WHERE";
+  $query="INSERT INTO ugs(ts, fk_user_id,ug_fk_user_id,ug_fk_group_id)";
+  $query .= " SELECT $time, ".mq($this_user_id).", ".mq($q['user_id']).", group_id FROM groups WHERE";
   $query .= " group_id IN(".join(",", $q['user_groups']).")";
   run_query($query);
 
@@ -810,8 +815,18 @@ if($q['action'] == 'v4get_net') {
   $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
   $prev_row=return_one($query, TRUE, "Группа не существует");
 
+  if($prev_row['group_default'] != 0 || $prev_row['group_name'] == "default") {
+    if($q['group_name'] != "default") {
+      error_exit("Нельзя переименовывать группу по умолчанию");
+    };
+  } else {
+    if($q['group_name'] == "default") {
+      error_exit("Нельзя переименовывать группу в группу по умолчанию");
+    };
+  };
+
   $query="UPDATE groups SET";
-  $query .= " ts=CURRENT_TIMESTAMP()";
+  $query .= " ts=$time";
   $query .= ",$set_fk_user_id";
   $query .= ",group_name=".mq($q['group_name']);
   $query .= ",group_rights=".mq($q['group_rights']);
@@ -826,6 +841,7 @@ if($q['action'] == 'v4get_net') {
     $query .= " $set_fk_user_id";
     $query .= ",ug_fk_group_id=".mq($q['group_id']);
     $query .= ",ug_fk_user_id=".mq($user_id);
+    $query .= ",ts=$time";
     run_query($query);
   };
 
@@ -850,17 +866,21 @@ if($q['action'] == 'v4get_net') {
   require_p('group_rights', "/^(?:[a-z0-9_]+(?:,[a-z0-9_]+)*)?$/");
   require_p('group_users', Array("type" => "num_any"));
 
+  if($q['group_name'] == "default") {
+    error_exit("Нельзя добавлять группу по умолчанию");
+  };
+
   trans_start();
 
   $query="INSERT INTO groups SET";
-  $query .= " ts=CURRENT_TIMESTAMP()";
+  $query .= " ts=$time";
   $query .= ",$set_fk_user_id";
   $query .= ",group_name=".mq($q['group_name']);
   $query .= ",group_rights=".mq($q['group_rights']);
 
   run_query($query);
 
-  $id=mysqli_insert_id();
+  $id=mysqli_insert_id($db);
   if($id == 0) { error_exit("Bad insert ID returned"); };
 
 
@@ -869,15 +889,16 @@ if($q['action'] == 'v4get_net') {
     $query .= " $set_fk_user_id";
     $query .= ",ug_fk_group_id=".mq($id);
     $query .= ",ug_fk_user_id=".mq($user_id);
+    $query .= ",ts=$time";
     run_query($query);
   };
 
-  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($qid);
+  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($id);
   $new_row=return_one($query, TRUE, "Группа не существует");
 
   audit_log("groups,ugs", $q['action'], [], $new_row);
 
-  $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($qid);
+  $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($id);
 
   ok_exit(return_one($query, TRUE, "Группа не существует"));
 } else if($q['action'] == 'delete_group') {
@@ -886,9 +907,35 @@ if($q['action'] == 'v4get_net') {
 
   trans_start();
 
-  $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
+  # save for history
+  $query="SELECT groups.*";
+  $query .= ", (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users";
+  $query .= " FROM groups WHERE group_id=".mq($q['group_id']);
   $prev_row=return_one($query, TRUE, "Группа не существует");
 
+  if($prev_row['group_default'] != 0 || $prev_row['group_name'] == "default") {
+    error_exit("Нельзя удалять группу по умолчанию");
+  };
+
+  $query="SELECT DISTINCT v4net_addr, v4net_mask FROM g4favs WHERE v4fav_fk_group_id=".mq($q['group_id']);
+  $prev_row['group_v4favs']=return_query($query);
+
+  $query="SELECT DISTINCT HEX(v6net_addr), v6net_mask FROM g6favs WHERE v6fav_fk_group_id=".mq($q['group_id']);
+  $prev_row['group_v6favs']=return_query($query);
+
+  $query="SELECT gn4r_fk_v4net_id, gn4r_rmask FROM gn4rs WHERE gn4r_fk_group_id=".mq($q['group_id']);
+  $prev_row['group_v4net_rights']=return_query($query);
+
+  $query="SELECT gn6r_fk_v6net_id, gn6r_rmask FROM gn6rs WHERE gn6r_fk_group_id=".mq($q['group_id']);
+  $prev_row['group_v6net_rights']=return_query($query);
+
+  $query="SELECT gr4r_fk_v4r_id, gr4r_rmask FROM gr4rs WHERE gr4r_fk_group_id=".mq($q['group_id']);
+  $prev_row['group_v4range_rights']=return_query($query);
+
+  $query="SELECT gr6r_fk_v6r_id, gr6r_rmask FROM gr6rs WHERE gr6r_fk_group_id=".mq($q['group_id']);
+  $prev_row['group_v6range_rights']=return_query($query);
+
+  ###
   $query="DELETE FROM groups";
   $query .= " WHERE group_id=".mq($q['group_id']);
 
