@@ -658,7 +658,7 @@ function user_edit(user_id, opt, donefunc) {
     table.find(".user_email").text(data['ok']['user_email']);
     table.find(".user_phone").text(data['ok']['user_phone']);
     table.find(".user_sub").text(data['ok']['user_sub']);
-    if(data['ok']['user_last_login'] != 'hidden') {
+    if(data['ok']['user_last_login'] != 'hidden' && data['ok']['user_last_login'] != 0) {
       table.find(".user_last_login").text(from_unix_time(data['ok']['user_last_login']));
     } else {
       table.find(".user_last_login").text('Скрыто').css({"color": "gray"});

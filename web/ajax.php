@@ -219,10 +219,13 @@ function has_nright($rmask, $right) {
   return FALSE;
 };
 
-function audit_log($tables, $operation, $prev_row, $new_row) {
+function audit_log($subject, $subject_id, $tables, $operation, $prev_row, $new_row) {
   global $q;
+  global $time;
   $query="INSERT INTO audit_log SET";
   $query .= " fk_user_id=".mq($_SESSION['user']['user_id']);
+  $query .= ",al_subject=".mq($subject);
+  $query .= ",al_subject_id=".mq($subject_id);
   $query .= ",al_tables=".mq($tables);
   $query .= ",al_op=".mq($operation);
   $query .= ",al_query=".mq(jstr($q));
@@ -383,6 +386,9 @@ if(!isset($_SESSION['user'])) {
 
   custom_exit(Array("no_auth" => $providers_list));
 } else {
+  if($_SESSION['user']['user_state'] != 1) {
+    error_exit("Пользователь не активирован или отключен");
+  };
   #get access rights for future use in requests
   if(!has_right(R_SUPER)) {
     #networks access
@@ -617,7 +623,7 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM v4rs WHERE v4r_id=".mq($q['range_id']);
   $new_row=return_one($query, TRUE, "Диапазон не существует");
 
-  audit_log("v4rs,gr4rs", $q['action'], $prev_row, $new_row);
+  audit_log("v4range", $q['range_id'], "v4rs,gr4rs", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
 
@@ -668,7 +674,7 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM v4rs WHERE v4r_id=".mq($id);
   $new_row=return_one($query, TRUE, "Диапазон не существует");
 
-  audit_log("v4rs,gr4rs", $q['action'], [], $new_row);
+  audit_log("v4range", $id, "v4rs,gr4rs", $q['action'], [], $new_row);
   ok_exit("done");
 
 } else if($q['action'] == 'v4_delete_global_range') {
@@ -687,7 +693,7 @@ if($q['action'] == 'v4get_net') {
 
   run_query($query);
 
-  audit_log("v4rs,gr4rs", $q['action'], $prev_row, []);
+  audit_log("v4range", $q['range_id'], "v4rs,gr4rs", $q['action'], $prev_row, []);
 
   ok_exit("done");
 } else if($q['action'] == 'get_groups') {
@@ -798,7 +804,7 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']);
   $new_row=return_one($query, TRUE, "Пользователь не существует");
 
-  audit_log("users,ugs", $q['action'], $prev_row, $new_row);
+  audit_log("user", $q['user_id'], "users,ugs", $q['action'], $prev_row, $new_row);
 
   $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']));
   
@@ -855,7 +861,7 @@ if($q['action'] == 'v4get_net') {
   $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
   $new_row=return_one($query, TRUE, "Группа не существует");
 
-  audit_log("groups,ugs", $q['action'], $prev_row, $new_row);
+  audit_log("group", $q['group_id'], "groups,ugs", $q['action'], $prev_row, $new_row);
 
   $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($q['group_id']);
 
@@ -896,7 +902,7 @@ if($q['action'] == 'v4get_net') {
   $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($id);
   $new_row=return_one($query, TRUE, "Группа не существует");
 
-  audit_log("groups,ugs", $q['action'], [], $new_row);
+  audit_log("group", $id, "groups,ugs", $q['action'], [], $new_row);
 
   $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($id);
 
@@ -948,7 +954,7 @@ if($q['action'] == 'v4get_net') {
     error_exit("Операция приведет к потере права суперпользователя\nтекущим администратором. Операция отменена");
   };
 
-  audit_log("groups,ugs", $q['action'], $prev_row, []);
+  audit_log("group", $q['group_id'], "groups,ugs", $q['action'], $prev_row, []);
 
   ok_exit("done");
 } else {
