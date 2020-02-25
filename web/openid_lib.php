@@ -208,7 +208,7 @@ function process_tokens($tokens, $ap, $just_logged_in=FALSE) {
   if($user !== NULL) {
   
     if($just_logged_in) {
-      run_query("UPDATE users SET user_last_login=NOW() WHERE user_id=".mq($user['user_id']));
+      run_query("UPDATE users SET ts=ts, user_last_login=NOW() WHERE user_id=".mq($user['user_id']));
     };
 
     if($user['user_state'] == 1) {

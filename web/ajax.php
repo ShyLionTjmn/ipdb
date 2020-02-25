@@ -218,6 +218,18 @@ function has_nright($rmask, $right) {
   return FALSE;
 };
 
+function audit_log($tables, $operation, $prev_row, $new_row) {
+  global $q;
+  $query="INSERT INTO audit_log SET";
+  $query .= " fk_user_id=".mq($_SESSION['user']['user_id']);
+  $query .= ",al_tables=".mq($tables);
+  $query .= ",al_op=".mq($operation);
+  $query .= ",al_query=".mq(jstr($q));
+  $query .= ",al_prev_data=".mq(jstr($prev_row));
+  $query .= ",al_new_data=".mq(jstr($new_row));
+  run_query($query);
+};
+
 $json=file_get_contents("php://input");
 $q = json_decode($json, true);
 if($q === NULL) {
@@ -386,6 +398,8 @@ if(!isset($_SESSION['user'])) {
     $GLOBALS['v4rs_access']=return_query($query);
   };
 };
+
+$this_user_id=$_SESSION['user']['user_id'];
 
 if($q['action'] == 'v4get_net') {
   require_p('net', [ "type" => "v4long" ]);
@@ -663,7 +677,7 @@ if($q['action'] == 'v4get_net') {
 
   if(!has_right(R_VIEWANY)) {
     foreach($ret['group_users'] as $key => $value) {
-      if($value['user_id'] != $_SESSION['user']['user_id']) {
+      if($value['user_id'] != $this_user_id) {
         foreach(user_hide as $field) {
           $ret['group_users'][$key][$field] = "hidden";
         };
@@ -680,7 +694,7 @@ if($q['action'] == 'v4get_net') {
   require_p('user_id');
 
   $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']), TRUE, "Пользователь не существует");
-  if(!has_right(R_VIEWANY) && $_SESSION['user']['user_id'] != $q['user_id']) {
+  if(!has_right(R_VIEWANY) && $this_user_id != $q['user_id']) {
     foreach(user_hide as $field) {
       $ret[$field] = "hidden";
     };
@@ -701,10 +715,51 @@ if($q['action'] == 'v4get_net') {
   ok_exit($ret);
 } else if($q['action'] == 'save_user') {
   require_right(R_SUPER);
-  require_p('user_id');
+  require_p('user_id', "/^\d+$/");
   optional_p('user_state', "/^(?:-[21]|[01])$/");
   require_p('user_groups', Array("type" => "num_many"));
 
+  if(isset($q['user_state']) && $q['user_id'] == $this_user_id) {
+    error_exit("Нельзя изменить собственный статус");
+  };
+
+  trans_start();
+
+  $query="SELECT users.*, aps.ap_off, aps.ap_name";
+  $query .= ", (SELECT GROUP_CONCAT(ug_fk_group_id) FROM ugs WHERE ug_fk_user_id=user_id ORDER BY ug_fk_group_id) as user_groups";
+  $query .= " FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']);
+  $prev_row=return_one($query, TRUE, "Пользователь не существует");
+
+  $query="UPDATE users SET";
+  $query .= " ts=CURRENT_TIMESTAMP()";
+  $query .= ",fk_user_id=".mq($this_user_id);
+
+  if(isset($q['user_state'])) {
+    $query .= ",user_state=".mq($q['user_state']);
+  };
+
+  $query .= " WHERE user_id=".mq($q['user_id']);
+
+  run_query($query);
+
+  $query="DELETE FROM ugs WHERE ug_fk_user_id=".mq($q['user_id']);
+  run_query($query);
+
+  $query="INSERT INTO ugs(fk_user_id,ug_fk_user_id,ug_fk_group_id)";
+  $query .= " SELECT ".mq($this_user_id).", ".mq($q['user_id']).", group_id FROM groups WHERE";
+  $query .= " group_id IN(".join(",", $q['user_groups']).")";
+  run_query($query);
+
+  $query="SELECT users.*, aps.ap_off, aps.ap_name";
+  $query .= ", (SELECT GROUP_CONCAT(ug_fk_group_id) FROM ugs WHERE ug_fk_user_id=user_id ORDER BY ug_fk_group_id) as user_groups";
+  $query .= " FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']);
+  $new_row=return_one($query, TRUE, "Пользователь не существует");
+
+  audit_log("users,ugs", $q['action'], $prev_row, $new_row);
+
+  $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']));
+  
+  ok_exit($ret);
 } else {
   error_exit("Unknown action");
 };

@@ -387,6 +387,7 @@ function user_edit(user_id, opt, donefunc) {
 
   if(has_right(R_SUPER)) {
     d['buttons'].push({ "text": "Сохранить", "class": "confirm_btn", "click": function() {
+      let _dialog=$(this);
       let _id=$(this).data("id");
       if(_id == undefined) { error_at(); return; };
 
@@ -412,9 +413,27 @@ function user_edit(user_id, opt, donefunc) {
         return;
       };
 
+      let prev_groups=Array();
+      
+      let prev_list=$(this).find(".groups_list").data("redo_data");
+
+      for(let i=0; i < prev_list.length; i++) {
+        let group_id=prev_list[i]['group_id'];
+        prev_groups.push(group_id);
+      };
+
+      groups.sort(function(a,b) { return a-b; });
+      prev_groups.sort(function(a,b) { return a-b; });
+
+      if(groups.join(",") == prev_groups.join(",") &&
+         (_id == ud['user']['user_id'] || $(this).data("prev_state") == new_state)
+      ) {
+        _dialog.dialog("close");
+        return;
+      };
+
       query['user_groups']=groups;
 
-      let _dialog=$(this);
 
       run_query(query, function(ret_data) {
         _dialog.dialog("close");
@@ -620,6 +639,8 @@ function user_edit(user_id, opt, donefunc) {
   table.find("INPUT").checkboxradio({"disabled": !has_right(R_SUPER) || user_id == ud['user']['user_id']});
 
   run_query({"action": "get_user", "user_id": user_id}, function(data) {
+    dialog.data("data", data['ok']);
+
     table.find(".user_name").text(data['ok']['user_name']);
     table.find(".user_username").text(data['ok']['user_username']);
     table.find(".ap_name").text(data['ok']['ap_name']);
@@ -654,7 +675,10 @@ function user_edit(user_id, opt, donefunc) {
       break;
     default:
       error_at();
+      throw("error");
     };
+
+    dialog.data("prev_state", data['ok']['user_state']);
 
     table.find(".states_list").find("INPUT").checkboxradio("refresh");
 
@@ -758,6 +782,7 @@ function get_users_list_row(user) {
            user_edit(_data['user_id'], { "allow_groups_change": _data['_allow_groups_change'] }, function(ret_data) {
              ret_data['_show_minus'] = _data['_show_minus'];
              ret_data['_allow_groups_change'] = _data['_allow_groups_change'];
+             ret_data['_show_info_btn'] = _data['_show_info_btn'];
              row.replaceWith( get_users_list_row(ret_data) );
              _cont.trigger("list_change");
            });
@@ -3018,7 +3043,9 @@ $( document ).ready(function() {
          .css({"margin-right": "0.5em"})
          .css(s_blocks_color)
          .click(function() {
-           user_edit(ud['user']['user_id'], {'allow_groups_change': true});
+           user_edit(ud['user']['user_id'], {'allow_groups_change': true}, function() {
+             location.reload(true);
+           });
            clear_calc();
            let calc_cont=$("#calc_text");
            calc_cont
