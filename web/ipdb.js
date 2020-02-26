@@ -2549,7 +2549,7 @@ function v4nav(data) {
 
       if(taken) {
         if(view) {
-          if(has_right(R_VIEWANY) || (data['nets'][row_net]['rmask'] & NR_VIEWOTHER) > 0) {
+          if(has_right(R_VIEWANY) || (data['nets'][row_net]['rmask_effective'] & NR_VIEWOTHER) > 0) {
             td
              .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets")
                .addClass("ui-button")
