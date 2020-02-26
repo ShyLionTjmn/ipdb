@@ -391,6 +391,28 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
 
   d['buttons'].push({ "text": has_right(R_SUPER)?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
 
+  let domain_sel=$(SELECT).addClass(".domain_sel")
+   .append( $(OPTION).text("Выберете домен ...").val() )
+  ;
+
+  dialog
+   .append( $(DIV)
+     .append( $(LABEL).text("Домен: ") )
+     .append( domain_sel )
+   )
+  ;
+
+  let table=$(TABLE)
+   .append( $(THEAD)
+     .append( $(TR)
+       .append( $(TH).text("VLAN/BD") )
+       .append( $(TH).text("Краткое имя") )
+       .append( $(TH).text("Описание") )
+       .append( $(TH) )
+     )
+   )
+  ;
+
   dialog.dialog(d);
 };
 
