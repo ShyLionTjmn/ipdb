@@ -354,9 +354,48 @@ function user_state_elm(user) {
 };
 
 function vlans_list(presel_vlan_id, opt, donefunc) {
+  if(opt == undefined) { error_at(); return; };
+  if( $("#vlans_list").length != 0) { return; };
+
+  let dialog=$(DIV).id("vlans_list")
+   .data("opt", opt)
+   .addClass("dialog_start")
+   .title(donefunc != null?"Выбор VLAN/BD":"Просмотр VLAN/BD")
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  if(_debug_opts) {
+    dialog.append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"position": "absolute", "display": "inline-block", "color": "lightgray", "left": "0.2em"}).title(jstr(opt)) );
+  };
+
+  let d={
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1000,
+    minWidth:800,
+    minHeight:600,
+    //width: "auto",
+    buttons: [],
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    },
+  };
+
+  if(donefunc != undefined && (opt['return'] == 'any' || opt['return'] == 'many') {
+    d['buttons'].push({ "text": "Выбрать", "class": "confirm_btn", "click": function() {
+      let _dialog=$(this);
+    }});
+  };
+
+  d['buttons'].push({ "text": has_right(R_SUPER)?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
+
+  dialog.dialog(d);
 };
 
 function user_edit(user_id, opt, donefunc) {
+  if(opt == undefined) { error_at(); return; };
   if(user_id == undefined) { error_at(); return; };;
 
   if( $("#user_edit"+user_id).length != 0) { return; };
@@ -588,7 +627,7 @@ function user_edit(user_id, opt, donefunc) {
    .append( $(DIV)
      .append( $(LABEL).text("Группы пользователя: ")
      )
-     .append( (opt == undefined || !opt['allow_groups_change'] || !has_right(R_SUPER)) ? $(LABEL) : $(LABEL)
+     .append( (!opt['allow_groups_change'] || !has_right(R_SUPER)) ? $(LABEL) : $(LABEL)
        .addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
        .css({"color": "green"})
        .title("Добавить в группу")
@@ -613,7 +652,7 @@ function user_edit(user_id, opt, donefunc) {
          });
        })
      )
-     .append( (opt == undefined || !opt['allow_groups_change'] || !has_right(R_SUPER)) ? $(LABEL) : $(LABEL)
+     .append( (!opt['allow_groups_change'] || !has_right(R_SUPER)) ? $(LABEL) : $(LABEL)
        .addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button")
        .css({"color": color_table_buttons, "margin-left": "0.5em" })
        .title("Восстановить начальный список")
@@ -691,7 +730,7 @@ function user_edit(user_id, opt, donefunc) {
 
     for(let i=0; i < data['ok']['user_groups'].length; i++) {
       data['ok']['user_groups'][i]['_no_user_info_btn'] = true;
-      if(has_right(R_SUPER) && opt != undefined && opt['allow_groups_change']) {
+      if(has_right(R_SUPER) && opt['allow_groups_change']) {
         data['ok']['user_groups'][i]['_minus'] = true;
       };
     };
@@ -807,6 +846,7 @@ function users_list_row(user) {
 };
 
 function users_list(exclude_list, opt, donefunc) {
+  if(opt == undefined) { error_at(); return; };
   if(!has_right(R_VIEWANY)) { error_at(); return; };
 
   if( $("#users_list").length != 0) { error_at(); return; };
@@ -891,13 +931,12 @@ function users_list(exclude_list, opt, donefunc) {
       let user=data['ok'][i];
       if(in_array(exclude_list, user['user_id'])) continue;
 
-      if(opt != undefined && opt['show_sel'] != undefined) {
+      if(opt['show_sel'] != undefined) {
         user['_sel'] = opt['show_sel'];
       };
 
-      user['_show_info_btn'] = (opt != undefined && opt['allow_user_info_btn']);
-      user['_allow_groups_change'] = (opt != undefined && opt['allow_user_group_change']);
-      //user['_allow_edit'] = (opt != undefined && opt['allow_edit']);
+      user['_show_info_btn'] = (opt['allow_user_info_btn']);
+      user['_allow_groups_change'] = (opt['allow_user_group_change']);
 
       let row=users_list_row(user);
       row.appendTo( table );
@@ -906,6 +945,7 @@ function users_list(exclude_list, opt, donefunc) {
 };
 
 function group_edit(group_id, opt, donefunc) {
+  if(opt == undefined) { error_at(); return; };
   if(group_id == undefined && !has_right(R_SUPER)) { error_at(); return; };
 
   let id="group_edit";
@@ -913,7 +953,7 @@ function group_edit(group_id, opt, donefunc) {
 
   if( $("#"+id).length != 0) { return; };
 
-  let allow_group_edit = opt != undefined && opt['allow_edit'];
+  let allow_group_edit = opt['allow_edit'];
 
   let dialog=$(DIV).id(id)
    .data("opt", opt)
@@ -1075,7 +1115,7 @@ function group_edit(group_id, opt, donefunc) {
              for(let i=0; i < ret_data.length; i++) {
                ret_data[i]['_allow_groups_change'] = false;
                ret_data[i]['_show_minus'] = true;
-               ret_data[i]['_show_info_btn'] = (_opt == undefined || _opt['allow_user_info_btn']);
+               ret_data[i]['_show_info_btn'] = _opt['allow_user_info_btn'];
                _cont.append( users_list_row( ret_data[i] ) );
              };
              _cont.trigger("list_change");
@@ -1164,7 +1204,7 @@ function group_edit(group_id, opt, donefunc) {
           data['ok']['group_users'][i]['_show_minus'] = true;
         };
 
-        data['ok']['group_users'][i]['_show_info_btn'] = (opt == undefined || opt['allow_user_info_btn']);
+        data['ok']['group_users'][i]['_show_info_btn'] = opt['allow_user_info_btn'];
       };
 
       for(let i=0; i < data['ok']['group_users'].length; i++) {
@@ -1336,6 +1376,7 @@ function groups_list_row(group, donefunc) {
 };
 
 function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
+  if(opt == undefined) { error_at(); return; };
   if( $("#groups_list").length != 0) { error_at(); return; };
 
   let presel_list;
@@ -1371,13 +1412,13 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       $(this).remove();
     },
     open: function() {
-      if(opt != undefined && opt['return'] == "many" && donefunc != undefined && presel_list.length == 0) {
+      if(opt['return'] == "many" && donefunc != undefined && presel_list.length == 0) {
         $(this).dialog("widget").find("BUTTON.confirm_btn").prop("disabled", true).css({"color": "gray"});
       };
     }
   };
 
-  if(opt != undefined && (opt['return'] == "any" || opt['return'] == "many") && donefunc != undefined) {
+  if((opt['return'] == "any" || opt['return'] == "many") && donefunc != undefined) {
     d['buttons'].push({ "text": "Подтвердить", "class": "confirm_btn", "click": function() {
       let ret=Array();
 
@@ -1398,7 +1439,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
 
   let table=$(TABLE);
 
-  if(opt != undefined && opt['return'] == "many" && donefunc != undefined) {
+  if(opt['return'] == "many" && donefunc != undefined) {
     table
      .on("sel_change", function() {
        let sel_count=0;
@@ -1410,7 +1451,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     ;
   };
 
-  if(has_right(R_SUPER) && opt != undefined && opt['allow_add']) {
+  if(has_right(R_SUPER) && opt['allow_add']) {
     table
      .append( $(THEAD)
        .append( $(TR)
@@ -1423,17 +1464,17 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
                let _donefunc=$(this).closest(".dialog_start").data("donefunc");
                let _table=$(this).closest(".dialog_start").find("TABLE");
                let _allow_edit=true;
-               let _allow_user_info_btn = (_opt == undefined || opt['allow_user_info_btn'] === true);
+               let _allow_user_info_btn = _opt['allow_user_info_btn'] === true;
                group_edit(undefined, { "allow_edit": _allow_edit, "allow_user_info_btn": _allow_user_info_btn}, function(ret_data) {
-                 if(_opt != undefined && _opt['return'] == "one") {
+                 if(_opt['return'] == "one") {
                    ret_data['_sel'] = "one";
-                 } else if(_opt != undefined && _opt['return'] != undefined) {
+                 } else if(_opt['return'] != undefined) {
                    ret_data['_sel'] = "multi";
                  };       
 
-                 ret_data['_no_user_info_btn'] = (_opt != undefined && _opt['allow_user_info_btn'] === false);
-                 ret_data['_allow_edit'] = (_opt != undefined && _opt['allow_edit']);
-                 ret_data['_allow_delete'] = (_opt != undefined && _opt['allow_delete']);
+                 ret_data['_no_user_info_btn'] = (_opt['allow_user_info_btn'] === false);
+                 ret_data['_allow_edit'] = _opt['allow_edit'];
+                 ret_data['_allow_delete'] = _opt['allow_delete'];
 
                  table.find("TBODY").append( groups_list_row(ret_data, _donefunc) );
                  table.trigger("list_change");
@@ -1473,15 +1514,15 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       let group=data['ok'][i];
       if(in_array(exclude_list, group['group_id'])) continue;
 
-      if(opt != undefined && opt['return'] == "one") {
+      if(opt['return'] == "one") {
         group['_sel'] = "one";
-      } else if(opt != undefined && opt['return'] != undefined) {
+      } else if(opt['return'] != undefined) {
         group['_sel'] = "multi";
       };
 
-      group['_no_user_info_btn'] = (opt != undefined && opt['allow_user_info_btn'] === false);
-      group['_allow_edit'] = (opt != undefined && opt['allow_edit']);
-      group['_allow_delete'] = (opt != undefined && opt['allow_delete']);
+      group['_no_user_info_btn'] = (opt['allow_user_info_btn'] === false);
+      group['_allow_edit'] = opt['allow_edit'];
+      group['_allow_delete'] = opt['allow_delete'];
 
       let row=groups_list_row(group, donefunc);
       row.appendTo( tbody );
@@ -1490,6 +1531,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
 };
 
 function group_net_right_div(gr, mask, opt) {
+  if(opt == undefined) { error_at(); return; };
   let ret=$(DIV)
    .css({"white-space": "pre", "margin-bottom": "0.2em"})
    .addClass("group_rights_div")
@@ -1508,7 +1550,7 @@ function group_net_right_div(gr, mask, opt) {
   for(let i=0; i < group_net_rights.length; i++) {
     if(((group_net_rights[i]['right'] & mask) >>> 0) > 0) {
       let is_set = (gr != undefined && ((Number(gr['rmask']) & group_net_rights[i]['right']) >>> 0) > 0);
-      if(is_set || (opt != undefined && opt['allow_edit'] == true)) {
+      if(is_set || opt['allow_edit'] == true) {
         let r_label=$(LABEL).addClass("right")
          .toggle(is_set || gr == undefined)
          .css({"border": "1px solid gray", "padding-left": "0.1em", "padding-right": "0.1em", "margin-left": "0.3em"})
@@ -1544,7 +1586,7 @@ function group_net_right_div(gr, mask, opt) {
    )
   ;
 
-  if(opt != undefined && opt['allow_edit'] == true) {
+  if(opt['allow_edit'] == true) {
     ret
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bars").addClass("ui-button").addClass("unedit_btn")
        .css({"color": color_table_buttons})
@@ -1619,7 +1661,7 @@ function group_net_right_div(gr, mask, opt) {
      )
     ;
   };
-  if(opt != undefined && opt['allow_edit'] == true) {
+  if(opt['allow_edit'] == true) {
     ret
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button").addClass("unedit_btn")
        .css({"color": color_table_buttons})
