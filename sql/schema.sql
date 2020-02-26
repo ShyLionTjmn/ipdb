@@ -175,6 +175,37 @@ CREATE TABLE vlans (
   tc		TINYINT COMMENT 'VLANs or Bridge domain domains members'
 );
 
+#vlan ranges
+CREATE TABLE vrs (
+  vr_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vr_start	BIGINT UNSIGNED NOT NULL,
+  vr_stop	BIGINT UNSIGNED NOT NULL,
+  vr_fk_vd_id	BIGINT UNSIGNED NOT NULL,
+  vr_name	VARCHAR(190) NOT NULL DEFAULT '',
+  vr_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_user_id	BIGINT UNSIGNED,
+  PRIMARY KEY (vr_id),
+  UNIQUE KEY uk_vr(vr_fk_vd_id,vr_start,vr_stop,vr_name),
+  FOREIGN KEY (vr_fk_vd_id) REFERENCES vds(vd_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  tc		TINYINT COMMENT 'VLANs or Bridge domain ranges'
+);
+
+#group vlan range rights
+CREATE TABLE gvrrs (
+  gvrr_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  gvrr_fk_vr_id	BIGINT UNSIGNED NOT NULL,
+  gvrr_fk_group_id	BIGINT UNSIGNED NOT NULL,
+  gvrr_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit VLAN, 8-free VLAN, 32-manage access, 256-edit net name/desr',
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_user_id	BIGINT UNSIGNED,
+  PRIMARY KEY (gvrr_id),
+  UNIQUE KEY uk_gvrr(gvrr_fk_vr_id,gvrr_fk_group_id),
+  FOREIGN KEY (gvrr_fk_vr_id) REFERENCES vrs(vr_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (gvrr_fk_group_id) REFERENCES groups(group_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  tc		TINYINT COMMENT 'VLANs or Bridge range group access'
+);
+
 CREATE TABLE sites (
   site_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   site_name	VARCHAR(190) NOT NULL DEFAULT '',

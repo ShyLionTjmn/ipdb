@@ -353,6 +353,9 @@ function user_state_elm(user) {
   return $(LABEL).addClass("ui-icon").addClass(state_icon).css({"color": state_color}).title(state_text).data("text", state_text);
 };
 
+function vlans_list(presel_vlan_id, opt, donefunc) {
+};
+
 function user_edit(user_id, opt, donefunc) {
   if(user_id == undefined) { error_at(); return; };;
 
@@ -2670,8 +2673,14 @@ function v4nav(data) {
       net_td.text("... " + data['aggr_nets'][ row_net ]['aggr_count'] + " " + nets2lang(false, 'ru', data['aggr_nets'][ row_net ]['aggr_count']));
     };
 
-    let net_name_css={"padding-left": "0.5em", "padding-right": "0.5em", "border-bottom": "1px solid gray", "border-left": "1px solid gray"};
-    if(row_has_nets) net_name_css['background-color'] = color_taken;
+    let net_name_css={"padding-left": "0.5em", "padding-right": "0.5em", "border-left": "1px solid gray"};
+    if(row_has_nets) {
+      net_name_css['background-color'] = color_taken;
+      net_name_css['border-bottom'] = "1px solid gray";
+      net_name_css['border-top'] = "1px solid gray";
+    } else {
+      net_name_css['background-color'] = "white";
+    };
 
     tr
      .append( net_td
@@ -3212,6 +3221,15 @@ $( document ).ready(function() {
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
              users_list([], { "allow_user_info_btn": true, "allow_user_group_change": has_right(R_SUPER) });
+           })
+         )
+        ;
+
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("VLAN/BDs")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             vlans_list(undefined, {});
            })
          )
         ;
