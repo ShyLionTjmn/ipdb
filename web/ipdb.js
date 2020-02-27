@@ -383,7 +383,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
     },
   };
 
-  if(donefunc != undefined && (opt['return'] == 'any' || opt['return'] == 'many') {
+  if(donefunc != undefined && (opt['return'] == 'any' || opt['return'] == 'many')) {
     d['buttons'].push({ "text": "Выбрать", "class": "confirm_btn", "click": function() {
       let _dialog=$(this);
     }});
@@ -392,7 +392,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   d['buttons'].push({ "text": has_right(R_SUPER)?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
 
   let domain_sel=$(SELECT).addClass(".domain_sel")
-   .append( $(OPTION).text("Выберете домен ...").val() )
+   .append( $(OPTION).text("Выберете домен ...").val("") )
   ;
 
   dialog
@@ -402,16 +402,24 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
    )
   ;
 
-  let table=$(TABLE)
+  let table=$(TABLE).addClass("vlans_table")
    .append( $(THEAD)
      .append( $(TR)
        .append( $(TH).text("VLAN/BD") )
        .append( $(TH).text("Краткое имя") )
        .append( $(TH).text("Описание") )
-       .append( $(TH) )
+       .append( $(TH) ) //for buttons
+       .append( $(TH) ) //for ranges
      )
    )
+   .appendTo( dialog )
   ;
+
+  let tbody=$(TBODY).addClass("vlans_list")
+   .append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете домен") ) )
+   .appendTo( table )
+  ;
+
 
   dialog.dialog(d);
 };
@@ -3161,7 +3169,7 @@ $( document ).ready(function() {
 
       let menu_bar = $(DIV).id("top_menu")
        .css({"border": "1px solid lightgray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
-       .hide()
+       //.hide()
        .click(function(e) {
          e.stopPropagation();
          $("#top_menu").hide();
@@ -3183,6 +3191,7 @@ $( document ).ready(function() {
        .append( menu_bar )
        .append( $(DIV).id("user_info")
          .css({"border": "1px solid lightgray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
+         .hide()
        )
        .appendTo( $("BODY") )
       ;
