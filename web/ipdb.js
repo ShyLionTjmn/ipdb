@@ -395,11 +395,30 @@ function populate_vlans_table(tbody, data, opt) {
   let vlan_keys=keys(vlans_display);
   vlan_keys.sort(function(a,b) { return Number(vlan_keys[a]) - Number(vlan_keys[b]); });
 
-  let prev_vlan=undefined;
+  let last_vlan=0;
 
   for(let i=0; i < vlan_keys.length; i++) {
     let vlan_key=vlan_keys[i];
     let vlan_number=Number(vlan_key);
+
+    if(vlan_number < 1) { error_at(); throw("Error"); };
+
+    if((last_vlan + 1) < vlan_number) {
+      //we have to add TAKE row before adding this one
+      let take_start=last_vlan + 1;
+      let take_stop=vlan_number - 1;
+
+      tbody
+       .append( $(TR)
+         .append( $(TD)
+           .text( String(take_start) + " - " + String(take_stop) )
+         )
+         .append( $(TD)
+           .text("TAKE")
+         )
+       )
+      ;
+    };
 
     tbody
      .append( $(TR)
@@ -407,11 +426,30 @@ function populate_vlans_table(tbody, data, opt) {
          .text(vlan_number)
        )
        .append( $(TD)
-         .text(jstr(vlans_display[vlan_key]))
+         .text(JSON.stringify(vlans_display[vlan_key]))
+       )
+     )
+    ;
+    last_vlan=vlan_number;
+  };
+
+  if(last_vlan  < max_vlan) {
+    //we have to add TAKE row at the end
+    let take_start=last_vlan + 1;
+    let take_stop=max_vlan;
+
+    tbody
+     .append( $(TR)
+       .append( $(TD)
+         .text( String(take_start) + " - " + String(take_stop) )
+       )
+       .append( $(TD)
+         .text("TAKE")
        )
      )
     ;
   };
+
 };
 
 function vdomain_row(vdomain) {
@@ -561,8 +599,8 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   let d={
     modal:true,
     maxHeight:1000,
-    maxWidth:1000,
-    minWidth:800,
+    //maxWidth:1200,
+    minWidth:1000,
     minHeight:600,
     //width: "auto",
     buttons: [],
@@ -659,10 +697,15 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
          let prev_row=_sel.find("OPTION:selected");
          if(_sel.val() == "") return;
          if(_sel.val() != prev_row.val() ) { error_at(); return; };
-         run_query({"action": "delete_vdomain", "vd_id": prev_row.val()}, function(ret_data) {
-           prev_row.remove();
-           _sel.val("").trigger("change");
-         })
+
+         show_confirm_checkbox("Подтвердите удаление домена.\nВНИМАНИЕ! Будут удалены связаные с доменом диапазоны VLAN!", function() {
+           run_query({"action": "delete_vdomain", "vd_id": prev_row.val()}, function(ret_data) {
+             prev_row.remove();
+             _sel.val("").trigger("change");
+           })
+         });
+
+         
        })
        .hide()
      )
