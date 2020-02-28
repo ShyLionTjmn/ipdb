@@ -150,6 +150,7 @@ CREATE TABLE `atvs` (
 # VLAN/BDs domains
 CREATE TABLE vds (
   vd_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vd_max_num	BIGINT UNSIGNED NOT NULL DEFAULT 4095,
   vd_name	VARCHAR(190) NOT NULL DEFAULT '',
   vd_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   vd_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time vlans data changed and periodiaclly checked by front-end to notify user if out of sync',
@@ -196,7 +197,7 @@ CREATE TABLE gvrrs (
   gvrr_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   gvrr_fk_vr_id	BIGINT UNSIGNED NOT NULL,
   gvrr_fk_group_id	BIGINT UNSIGNED NOT NULL,
-  gvrr_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info and IPs, 4-take/edit VLAN, 8-free VLAN, 32-manage access, 256-edit net name/desr',
+  gvrr_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask:  1-view name, 2-view other info, 4-take/edit VLAN, 8-free VLAN',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (gvrr_id),

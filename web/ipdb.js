@@ -353,8 +353,12 @@ function user_state_elm(user) {
   return $(LABEL).addClass("ui-icon").addClass(state_icon).css({"color": state_color}).title(state_text).data("text", state_text);
 };
 
+function populate_vlans_table(tbody, data, opt) {
+};
+
 function vdomain_row(vdomain) {
   return $(OPTION)
+   .data("data", vdomain)
    .text(vdomain['vd_name'])
    .title(vdomain['vd_descr'])
    .val(vdomain['vd_id'])
@@ -406,10 +410,16 @@ function vdomain_edit(vd_id, opt, donefunc) {
         _dialog.find(".vd_name").animateHighlight();
         return;
       };
+      let _vd_max_num=_dialog.find(".vd_max_num").val().trim();
+      if(_vd_max_num == undefined) { error_at(); return; };
+      if(!_vd_max_num.match(/^\d+$/)) {
+        _dialog.find(".vd_max_num").animateHighlight();
+        return;
+      };
       let _vd_descr=_dialog.find(".vd_descr").val();
       if(_vd_descr == undefined) { error_at(); return; };
 
-      let query={"vd_name": _vd_name, "vd_descr": _vd_descr};
+      let query={"vd_name": _vd_name, "vd_descr": _vd_descr, "vd_max_num": _vd_max_num};
 
       let _id=_dialog.data("id");
       if(_id == undefined) {
@@ -444,6 +454,14 @@ function vdomain_edit(vd_id, opt, donefunc) {
      )
      .append( $(TR)
        .append( $(TD).css({"text-align": "rigth"})
+         .append( $(LABEL).text("Макс. номер: ") )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("vd_max_num").prop({"readonly": readonly}).val("4095") )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css({"text-align": "rigth"})
          .append( $(LABEL).text("Описание: ") )
        )
        .append( $(TD)
@@ -456,6 +474,7 @@ function vdomain_edit(vd_id, opt, donefunc) {
   if(vd_id != undefined) {
     run_query({"action": "get_vdomain", "vd_id": vd_id}, function(ret_data) {
       dialog.find(".vd_name").val(ret_data['ok']['vd_name']);
+      dialog.find(".vd_max_num").val(ret_data['ok']['vd_max_num']);
       dialog.find(".vd_descr").val(ret_data['ok']['vd_descr']);
       dialog.data("data", ret_data['ok']);
     });
@@ -470,6 +489,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
 
   let dialog=$(DIV).id("vlans_list")
    .data("opt", opt)
+   .data("presel_id", presel_vlan_id)
    .addClass("dialog_start")
    .title(donefunc != null?"Выбор VLAN/BD":"Просмотр VLAN/BD")
    .css({"white-space": "pre", "font-size": "larger"})
@@ -503,7 +523,41 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   d['buttons'].push({ "text": has_right(R_SUPER)?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
 
   let domain_sel=$(SELECT).addClass("domain_sel")
+   .title("Выберете домен ...")
    .append( $(OPTION).text("Выберете домен ...").val("") )
+   .on("change select", function() {
+     let _dialog=$(this).closest(".dialog_start");
+     let _opt=_dialog.data("opt");
+     let _sel=$(this);
+     let _sel_id=_sel.val();
+     let _opt_elm=_sel.find("OPTION:selected");
+
+     if(_sel_id != undefined && _sel_id != "") {
+       _sel.title(_opt_elm.data("data")['vd_descr']);
+       _dialog.find(".vdomain_edit_btn").show();
+       if(_opt_elm.data("data")['vlans_count'] > 0) {
+         _dialog.find(".vdomain_delete_btn").hide();
+       } else {
+         _dialog.find(".vdomain_delete_btn").show();
+       };
+     } else {
+       _dialog.find(".vdomain_edit_btn").hide();
+       _dialog.find(".vdomain_delete_btn").hide();
+       _sel.title("Выберете домен ...");
+     };
+
+     let _tbody=_dialog.find(".vlans_list").empty();
+
+     if(_sel_id != undefined && _sel_id != "") {
+       let query={"action": "get_vlans", "vd_id": _sel_id};
+       run_query(query, function(ret_data) {
+         populate_vlans_table(_tbody, ret_data['ok'], _opt);
+       });
+     } else { 
+       _tbody.append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете домен") ) );
+     };
+
+   })
   ;
 
   let head_row=$(DIV)
@@ -523,6 +577,36 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
            _sel.val(ret_data['vd_id']).trigger("change");
          })
        })
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button").addClass("vdomain_edit_btn")
+       .css({"margin-left": "0.5em", "color": color_table_buttons})
+       .click(function() {
+         let _sel=$(this).closest(".dialog_start").find(".domain_sel");
+         let prev_row=_sel.find("OPTION:selected");
+         if(_sel.val() == "") return;
+         if(_sel.val() != prev_row.val() ) { error_at(); return; };
+         vdomain_edit(prev_row.val(), {}, function(ret_data) {
+           let row=vdomain_row(ret_data);
+           prev_row.replaceWith(row);
+           _sel.val(ret_data['vd_id']);
+           _sel.title(ret_data['vd_descr']);
+         })
+       })
+       .hide()
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button").addClass("vdomain_delete_btn")
+       .css({"margin-left": "0.5em", "color": "coral"})
+       .click(function() {
+         let _sel=$(this).closest(".dialog_start").find(".domain_sel");
+         let prev_row=_sel.find("OPTION:selected");
+         if(_sel.val() == "") return;
+         if(_sel.val() != prev_row.val() ) { error_at(); return; };
+         run_query({"action": "delete_vdomain", "vd_id": prev_row.val()}, function(ret_data) {
+           prev_row.remove();
+           _sel.val("").trigger("change");
+         })
+       })
+       .hide()
      )
     ;
   };
@@ -553,6 +637,15 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   };
 
   run_query(query, function(ret_data) {
+    ret_data['ok']['vds'].sort(function(a, b) {
+      return String(a['vd_name']).localeCompare(String(b['vd_name']));
+    });
+    for(let i=0; i < ret_data['ok']['vds'].length; i++) {
+      domain_sel.append( vdomain_row(ret_data['ok']['vds'][i]) );
+    };
+    if(presel_vlan_id != undefined) {
+      domain_sel.val(ret_data['ok']['select_vd_id']).trigger("change");
+    };
   });
 
   dialog.dialog(d);

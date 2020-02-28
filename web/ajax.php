@@ -977,7 +977,7 @@ if($q['action'] == 'v4get_net') {
 } else if($q['action'] == 'get_vdomains') {
   optional_p('focus_on_vlan_id', "/^\d+$/");
 
-  $query="SELECT * FROM vds";
+  $query="SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds";
 
   $ret=Array();
   $vds=return_query($query);
@@ -999,30 +999,38 @@ if($q['action'] == 'v4get_net') {
 } else if($q['action'] == 'get_vdomain') {
   require_p('vd_id', "/^\d+$/");
 
-  $query="SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']);
+  $query="SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']);
+  $vdomain=return_one($query, TRUE);
 
-  return_one($query, TRUE);
+  if(!has_right(R_VIEWANY)) {
+    $vdomain['vd_name']=substr($vdomain['vd_name'], 0, 1)."...";
+    $vdomain['vd_descr']='hidden';
+  };
+
+  ok_exit($vdomain);
 } else if($q['action'] == 'edit_vdomain') {
   require_right(R_SUPER);
   require_p('vd_id', "/^\d+$/");
+  require_p('vd_max_num', "/^\d+$/");
   require_p('vd_name', "/^\S(?:.*\S)?$/");
   require_p('vd_descr');
 
   trans_start();
 
-  $prev_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+  $prev_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
   $query="UPDATE vds SET";
   $query .= " $set_fk_user_id";
   $query .= ",ts=$time";
   $query .= ",vd_name=".mq($q['vd_name']);
+  $query .= ",vd_max_num=".mq($q['vd_max_num']);
   $query .= ",vd_descr=".mq($q['vd_descr']);
   $query .= ",vd_check=vd_check+1";
   $query .= " WHERE vd_id=".mq($q['vd_id']);
 
   run_query($query);
 
-  $new_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+  $new_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
 
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
@@ -1030,6 +1038,7 @@ if($q['action'] == 'v4get_net') {
   ok_exit($new_row);
 } else if($q['action'] == 'add_vdomain') {
   require_right(R_SUPER);
+  require_p('vd_max_num', "/^\d+$/");
   require_p('vd_name', "/^\S(?:.*\S)?$/");
   require_p('vd_descr');
 
@@ -1041,6 +1050,7 @@ if($q['action'] == 'v4get_net') {
   $query .= " $set_fk_user_id";
   $query .= ",ts=$time";
   $query .= ",vd_name=".mq($q['vd_name']);
+  $query .= ",vd_max_num=".mq($q['vd_max_num']);
   $query .= ",vd_descr=".mq($q['vd_descr']);
   $query .= ",vd_check=vd_check+1";
 
@@ -1049,7 +1059,7 @@ if($q['action'] == 'v4get_net') {
   $q['vd_id']=mysqli_insert_id($db);
   if( $q['vd_id'] == 0 ) { error_exit("Bad insert id"); };
 
-  $new_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+  $new_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
 
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
@@ -1061,7 +1071,7 @@ if($q['action'] == 'v4get_net') {
 
   trans_start();
 
-  $prev_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+  $prev_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
   $query="DELETE FROM vds WHERE vd_id=".mq($q['vd_id']);
   run_query($query);
@@ -1071,6 +1081,44 @@ if($q['action'] == 'v4get_net') {
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'get_vlans') {
+  require_p('vd_id', "/^\d+$/");
+
+  $vdomain=return_one("SELECT vds.* FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+  if(!has_right(R_VIEWANY)) {
+    $vdomain['vd_name']=substr($vdomain['vd_name'], 0, 1)."...";
+    $vdomain['vd_descr']='hidden';
+  };
+
+  $query="SELECT vrs.*, (SELECT BIT_OR(gvrr_rmask) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id AND gvrr_fk_group_id IN ($groups)) as rmask";
+  $query .=" FROM vrs";
+  $query .=" WHERE vr_fk_vd_id=".mq($q['vd_id']);
+
+  $vrs=return_query($query);
+
+  foreach($vrs as $key => $val) {
+    if(!has_nright($val['rmask'], NR_VIEWNAME) { $vrs[$key]['vr_name'] = 'hidden';  $vrs[$key]['vr_descr'] = 'hidden'; };
+    if(!has_nright($val['rmask'], NR_VIEWOTHER) { $vrs[$key]['vr_descr'] = 'hidden'; };
+  };
+
+  $query="SELECT vlans.*";
+  $query .=" FROM vlans WHERE vlan_fk_vd_id=".mq($q['vd_id']);
+  $vlans=return_query($query);
+
+  foreach($vlans as $i => $v) {
+    $vlan_num=$v['vlan_number'];
+
+    $effective_rmask = 0;
+
+    foreach($vrs as $vrange) {
+      if($vrange['vr_start'] <= $vlan_num && $vrange['vr_stop'] >= $vlan_num && $vrange['rmask'] !== NULL) { $effective_rmask = $effective_rmask | $vrange['rmask']; };
+    };
+
+    if(!has_nright($effective_rmask, NR_VIEWNAME) { $vlans[$i]['vlan_name'] = 'hidden';  $vlans[$i]['vlan_descr'] = 'hidden'; };
+    if(!has_nright($effective_rmask, NR_VIEWOTHER) { $vlans[$i]['vlan_descr'] = 'hidden'; };
+
+  };
+
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
