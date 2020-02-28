@@ -974,6 +974,28 @@ if($q['action'] == 'v4get_net') {
   audit_log("group", $q['group_id'], "groups,ugs", $q['action'], $prev_row, []);
 
   ok_exit("done");
+} else if($q['action'] == 'get_vdomains') {
+  optional_p('focus_on_vlan_id', "/^\d+$/");
+
+  $query="SELECT * FROM vds";
+
+  $ret=Array();
+  $vds=return_query($query);
+
+  if(!has_right(R_VIEWANY)) {
+    foreach($vds as $key => $val) {
+      $vds[$key]['vd_name']=substr($vds[$key]['vd_name'], 0, 1)."...";
+      $vds[$key]['vd_descr']='hidden';
+    };
+  };
+
+  $ret['vds']=$vds;
+
+  if(isset($q['focus_on_vlan_id'])) {
+    $ret['select_vd_id']=return_only("SELECT vlan_fk_vd_id WHERE vlan_id=".mq($q['focus_on_vlan_id']), TRUE, "VLAN не существует");
+  };
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

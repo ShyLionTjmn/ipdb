@@ -395,12 +395,24 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
    .append( $(OPTION).text("Выберете домен ...").val("") )
   ;
 
-  dialog
-   .append( $(DIV)
-     .append( $(LABEL).text("Домен: ") )
-     .append( domain_sel )
-   )
+  let head_row=$(DIV)
+   .append( $(LABEL).text("Домен: ") )
+   .append( domain_sel )
   ;
+
+  if(has_right(R_SUPER)) {
+    head_row
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .css({"margin-left": "0.5em", "color": color_table_buttons})
+       .click(function() {
+         vdomain_edit(undefined, {}, function(ret_data) {
+         })
+       })
+     )
+    ;
+  };
+
+  dialog.append( head_row );
 
   let table=$(TABLE).addClass("vlans_table")
    .append( $(THEAD)
@@ -420,6 +432,13 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
    .appendTo( table )
   ;
 
+  let query={"action": "get_vdomains"};
+  if(presel_vlan_id != undefined) {
+    query['focus_on_vlan_id']=presel_vlan_id;
+  };
+
+  run_query(query, function(ret_data) {
+  });
 
   dialog.dialog(d);
 };
@@ -3077,6 +3096,11 @@ $( document ).ready(function() {
   window.onpopstate=function(e) {
     $R=e.state;
     process_R();
+  };
+
+  window.onerror = function AllErrorsHandler(errorMsg, url, lineNumber) {
+    alert("Error occured: " + errorMsg + "\nIn: "+url+"\nAt: "+ lineNumber);//or any message
+    return false;
   };
 
   page_root=window.location.href.split("?")[0];
