@@ -354,6 +354,64 @@ function user_state_elm(user) {
 };
 
 function populate_vlans_table(tbody, data, opt) {
+  let vlans=data['vlans'];
+  let vd=data['vd'];
+  let vrs=data['vrs'];
+
+  let max_vlan=Number(vd['vd_max_num']);
+  if(vlans.length > 0 && Number(data['vlans_stop']) > max_vlan) {
+    max_vlan=Number(data['vlans_stop']);
+  };
+
+  let vlans_display={};
+
+  for(let i in vrs) {
+    let rstart=Number(vrs[i]['vr_start']);
+    let rstop=Number(vrs[i]['vr_stop']);
+    if(vlans_display[rstart] == undefined) {
+      vlans_display[rstart] = {'range_start': {}, 'range_stop': {}, 'range_start_stop': {}, 'vlan': undefined};
+    };
+    if(vlans_display[rstop] == undefined) {
+      vlans_display[rstop] = {'range_start': {}, 'range_stop': {}, 'range_start_stop': {}, 'vlan': undefined};
+    };
+    if(rstart != rstop) {
+      vlans_display[rstart]['range_start'][i] = true;
+      vlans_display[rstop]['range_stop'][i] = true;
+    } else {
+      vlans_display[rstart]['range_start_stop'][i] = true;
+    };
+  };
+
+  for(let i in vlans) {
+    let vlan=vlans[i];
+    let vlan_num=Number(vlan['vlan_number']);
+    if(vlans_display[vlan_num] == undefined) {
+      vlans_display[vlan_num] = {'range_start': {}, 'range_stop': {}, 'range_start_stop': {}, 'vlan': i};
+    } else {
+      vlans_display[vlan_num]['vlan'] = i;
+    };
+  };
+
+  let vlan_keys=keys(vlans_display);
+  vlan_keys.sort(function(a,b) { return Number(vlan_keys[a]) - Number(vlan_keys[b]); });
+
+  let prev_vlan=undefined;
+
+  for(let i=0; i < vlan_keys.length; i++) {
+    let vlan_key=vlan_keys[i];
+    let vlan_number=Number(vlan_key);
+
+    tbody
+     .append( $(TR)
+       .append( $(TD)
+         .text(vlan_number)
+       )
+       .append( $(TD)
+         .text(jstr(vlans_display[vlan_key]))
+       )
+     )
+    ;
+  };
 };
 
 function vdomain_row(vdomain) {

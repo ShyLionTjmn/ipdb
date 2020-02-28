@@ -1094,19 +1094,31 @@ if($q['action'] == 'v4get_net') {
   $query .=" FROM vrs";
   $query .=" WHERE vr_fk_vd_id=".mq($q['vd_id']);
 
-  $vrs=return_query($query);
+  $vrs=return_query($query, 'vr_id');
 
   foreach($vrs as $key => $val) {
-    if(!has_nright($val['rmask'], NR_VIEWNAME) { $vrs[$key]['vr_name'] = 'hidden';  $vrs[$key]['vr_descr'] = 'hidden'; };
-    if(!has_nright($val['rmask'], NR_VIEWOTHER) { $vrs[$key]['vr_descr'] = 'hidden'; };
+    if(!has_nright($val['rmask'], NR_VIEWNAME)) { $vrs[$key]['vr_name'] = 'hidden';  $vrs[$key]['vr_descr'] = 'hidden'; };
+    if(!has_nright($val['rmask'], NR_VIEWOTHER)) { $vrs[$key]['vr_descr'] = 'hidden'; };
   };
 
   $query="SELECT vlans.*";
-  $query .=" FROM vlans WHERE vlan_fk_vd_id=".mq($q['vd_id']);
-  $vlans=return_query($query);
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(v4net_id,':',v4net_addr,'/',v4net_mask)) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id GROUP BY v4net_fk_vlan_id ORDER BY v4net_addr) as v4nets";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(v6net_id,':',HEX(v6net_addr),'/',v6net_mask)) FROM v6nets WHERE v6net_fk_vlan_id=vlan_id GROUP BY v6net_fk_vlan_id ORDER BY v6net_addr) as v6nets";
+  $query .= " FROM vlans WHERE vlan_fk_vd_id=".mq($q['vd_id']);
+  $query .= " ORDER BY vlan_number";
+  $vlans=return_query($query, 'vlan_number');
+
 
   foreach($vlans as $i => $v) {
     $vlan_num=$v['vlan_number'];
+
+    if(!isset($min_vlan) || $vlan_num < $min_vlan) {
+      $min_vlan=$vlan_num;
+    };
+
+    if(!isset($max_vlan) || $vlan_num > $max_vlan) {
+      $max_vlan=$vlan_num;
+    };
 
     $effective_rmask = 0;
 
@@ -1114,11 +1126,22 @@ if($q['action'] == 'v4get_net') {
       if($vrange['vr_start'] <= $vlan_num && $vrange['vr_stop'] >= $vlan_num && $vrange['rmask'] !== NULL) { $effective_rmask = $effective_rmask | $vrange['rmask']; };
     };
 
-    if(!has_nright($effective_rmask, NR_VIEWNAME) { $vlans[$i]['vlan_name'] = 'hidden';  $vlans[$i]['vlan_descr'] = 'hidden'; };
-    if(!has_nright($effective_rmask, NR_VIEWOTHER) { $vlans[$i]['vlan_descr'] = 'hidden'; };
+    if(!has_nright($effective_rmask, NR_VIEWNAME)) { $vlans[$i]['vlan_name'] = 'hidden';  $vlans[$i]['vlan_descr'] = 'hidden'; };
+    if(!has_nright($effective_rmask, NR_VIEWOTHER)) { $vlans[$i]['vlan_descr'] = 'hidden'; };
 
   };
 
+  $ret=Array();
+  $ret['vd']=$vdomain;
+  $ret['vrs']=$vrs;
+  $ret['vlans']=$vlans;
+
+  if(count($vlans) > 0) {
+    $ret['vlans_start']=$min_vlan;
+    $ret['vlans_stop']=$max_vlan;
+  };
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
