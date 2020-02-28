@@ -996,6 +996,81 @@ if($q['action'] == 'v4get_net') {
   };
 
   ok_exit($ret);
+} else if($q['action'] == 'get_vdomain') {
+  require_p('vd_id', "/^\d+$/");
+
+  $query="SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']);
+
+  return_one($query, TRUE);
+} else if($q['action'] == 'edit_vdomain') {
+  require_right(R_SUPER);
+  require_p('vd_id', "/^\d+$/");
+  require_p('vd_name', "/^\S(?:.*\S)?$/");
+  require_p('vd_descr');
+
+  trans_start();
+
+  $prev_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+
+  $query="UPDATE vds SET";
+  $query .= " $set_fk_user_id";
+  $query .= ",ts=$time";
+  $query .= ",vd_name=".mq($q['vd_name']);
+  $query .= ",vd_descr=".mq($q['vd_descr']);
+  $query .= ",vd_check=vd_check+1";
+  $query .= " WHERE vd_id=".mq($q['vd_id']);
+
+  run_query($query);
+
+  $new_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+
+
+  audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
+} else if($q['action'] == 'add_vdomain') {
+  require_right(R_SUPER);
+  require_p('vd_name', "/^\S(?:.*\S)?$/");
+  require_p('vd_descr');
+
+  trans_start();
+
+  $prev_row=[];
+
+  $query="INSERT INTO vds SET";
+  $query .= " $set_fk_user_id";
+  $query .= ",ts=$time";
+  $query .= ",vd_name=".mq($q['vd_name']);
+  $query .= ",vd_descr=".mq($q['vd_descr']);
+  $query .= ",vd_check=vd_check+1";
+
+  run_query($query);
+
+  $q['vd_id']=mysqli_insert_id($db);
+  if( $q['vd_id'] == 0 ) { error_exit("Bad insert id"); };
+
+  $new_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+
+
+  audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
+} else if($q['action'] == 'delete_vdomain') {
+  require_right(R_SUPER);
+  require_p('vd_id', "/^\d+$/");
+
+  trans_start();
+
+  $prev_row=return_one("SELECT * FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
+
+  $query="DELETE FROM vds WHERE vd_id=".mq($q['vd_id']);
+  run_query($query);
+
+  $new_row=[];
+
+  audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
