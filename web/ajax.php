@@ -12,6 +12,8 @@ require("myphplib.php");
 $dt=new DateTime();
 $time=$dt->getTimestamp();
 
+$ajax_start=microtime(TRUE);
+
 $IPDB_CHARSET="utf8mb4";
 
 header("Cache-Control: no-cache, no-store, must-revalidate");
@@ -101,8 +103,10 @@ function error_exit($redtext) {
 function ok_exit($redtext) {
   close_db();
   global $curl;
+  global $ajax_start;
   if(isset($curl) && $curl !== FALSE) { curl_close($curl); };
-  echo JSON_encode(array("ok" => $redtext));
+  $ajax_time = microtime(TRUE) - $ajax_start;
+  echo JSON_encode(array("ok" => $redtext, "_time" => round($ajax_time, 6)));
   exit;
 };
 

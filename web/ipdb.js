@@ -598,7 +598,8 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
 
   let d={
     modal:true,
-    maxHeight:1000,
+    position: { my: "center top", at: "center top", of: window },
+    maxHeight:800,
     //maxWidth:1200,
     minWidth:1000,
     minHeight:600,

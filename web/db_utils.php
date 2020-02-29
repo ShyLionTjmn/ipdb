@@ -1,10 +1,18 @@
 <?php
+
+$DB_SAFE=TRUE;
+
 function run_query($query, $exit_on_error=TRUE, $dbc = NULL) {
+  global $DB_SAFE;
   if ($dbc == null) {
     global $db;
   } else {
     $db = $dbc;
-  }
+  };
+
+  if($DB_SAFE && preg_match("/^(?:update|delete)\b/i", $query) && !preg_match("/\bwhere\b/i", $query)) {
+    error_exit("Unsafe update/delete operation. Trace: ".trace()."\n".$query);
+  };
   $res=mysqli_query($db, $query);
   if(!isset($res) || $res === FALSE) {
     if($exit_on_error) {
@@ -46,8 +54,10 @@ function trace($depth=4) {
   if(!isset($bt) || count($bt) == 0) {
     return "NO TRACE";
   };
-  function _map($item) { return $item['line']; };
-  return join(">", array_map("_map", array_reverse($bt)));
+  function _map($item) {
+    return basename($item['file']).": ".$item['line'];
+  };
+  return join(" > ", array_map("_map", array_reverse($bt)));
 };
 
 function trans_start($dbc = NULL) {
