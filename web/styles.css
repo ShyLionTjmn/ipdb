@@ -13,3 +13,6 @@ TR.bg_colored:nth-child(odd)
 {
   background: #E0FFFF;
 }
+.wspre {
+  white-space: nowrap-pre;
+}

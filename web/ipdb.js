@@ -89,9 +89,6 @@ const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
 const s_ranges_spacing={"min-width": "1em", "display": "inline-block"};
 
-//const color_odd="#FFE0FF";
-//const color_even="#E0FFFF";
-
 //const color_taken="#EEEEEE";
 const color_taken="#FFFFCC";
 const color_table_buttons="rgb(79, 129, 189)";
@@ -3349,13 +3346,7 @@ function v4nav(data) {
     } else {
       hidden_count++;
     };
-/*
-    if(bg_count % 2) {
-      tr.css({"background-color": color_odd});
-    } else {
-      tr.css({"background-color": color_even});
-    };
-*/
+
     tr.addClass("bg_colored");
     tr.appendTo(tbody);
   };
@@ -3578,6 +3569,7 @@ $( document ).ready(function() {
     return false;
   };
 
+  $(document).tooltip({classes: { "ui-tooltip": "wspre"}});
   page_root=window.location.href.split("?")[0];
   let qs=window.location.search.substring(1);
 
