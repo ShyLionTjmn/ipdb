@@ -397,8 +397,11 @@ function populate_vlans_table(tbody, data, opt) {
 
   let last_vlan=0;
 
+  let current_ranges={};
+
   for(let i=0; i < vlan_keys.length; i++) {
     let vlan_key=vlan_keys[i];
+    let vlan=vlans[vlan_key];
     let vlan_number=Number(vlan_key);
 
     if(vlan_number < 1) { error_at(); throw("Error"); };
@@ -408,46 +411,46 @@ function populate_vlans_table(tbody, data, opt) {
       let take_start=last_vlan + 1;
       let take_stop=vlan_number - 1;
 
-      tbody
-       .append( $(TR)
-         .append( $(TD)
-           .text( String(take_start) + " - " + String(take_stop) )
-         )
-         .append( $(TD)
-           .text("TAKE")
-         )
-       )
-      ;
+      let row=vlans_take_row(take_start, take_stop);
+      row.append( vlans_ranges_td(vrs, current_ranges) );
+      tbody.append( row );
     };
 
-    tbody
-     .append( $(TR)
-       .append( $(TD)
-         .text(vlan_number)
-       )
-       .append( $(TD)
-         .text(JSON.stringify(vlans_display[vlan_key]))
-       )
-     )
-    ;
+    for(let r in vlans_display[vlan_key]["range_start"]) {
+      if(current_ranges[r] != undefined) { error_at(); throw("error"); };
+      current_ranges[r]=true;
+    };
+
+    let row;
+
+    if(vlans_display[vlan_key]["vlan"] != undefined) {
+      row=vlans_vlan_row(vlan);
+    } else {
+      row=vlans_take_row(vlan_number, vlan_number);
+    };
+
+    row.append( vlans_ranges_td(vrs, current_ranges, vlans_display[vlan_key] ));
+
+    tbody.append( row );
+
     last_vlan=vlan_number;
+
+    for(let r in vlans_display[vlan_key]["range_stop"]) {
+      if(current_ranges[r] == undefined) { error_at(); throw("error"); };
+      delete current_ranges[r];
+    };
   };
+
+  if(keys(current_ranges).length != 0 ) { error_at(); throw("error "+jstr(current_ranges)); };
 
   if(last_vlan  < max_vlan) {
     //we have to add TAKE row at the end
     let take_start=last_vlan + 1;
     let take_stop=max_vlan;
 
-    tbody
-     .append( $(TR)
-       .append( $(TD)
-         .text( String(take_start) + " - " + String(take_stop) )
-       )
-       .append( $(TD)
-         .text("TAKE")
-       )
-     )
-    ;
+    let row=vlans_take_row(take_start, take_stop);
+    row.append( vlans_ranges_td(vrs, current_ranges) );
+    tbody.append( row );
   };
 
 };
@@ -599,10 +602,10 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   let d={
     modal:true,
     position: { my: "center top", at: "center top", of: window },
-    maxHeight:800,
+    maxHeight: $(window).height(),
     //maxWidth:1200,
     minWidth:1000,
-    minHeight:600,
+    minHeight: $(window).height()-10,
     //width: "auto",
     buttons: [],
     close: function() {
@@ -658,6 +661,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   ;
 
   let head_row=$(DIV)
+   .css({"position": "absolute", "top": "1em", "left": "1em", "right": "1em"})
    .append( $(LABEL).text("Домен: ") )
    .append( domain_sel )
   ;
@@ -715,17 +719,33 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
 
   dialog.append( head_row );
 
+  let table_div=$(DIV)
+   .css({"position": "absolute", "top": "3em", "left": "1em", "right": "1em", "bottom": "1em", "overflow-y": "scroll"})
+  ;
+
+  dialog.append( table_div );
+
   let table=$(TABLE).addClass("vlans_table")
    .append( $(THEAD)
-     .append( $(TR)
-       .append( $(TH).text("VLAN/BD") )
-       .append( $(TH).text("Краткое имя") )
-       .append( $(TH).text("Описание") )
-       .append( $(TH) ) //for buttons
-       .append( $(TH) ) //for ranges
+     .append( $(TR).css({"position": "relative"})
+       .append( $(TH).text("VLAN/BD")
+         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+       )
+       .append( $(TH).text("Краткое имя")
+         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+       )
+       .append( $(TH).text("Описание")
+         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+       )
+       .append( $(TH)
+         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+       ) //for buttons
+       .append( $(TH)
+         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+       ) //for ranges
      )
    )
-   .appendTo( dialog )
+   .appendTo( table_div )
   ;
 
   let tbody=$(TBODY).addClass("vlans_list")
