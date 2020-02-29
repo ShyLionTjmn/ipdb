@@ -89,8 +89,8 @@ const s_blocks_border_color={"border-color": "rgb(79, 129, 189)"};
 const s_blocks_color={"color": "rgb(79, 129, 189)"};
 const s_ranges_spacing={"min-width": "1em", "display": "inline-block"};
 
-const color_odd="#FFE0FF";
-const color_even="#E0FFFF";
+//const color_odd="#FFE0FF";
+//const color_even="#E0FFFF";
 
 //const color_taken="#EEEEEE";
 const color_taken="#FFFFCC";
@@ -229,6 +229,12 @@ function has_right(right, rightstr) {
   };
 };
 
+function has_nright(rmask, right) {
+  if(has_right(R_SUPER)) return true;
+  if((right === NR_VIEWNAME || right === NR_VIEWOTHER) && has_right(R_VIEWANY)) return true;
+  return ((rmask & right) >>> 0) > 0;
+};
+
 function v4long2ip(net) {
   let o=ip4octets(net);
   return o[0]+"."+o[1]+"."+o[2]+"."+o[3];
@@ -353,7 +359,135 @@ function user_state_elm(user) {
   return $(LABEL).addClass("ui-icon").addClass(state_icon).css({"color": state_color}).title(state_text).data("text", state_text);
 };
 
-function populate_vlans_table(tbody, data, opt) {
+function take_vlan() {
+};
+
+function vlans_take_row(vlan_start, vlan_stop, rmask) {
+  let ret=$(TR).addClass("bg_colored");
+
+  let take_td=$(TD).prop("colspan", 3);
+
+  if(has_nright(rmask, NR_TAKE_IP)) {
+
+    if(vlan_stop != vlan_start) {
+      take_td
+       .append( $(LABEL).text("Занять один из: ")
+         .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
+       )
+      ;
+    } else {
+      take_td
+       .append( $(LABEL).text("Занять: ")
+         .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
+       )
+      ;
+    };
+
+    take_td
+     .append( $(LABEL).text(vlan_start)
+       .addClass("ui-button")
+       .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
+       .data("vlan", vlan_start)
+       .click(function() {
+         take_vlan.call(this);
+       })
+     )
+    ;
+
+    if(vlan_stop != vlan_start) {
+      take_td
+       .append( $(LABEL).text(" - ") )
+       .append( $(LABEL).text(vlan_stop)
+         .addClass("ui-button")
+         .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
+         .data("vlan", vlan_stop)
+         .click(function() {
+           take_vlan.call(this);
+         })
+       )
+      ;
+    };
+
+    if(vlan_stop > (vlan_start + 1)) {
+      take_td
+       .append( $(LABEL).text(" - ") )
+       .append( $(INPUT).css({"width": "4em"}).prop({"placeholder": "xxxx"}).addClass("any_vlan") )
+       .append( $(LABEL).text("Занять произвольный")
+         .addClass("ui-button")
+         .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
+         .data("vlan", "from_input")
+         .click(function() {
+           take_vlan.call(this);
+         })
+       )
+      ;
+    };
+
+  } else {
+    take_td.text("У вас недостаточно прав занимать VLAN в этом диапазоне");
+  };
+
+  ret.append( take_td );
+
+  ret.append( $(TD) );
+
+  return ret;
+};
+
+function vlans_vlan_row(vlan, rmask) {
+  let ret=$(TR).addClass("bg_colored");
+  ret.append( $(TD).text(vlan['vlan_number']) );
+  ret.append( $(TD).text(vlan['vlan_name']) );
+  ret.append( $(TD).text(vlan['vlan_descr']) );
+  ret
+   .append( $(TD)
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+       .click(function() {
+       })
+     )
+   )
+  ;
+
+  return ret;
+};
+
+function vr_info() {
+};
+
+function vlans_ranges_td(vrs, current_ranges, vlans_display) {
+  let ret=$(TD).css({"white-space": "pre"});
+
+  for(let r in vrs) {
+    let label=$(LABEL).css({"display": "inline-block", "width": "1em"});
+    if(current_ranges[r] != undefined) {
+      if(vlans_display != undefined && vlans_display['range_start'][r] != undefined) {
+        label.html("&#x2533;");
+      } else if(vlans_display != undefined && vlans_display['range_stop'][r] != undefined) {
+        label.html("&#x253B;");
+      } else if(vlans_display != undefined && vlans_display['range_start_stop'][r] != undefined) {
+        label.html("&#x25C0;");
+      } else {
+        label.html("&#x2503;");
+      };
+      try {
+        let vr_style=JSON.parse(vrs[r]['vr_style']);
+        label.css(vr_style);
+      } catch(e) {
+        //just ignore
+      };
+
+      label.data("data", vrs[r]);
+      label.title(vrs[r]['vr_name']);
+      label.click(function() {
+        vr_info.call(this);
+      });
+    };
+    label.appendTo( ret );
+  };
+  return ret;
+};
+
+function populate_vlans_table(tbody, data) {
   let vlans=data['vlans'];
   let vd=data['vd'];
   let vrs=data['vrs'];
@@ -411,7 +545,12 @@ function populate_vlans_table(tbody, data, opt) {
       let take_start=last_vlan + 1;
       let take_stop=vlan_number - 1;
 
-      let row=vlans_take_row(take_start, take_stop);
+      let take_effective_rmask = 0;
+      for(let r in current_ranges) {
+        take_effective_rmask = (take_effective_rmask | vrs[r]['rmask']) >>> 0;
+      };
+
+      let row=vlans_take_row(take_start, take_stop, take_effective_rmask);
       row.append( vlans_ranges_td(vrs, current_ranges) );
       tbody.append( row );
     };
@@ -423,10 +562,15 @@ function populate_vlans_table(tbody, data, opt) {
 
     let row;
 
+    let vlan_effective_rmask = 0;
+    for(let r in current_ranges) {
+      vlan_effective_rmask = (vlan_effective_rmask | vrs[r]['rmask']) >>> 0;
+    };
+
     if(vlans_display[vlan_key]["vlan"] != undefined) {
-      row=vlans_vlan_row(vlan);
+      row=vlans_vlan_row(vlan, vlan_effective_rmask);
     } else {
-      row=vlans_take_row(vlan_number, vlan_number);
+      row=vlans_take_row(vlan_number, vlan_number, vlan_effective_rmask);
     };
 
     row.append( vlans_ranges_td(vrs, current_ranges, vlans_display[vlan_key] ));
@@ -448,7 +592,7 @@ function populate_vlans_table(tbody, data, opt) {
     let take_start=last_vlan + 1;
     let take_stop=max_vlan;
 
-    let row=vlans_take_row(take_start, take_stop);
+    let row=vlans_take_row(take_start, take_stop, 0);
     row.append( vlans_ranges_td(vrs, current_ranges) );
     tbody.append( row );
   };
@@ -3205,13 +3349,14 @@ function v4nav(data) {
     } else {
       hidden_count++;
     };
-
+/*
     if(bg_count % 2) {
       tr.css({"background-color": color_odd});
     } else {
       tr.css({"background-color": color_even});
     };
-
+*/
+    tr.addClass("bg_colored");
     tr.appendTo(tbody);
   };
 

@@ -5,3 +5,11 @@
 
   background: rgb(40, 40, 40) !important; /* This will make it darker */
 }
+TR.bg_colored:nth-child(even)
+{
+  background: #FFE0FF;
+}
+TR.bg_colored:nth-child(odd)
+{
+  background: #E0FFFF;
+}
