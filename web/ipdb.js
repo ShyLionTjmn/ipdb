@@ -6,6 +6,8 @@ var page_root;
 
 var _debug_opts=true;
 
+const INPUT_STOP_TIMER	= 500;
+
 const R_SUPER='r_super';
 const R_VIEWANY='r_viewany';
 
@@ -590,6 +592,7 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
   this.data("style", style);
   this.data("validate_func", validate_func);
   this.title("Нажмите сюда для изменения")
+  this.addClass("vlan_click_label")
   this.click(function(e) {
     let prev_val=$(this).text();
     let _prop_name=$(this).data("prop_name");
@@ -607,17 +610,47 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
     };
     input.val(prev_val);
 
-    input.inputStop(1000).on("input_stop", function() {
-      let _validate_func=$(this).data("validate_func");
-      let _value=$(this).val();
-      let _prop_name=$(this).data("prop_name");
-      if(_validate_func != undefined) {
-        if(!_validate_func(_value, _prop_name)) {
-          $(this).css({"background-color": "pink"}).animateHighlight();
-          return;
-        };
-      };
-    });
+    input
+     .inputStop(INPUT_STOP_TIMER, function(e) {
+       //tab keydown function
+       let this_td=$(this).parent();
+       let next_td;
+       if(e.shiftKey) {
+         next_td=this_td.prev();
+       } else {
+         next_td=this_td.next();
+       };
+       if(next_td.find(".vlan_click_label").length == 1) {
+         next_td.find(".vlan_click_label").trigger("click");
+       } else if(next_td.find(".vlan_click_edit").length == 1) {
+         next_td.find(".vlan_click_edit").focus();
+       };
+       return false;
+     })
+     .on("input_stop", function() {
+       let _this=$(this);
+       let _validate_func=$(this).data("validate_func");
+       let _value=$(this).val();
+       let _prop_name=$(this).data("prop_name");
+       if(_validate_func != undefined) {
+         if(!_validate_func(_value, _prop_name)) {
+           $(this).css({"background-color": "pink"}).animateHighlight();
+           return;
+         };
+       };
+       $(this).css({"background-color": "yellow"});
+
+       let vlan_id=$(this).closest(".vlan_row").data("data")['vlan_id'];
+
+       let query={"action": "set_vlan_prop", "prop_name": _prop_name, "value": _value, "vlan_id": vlan_id};
+       run_query(query, function() {
+         _this.css({"background-color": "palegreen"});
+         _this.closest(".vlan_row").find(".undo_btn").show();
+         _this.closest(".vlan_row").find(".undo_btn_placeholder").hide();
+       });
+
+     })
+    ;
 
     $(this).replaceWith( input );
     if(! e.ctrlKey ) {
@@ -871,7 +904,6 @@ function vdomain_row(vdomain) {
   return $(OPTION)
    .data("data", vdomain)
    .text(vdomain['vd_name'])
-   .title(vdomain['vd_descr'])
    .val(vdomain['vd_id'])
   ;
 };
@@ -1035,7 +1067,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   d['buttons'].push({ "text": has_right(R_SUPER)?"Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
 
   let domain_sel=$(SELECT).addClass("domain_sel")
-   .title("Выберете домен ...")
+   .title("")
    .append( $(OPTION).text("Выберете домен ...").val("") )
    .on("change select", function() {
      let _dialog=$(this).closest(".dialog_start");
@@ -1055,7 +1087,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
      } else {
        _dialog.find(".vdomain_edit_btn").hide();
        _dialog.find(".vdomain_delete_btn").hide();
-       _sel.title("Выберете домен ...");
+       _sel.title("");
      };
 
      let _tbody=_dialog.find(".vlans_list").empty().data("vd_id", _sel_id);

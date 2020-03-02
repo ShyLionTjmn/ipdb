@@ -43,23 +43,44 @@ $.fn.enterKey = function (fnc) {
 };
 
 // triggers input_stop event on input stop after timeout
-$.fn.inputStop = function (timeout) {
+$.fn.inputStop = function (timeout, tabdown_func) {
   $(this)
    .data("input_stop_timeout", timeout)
+   .data("tabdown_func", tabdown_func)
    .on("input", function() {
+//console.log("input");
      let t=$(this).data("input_stop_timer");
-     if(t !== undefined) clearTimeout(t);
+     if(t !== undefined) {
+//console.log("Kill timer on input");
+       clearTimeout(t);
+     };
      let to=$(this).data("input_stop_timeout");
 
      let th=$(this);
-     $(this).data("input_stop_timer", setTimeout(function() {
+     let timer=setTimeout(function() {
+//console.log("Timer fired");
        th.data("input_stop_timer", undefined);
        th.trigger("input_stop");
-     }, to));
+     }, to);
+     $(this).data("input_stop_timer", timer);
+     $(this).css({"background-color": "palegoldenrod"});
+//console.log("Timer set on input");
    })
-   .on("keydown", function() {
+   .on("keydown", function(e) {
+//console.log("keydown");
+     if((e.keyCode || e.which) == '9') {
+       let _tabdown_func=$(this).data("tabdown_func");
+       if(_tabdown_func != undefined) {
+         _tabdown_func.call(this, e);
+         return false;
+       };
+       return;
+     };
      let t=$(this).data("input_stop_timer");
-     if(t !== undefined) clearTimeout(t);
+     if(t !== undefined) {
+//console.log("Kill timer no keydown");
+       clearTimeout(t);
+     };
    })
   ;
   return $(this);
