@@ -49,6 +49,8 @@ $.fn.inputStop = function (timeout, tabdown_func) {
    .data("tabdown_func", tabdown_func)
    .on("input", function() {
 //console.log("input");
+     $(this).addClass("unsaved");
+     $(this).removeClass("saved");
      let t=$(this).data("input_stop_timer");
      if(t !== undefined) {
 //console.log("Kill timer on input");

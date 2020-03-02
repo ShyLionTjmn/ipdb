@@ -516,7 +516,26 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
    .data("rmask", Number(rmask))
   ;
 
-  let take_td=$(TD).prop("colspan", 3);
+  let take_td=$(TD).prop("colspan", 3)
+   .css({"position": "relative", "padding": "0.2em 0.5em"})
+  ;
+
+  if(has_right(R_SUPER)) {
+    take_td
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-caret-1-nw")
+       .addClass("ui-button")
+       .addClass("vlan_range_btn")
+       .css({"position": "absolute", "top": 0, "left": 0, "font-size": "49%"})
+       //.hide()
+       .data("range_start", vlan_start)
+       .title("Установить начало диапазона: "+vlan_start)
+       .click(function() {
+          let _vlan=$(this).data("range_start");
+          $("INPUT#vlan_range_start").val(_vlan).trigger("input");
+       })
+     )
+    ;
+  };
 
   if(has_nright(rmask, NR_TAKE_VLAN)) {
 
@@ -588,6 +607,23 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
     ;
   };
 
+  if(has_right(R_SUPER)) {
+    take_td
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-caret-1-se")
+       .addClass("ui-button")
+       .addClass("vlan_range_btn")
+       .css({"position": "absolute", "bottom": 0, "right": 0, "font-size": "49%"})
+       //.hide()
+       .data("range_stop", vlan_stop)
+       .title("Установить окончание диапазона: "+vlan_stop)
+       .click(function() {
+          let _vlan=$(this).data("range_stop");
+          $("INPUT#vlan_range_stop").val(_vlan).trigger("input");
+       })
+     )
+    ;
+  };
+
   ret.append( take_td );
 
   ret.append( $(TD) );
@@ -639,7 +675,11 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
        if(!VLANS_AUTOSAVE) {
          return;
        };
+       $(this).trigger("save");
+     })
+     .on("save", function() {
        let _this=$(this);
+       _this.addClass("saving");
        let _validate_func=$(this).data("validate_func");
        let _value=$(this).val();
        let _prop_name=$(this).data("prop_name");
@@ -658,12 +698,19 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
          _this.css({"background-color": "palegreen"});
          _this.closest(".vlan_row").find(".undo_btn").show();
          _this.closest(".vlan_row").find(".undo_btn_placeholder").hide();
+         _this.removeClass("unsaved");
+         _this.removeClass("saving")
+         _this.addClass("saved");
        });
 
      })
     ;
 
+    $(this).closest(".vlan_row").find(".save_btn_paceholder").hide();
+    $(this).closest(".vlan_row").find(".save_btn").show();
+
     $(this).replaceWith( input );
+
     if(! e.ctrlKey ) {
       input.focus();
     };
@@ -679,7 +726,31 @@ function vlans_vlan_row(vlan, rmask) {
    .data("data", vlan)
    .data("rmask", rmask)
   ;
-  ret.append( $(TD).text(vlan['vlan_number']) );
+
+  let num_td=$(TD)
+   .css({"position": "relative", "padding-left": "0.9em"})
+  ;
+
+  if(has_right(R_SUPER)) {
+    num_td
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-caret-1-nw")
+       .addClass("ui-button")
+       .addClass("vlan_range_btn")
+       .css({"position": "absolute", "top": 0, "left": 0, "font-size": "49%"})
+       //.hide()
+       .data("range_start", vlan['vlan_number'])
+       .title("Установить начало диапазона: "+vlan['vlan_number'])
+       .click(function() {
+          let _vlan=$(this).data("range_start");
+          $("INPUT#vlan_range_start").val(_vlan).trigger("input");
+       })
+     )
+    ;
+  };
+  num_td.append( $(SPAN).text(vlan['vlan_number']) );
+
+  ret.append( num_td );
+
   ret
    .append( $(TD).css({"padding-top": "3px", "vertical-align": "top"})
      .append( $(LABEL)
@@ -694,7 +765,7 @@ function vlans_vlan_row(vlan, rmask) {
   ;
 
   ret
-   .append( $(TD).css({"padding-top": "3px", "vertical-align": "top"})
+   .append( $(TD).css({"padding-top": "3px", "vertical-align": "top", "padding-right": "1em", "position": "relative"})
      .append( $(LABEL)
        .css({"background-color": "#EEEEEE", "border": "1px solid gray", "display": "inline-block", "min-width": "20em", "height": "1.2em"})
        .text(vlan['vlan_descr'])
@@ -704,6 +775,22 @@ function vlans_vlan_row(vlan, rmask) {
    )
   ;
 
+  if(has_right(R_SUPER)) {
+    ret.find(".vlan_descr").parent()
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-caret-1-se")
+       .addClass("ui-button")
+       .addClass("vlan_range_btn")
+       .css({"position": "absolute", "bottom": 0, "right": 0, "font-size": "49%"})
+       //.hide()
+       .data("range_stop", vlan['vlan_number'])
+       .title("Установить окончание диапазона: "+vlan['vlan_number'])
+       .click(function() {
+          let _vlan=$(this).data("range_stop");
+          $("INPUT#vlan_range_stop").val(_vlan).trigger("input");
+       })
+     )
+    ;
+  };
   let act_td=$(TD).appendTo( ret );
 
   if(has_nright(rmask, NR_EDIT_VLAN)) {
@@ -738,6 +825,19 @@ function vlans_vlan_row(vlan, rmask) {
          });
        })
      )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-blank")
+       .addClass("save_btn_placeholder")
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-disk").addClass("ui-button")
+       .addClass("save_btn")
+       .title("Сохранить изменения")
+       .css({"color": "green"})
+       .hide()
+       .click(function() {
+         let _row=$(this).closest(".vlan_row");
+         _row.find(".vlan_click_edit").trigger("save");
+       })
+     )
     ;
   };
 
@@ -769,6 +869,31 @@ function vlans_vlan_row(vlan, rmask) {
 };
 
 function vr_info() {
+  let vr_info=$("#vr_info");
+  if(vr_info.length == 0) {
+    vr_info=$(DIV).id("vr_info")
+     .css({"background-color": "white", "border": "1px solid gray", "padding": "0.5em", "white-space": "pre"})
+    ;
+
+    $(DIV).id("vr_info_parent")
+     .css({"display": "inline-block", "position": "fixed", "bottom": "1em", "right": "1em", "z-index": 1000})
+     .append( $(DIV)
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-close").addClass("ui-button")
+         .click(function() {
+           $("#vr_info_parent").remove();
+         })
+       )
+     )
+     .append( vr_info )
+     .appendTo("BODY")
+    ;
+  };
+
+  vr_info.empty();
+
+  let data=$(this).data("data");
+
+  vr_info.text(jstr(data));
 };
 
 function vlans_ranges_td(vrs, current_ranges, vlans_display) {
