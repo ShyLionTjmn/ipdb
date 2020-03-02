@@ -30,7 +30,10 @@ const NR_VIEWNAME	= 1 << 0;
 const NR_VIEWOTHER	= 1 << 1;
 const NR_TAKE_IP	= 1 << 2;
 const NR_EDIT_IP	= NR_TAKE_IP;
+const NR_TAKE_VLAN        = NR_TAKE_IP;
+const NR_EDIT_VLAN        = NR_TAKE_VLAN;
 const NR_FREE_IP	= 1 << 3;
+const NR_FREE_VLAN      = NR_FREE_IP;
 const NR_IGNORE		= 1 << 4;
 const NR_MAN_ACCESS	= 1 << 5;
 const NR_MAN_RANGES	= 1 << 6;
@@ -1146,6 +1149,25 @@ if($q['action'] == 'v4get_net') {
   };
 
   ok_exit($ret);
+} else if($q['action'] == 'take_vlan') {
+  require_p('vd_id', "/^\d+$/");
+  require_p('vlan_number', "/^\d+$/");
+
+  $query="SELECT vrs.vr_start,vrs.vr_stop, (SELECT BIT_OR(gvrr_rmask) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id AND gvrr_fk_group_id IN ($groups)) as rmask";
+  $query .=" FROM vrs";
+  $query .=" WHERE vr_fk_vd_id=".mq($q['vd_id']);
+  $query .=" AND vr_start <= ".mq($q['vlan_number']);
+  $query .=" AND vr_stop >= ".mq($q['vlan_number']);
+
+  $vrs=return_query($query);
+
+  $effective_rmask = 0;
+  foreach($vrs as $vr) {
+    $effective_rmask = $effective_rmask | $vr['rmask'];
+  };
+
+  
+
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
