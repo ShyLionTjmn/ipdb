@@ -6,6 +6,8 @@ var page_root;
 
 var _debug_opts=true;
 
+var VLANS_AUTOSAVE=true;
+
 const INPUT_STOP_TIMER	= 500;
 
 const R_SUPER='r_super';
@@ -372,7 +374,7 @@ function take_vlan() {
     vlan_number = input.val();
     if(vlan_number == undefined) { error_at(); throw("error"); };
     if(!String(vlan_number).match(/^\d+$/)) {
-      input.animateHighlight();
+      input.animateHighlight("red", 300);
       return;
     };
   };
@@ -390,7 +392,7 @@ function take_vlan() {
     if(input.length == 0) {
       error_at(); throw("error");
     };
-    input.focus().add( check_row ).animateHighlight();
+    input.focus().add( check_row ).animateHighlight("red", 300);
     return;
   }; 
 
@@ -518,23 +520,25 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
 
   if(has_nright(rmask, NR_TAKE_VLAN)) {
 
+/*
     if(vlan_stop != vlan_start) {
       take_td
-       .append( $(LABEL).text("Занять один из: ")
+       .append( $(LABEL).text("Занять:")
          .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
        )
       ;
     } else {
       take_td
-       .append( $(LABEL).text("Занять: ")
+       .append( $(LABEL).text("Занять:")
          .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
        )
       ;
     };
-
+*/
     take_td
      .append( $(LABEL).text(vlan_start)
        .addClass("ui-button")
+       .title("Занять VLAN "+vlan_start)
        .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
        .data("vlan", Number(vlan_start))
        .click( take_vlan )
@@ -546,6 +550,7 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
        .append( $(LABEL).text(" - ") )
        .append( $(LABEL).text(vlan_stop)
          .addClass("ui-button")
+         .title("Занять VLAN "+vlan_stop)
          .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
          .data("vlan", Number(vlan_stop))
          .click( take_vlan )
@@ -561,7 +566,10 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
            $(this).closest(".vlan_take_row").find(".take_btn").trigger("click");
          })
        )
-       .append( $(LABEL).text("Занять произвольный")
+       .append( $(LABEL)
+         //.text("Занять произвольный")
+         .addClass("ui-icon").addClass("ui-icon-plus")
+         .title("Занять произвольный")
          .addClass("take_btn")
          .addClass("ui-button")
          .css({"font-size": "initial", "padding": "0.1em 0.2em", "margin-left": "0.5em"})
@@ -628,6 +636,9 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
        return false;
      })
      .on("input_stop", function() {
+       if(!VLANS_AUTOSAVE) {
+         return;
+       };
        let _this=$(this);
        let _validate_func=$(this).data("validate_func");
        let _value=$(this).val();
@@ -674,6 +685,7 @@ function vlans_vlan_row(vlan, rmask) {
      .append( $(LABEL)
        .css({"background-color": "#EEEEEE", "border": "1px solid gray", "display": "inline-block", "min-width": "10em", "height": "1.2em"})
        .text(vlan['vlan_name'])
+       .addClass("vlan_name")
        .vlan_click_edit('vlan_name', {"min-width": "10em", "width": "10em"}, function(value, prop) {
          return String(value).match(/^[0-9a-zA-Z_]{1,64}$/);
        })
@@ -686,6 +698,7 @@ function vlans_vlan_row(vlan, rmask) {
      .append( $(LABEL)
        .css({"background-color": "#EEEEEE", "border": "1px solid gray", "display": "inline-block", "min-width": "20em", "height": "1.2em"})
        .text(vlan['vlan_descr'])
+       .addClass("vlan_descr")
        .vlan_click_edit('vlan_descr', {"min-width": "20em", "width": "20em"})
      )
    )
@@ -696,7 +709,33 @@ function vlans_vlan_row(vlan, rmask) {
   if(has_nright(rmask, NR_EDIT_VLAN)) {
     act_td
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+       .css({"color": color_table_buttons})
+       .title("Изменить все поля")
        .click(function() {
+         let ev = jQuery.Event("click");
+         ev.ctrlKey = true;
+         $(this).closest(".vlan_row").find(".vlan_name").trigger("click");
+         $(this).closest(".vlan_row").find(".vlan_descr").trigger(ev);
+       })
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-blank")
+       .addClass("undo_btn_placeholder")
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrowrefresh-1-s").addClass("ui-button")
+       .addClass("undo_btn")
+       .title("Отменить изменения")
+       .css({"color": "green"})
+       .hide()
+       .click(function() {
+         let prev_row=$(this).closest(".vlan_row");
+         let _vlan=prev_row.data("data");
+         let _rmask=prev_row.data("rmask");
+         let query={"action": "save_vlan", "vlan_id": _vlan['vlan_id'], "vlan_name": _vlan['vlan_name'], "vlan_descr": _vlan['vlan_descr']};
+         run_query(query, function(ret_data) {
+           let new_row=vlans_vlan_row(ret_data['ok'], _rmask);
+           new_row.append( prev_row.find(".vlan_ranges_td").clone() );
+           prev_row.replaceWith( new_row );
+         });
        })
      )
     ;
@@ -706,6 +745,7 @@ function vlans_vlan_row(vlan, rmask) {
     act_td
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
        .css({"color": "coral", "margin-left": "0.5em"})
+       .title("Освободить VLAN "+vlan['vlan_number'])
        .click(function(e) {
          let vlan_row=$(this).closest(".vlan_row");
          let vlan_number=Number(vlan_row.data("data")['vlan_number']);
@@ -1160,6 +1200,19 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
      )
     ;
   };
+
+  head_row
+   .append( $(SPAN).css({"white-space": "pre", "float": "right"})
+     .append( $(LABEL).prop("for", "vlans_autosave").text("Автосохранение: ")
+       .title("Автосохранение данных")
+     )
+     .append( $(INPUT).id("vlans_autosave").prop({"type": "checkbox", "checked": VLANS_AUTOSAVE})
+       .on("change", function() {
+         VLANS_AUTOSAVE=$(this).is(":checked");
+       })
+     )
+   )
+  ;
 
   dialog.append( head_row );
 
