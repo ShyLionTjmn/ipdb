@@ -599,7 +599,8 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
        .hide()
        .data("range_start", vlan_start)
        .title("Установить начало диапазона: "+vlan_start)
-       .click(function() {
+       .click(function(e) {
+          e.stopPropagation();
           let _vlan=$(this).data("range_start");
           $("INPUT#vlan_range_start").val(_vlan).trigger("input");
        })
@@ -686,7 +687,8 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
        .hide()
        .data("range_stop", vlan_stop)
        .title("Установить окончание диапазона: "+vlan_stop)
-       .click(function() {
+       .click(function(e) {
+          e.stopPropagation();
           let _vlan=$(this).data("range_stop");
           $("INPUT#vlan_range_stop").val(_vlan).trigger("input");
        })
@@ -810,7 +812,8 @@ function vlans_vlan_row(vlan, rmask) {
        .hide()
        .data("range_start", vlan['vlan_number'])
        .title("Установить начало диапазона: "+vlan['vlan_number'])
-       .click(function() {
+       .click(function(e) {
+          e.stopPropagation();
           let _vlan=$(this).data("range_start");
           $("INPUT#vlan_range_start").val(_vlan).trigger("input");
        })
@@ -854,7 +857,8 @@ function vlans_vlan_row(vlan, rmask) {
        .hide()
        .data("range_stop", vlan['vlan_number'])
        .title("Установить окончание диапазона: "+vlan['vlan_number'])
-       .click(function() {
+       .click(function(e) {
+          e.stopPropagation();
           let _vlan=$(this).data("range_stop");
           $("INPUT#vlan_range_stop").val(_vlan).trigger("input");
        })
@@ -940,7 +944,9 @@ function vlans_vlan_row(vlan, rmask) {
 
 function vlan_range_dialog(vr_id, donefunc) {
   if(vr_id == undefined && donefunc == undefined) { error_at(); return; };
-  if( $("#vlan_range_dialog").length != 0) return;
+  if( $("#vlan_range_dialog").length != 0) {
+    return;
+  };
 
   $(".vlan_range_btn").show();
 
@@ -971,9 +977,6 @@ function vlan_range_dialog(vr_id, donefunc) {
     minWidth:600,
     width: "auto",
     buttons: [],
-    open: function() {
-      $(".ui-dialog-titlebar").css({"z-index": 1000000});
-    },
     close: function() {
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
