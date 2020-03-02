@@ -209,7 +209,11 @@ function show_dialog(message, opts) {
   dialog.dialog(d);
 };
 
-function show_confirm(message,func, opts, cancelfunc) {
+function show_confirm(message,func, opts, cancelfunc, skip_confirm) {
+  if(skip_confirm) {
+    func();
+    return;
+  };
   let dialog=$(DIV).data("done", 0).prop("title", "Подтвердите действие").css("white-space", "pre").text(message).appendTo("BODY");
   let d={
     modal:true,
@@ -235,7 +239,11 @@ function show_confirm(message,func, opts, cancelfunc) {
   dialog.dialog(d);
 };
 
-function show_confirm_checkbox(message,func, opts) {
+function show_confirm_checkbox(message,func, opts, cancelfunc, skip_confirm) {
+  if(skip_confirm) {
+    func();
+    return;
+  };
   let dialog=$(DIV)
    .prop("title", "Подтвердите действие")
    .css("white-space", "pre")

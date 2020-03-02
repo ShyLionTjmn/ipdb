@@ -1166,8 +1166,78 @@ if($q['action'] == 'v4get_net') {
     $effective_rmask = $effective_rmask | $vr['rmask'];
   };
 
-  
+  if(!has_nright($effective_rmask, NR_TAKE_VLAN)) {
+    error_exit("Недостаточно прав");
+  };
 
+  trans_start();
+
+  $prev_row=[];
+
+  $query="INSERT INTO vlans SET";
+  $query .= " vlan_fk_vd_id=".mq($q['vd_id']);
+  $query .= ",vlan_number=".mq($q['vlan_number']);
+  $query .= ",vlan_name=CONCAT('VLAN',LPAD(vlan_number, 4, '0'))";
+  $query .= ",ts=$time";
+  $query .= ",$set_fk_user_id";
+
+  run_query($query);
+
+  $id=mysqli_insert_id($db);
+  if($id == 0) { error_exit("Bad insert ID returned"); };
+
+  run_query("UPDATE vds SET vd_check=vd_check+1 WHERE vd_id=".mq($q['vd_id']));
+  
+  $new_row=return_one("SELECT * FROM vlans WHERE vlan_id=".mq($id), TRUE);
+
+  audit_log("vlan", $id, "vlans", $q['action'], $prev_row, $new_row);
+
+  $query="SELECT vlans.*";
+  $query .= ", NULL as v4nets";
+  $query .= ", NULL as v6nets";
+  $query .= " FROM vlans WHERE vlan_id=".mq($id);
+  $ret=return_one($query, TRUE);
+
+  if(!has_nright($effective_rmask, NR_VIEWNAME)) { $ret['vlan_name'] = 'hidden';  $ret['vlan_descr'] = 'hidden'; };
+  if(!has_nright($effective_rmask, NR_VIEWOTHER)) { $ret['vlan_descr'] = 'hidden'; };
+
+  ok_exit($ret);
+
+} else if($q['action'] == 'free_vlan') {
+  require_p('vlan_id', "/^\d+$/");
+
+  trans_start();
+
+  $query="SELECT vlans.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(v4net_id,':',v4net_addr,'/',v4net_mask)) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id GROUP BY v4net_fk_vlan_id ORDER BY v4net_addr) as v4nets";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(v6net_id,':',HEX(v6net_addr),'/',v6net_mask)) FROM v6nets WHERE v6net_fk_vlan_id=vlan_id GROUP BY v6net_fk_vlan_id ORDER BY v6net_addr) as v6nets";
+  $query .= " FROM vlans WHERE vlan_id=".mq($q['vlan_id']);
+  $prev_row=return_one($query, TRUE);
+
+  $query="SELECT vrs.vr_start,vrs.vr_stop, (SELECT BIT_OR(gvrr_rmask) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id AND gvrr_fk_group_id IN ($groups)) as rmask";
+  $query .=" FROM vrs";
+  $query .=" WHERE vr_fk_vd_id=".mq($prev_row['vlan_fk_vd_id']);
+  $query .=" AND vr_start <= ".mq($prev_row['vlan_number']);
+  $query .=" AND vr_stop >= ".mq($prev_row['vlan_number']);
+
+  $vrs=return_query($query);
+
+  $effective_rmask = 0;
+  foreach($vrs as $vr) {
+    $effective_rmask = $effective_rmask | $vr['rmask'];
+  };
+
+  if(!has_nright($effective_rmask, NR_FREE_VLAN)) {
+    error_exit("Недостаточно прав");
+  };
+
+  run_query("DELETE FROM vlans WHERE vlan_id=".mq($q['vlan_id']));
+
+  $new_row=[];
+
+  audit_log("vlan", $q['vlan_id'], "vlans", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
