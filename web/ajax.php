@@ -1349,6 +1349,30 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit($ret);
 
+} else if($q['action'] == 'vlan_get_range') {
+  require_p('range_id', "/^\d+$/");
+  $ret=Array();
+
+  $query="SELECT vrs.*";
+  $query .= ", (SELECT BIT_OR(gvrr_rmask) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id AND gvrr_fk_group_id IN ($groups)) as rmask";
+  $query .= " FROM vrs WHERE";
+  $query .= " vr_id=".mq($q['range_id']);
+
+  $range_info=return_one($query, TRUE, "Range not found.");
+
+  if(!has_nright($range_info['rmask'], NR_VIEWNAME)) { $range_info['vr_name'] = 'hidden'; $range_info['vr_descr'] = 'hidden'; };
+  if(!has_nright($range_info['rmask'], NR_VIEWOTHER)) { $range_info['vr_descr'] = 'hidden'; };
+
+  $ret['range_info']=$range_info;
+
+  $query="SELECT gvrr_rmask as rmask, group_id, group_name";
+  $query .= " FROM gvrrs INNER JOIN groups ON gvrr_fk_group_id=group_id";
+  $query .= " WHERE gvrr_fk_vr_id=".mq($q['range_id']);
+  $query .= " ORDER BY group_name, group_id";
+
+  $ret['range_group_rights']=return_query($query);
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
