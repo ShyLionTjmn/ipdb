@@ -602,6 +602,8 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
        .click(function(e) {
           e.stopPropagation();
           let _vlan=$(this).data("range_start");
+          let z_index=Number($("#vlan_range_dialog").closest(".ui-dialog").css("zIndex"));
+          $("#vlan_range_dialog").closest(".ui-dialog").css("zIndex", z_index+2);
           $("INPUT#vlan_range_start").val(_vlan).trigger("input");
        })
      )
@@ -690,6 +692,8 @@ function vlans_take_row(vlan_start, vlan_stop, rmask) {
        .click(function(e) {
           e.stopPropagation();
           let _vlan=$(this).data("range_stop");
+          let z_index=Number($("#vlan_range_dialog").closest(".ui-dialog").css("zIndex"));
+          $("#vlan_range_dialog").closest(".ui-dialog").css("zIndex", z_index+2);
           $("INPUT#vlan_range_stop").val(_vlan).trigger("input");
        })
      )
@@ -815,6 +819,8 @@ function vlans_vlan_row(vlan, rmask) {
        .click(function(e) {
           e.stopPropagation();
           let _vlan=$(this).data("range_start");
+          let z_index=Number($("#vlan_range_dialog").closest(".ui-dialog").css("zIndex"));
+          $("#vlan_range_dialog").closest(".ui-dialog").css("zIndex", z_index+2);
           $("INPUT#vlan_range_start").val(_vlan).trigger("input");
        })
      )
@@ -860,6 +866,8 @@ function vlans_vlan_row(vlan, rmask) {
        .click(function(e) {
           e.stopPropagation();
           let _vlan=$(this).data("range_stop");
+          let z_index=Number($("#vlan_range_dialog").closest(".ui-dialog").css("zIndex"));
+          $("#vlan_range_dialog").closest(".ui-dialog").css("zIndex", z_index+2);
           $("INPUT#vlan_range_stop").val(_vlan).trigger("input");
        })
      )
@@ -945,6 +953,8 @@ function vlans_vlan_row(vlan, rmask) {
 function vlan_range_dialog(vr_id, donefunc) {
   if(vr_id == undefined && donefunc == undefined) { error_at(); return; };
   if( $("#vlan_range_dialog").length != 0) {
+    let z_index=Number($("#vlan_range_dialog").closest(".ui-dialog").css("zIndex"));
+    $("#vlan_range_dialog").closest(".ui-dialog").css("zIndex", z_index+2);
     return;
   };
 

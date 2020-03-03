@@ -1373,6 +1373,62 @@ if($q['action'] == 'v4get_net') {
   $ret['range_group_rights']=return_query($query);
 
   ok_exit($ret);
+} else if($q['action'] == 'vlan_edit_range') {
+  require_p('range_id', "/^\d+$/");
+  require_p('range_start', "/^\d+$/");
+  require_p('range_stop', "/^\d+$/");
+  if($q['range_start'] > $q['range_stop']) { error_exit("Invalid range"); };
+  require_p('range_name');
+  require_p('range_descr');
+  require_p('range_style');
+  require_p('range_icon');
+  require_p('range_icon_style');
+  require_p('groups_rights',  Array("type" => "num2num"));
+
+  trans_start();
+
+  $query="SELECT vrs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gvrr_fk_group_id, ':', gvrr_rmask)) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id ORDER BY gvrr_fk_group_id) as groups_rights";
+  $query .= " FROM vrs WHERE vr_id=".mq($q['range_id']);
+  $prev_row=return_one($query, TRUE, "Диапазон не существует");
+
+  $query="UPDATE vrs SET";
+  $query .= " vr_start=".mq($q['range_start']);
+  $query .= ",vr_stop=".mq($q['range_stop']);
+  $query .= ",vr_name=".mq($q['range_name']);
+  $query .= ",vr_descr=".mq($q['range_descr']);
+  $query .= ",vr_style=".mq($q['range_style']);
+  $query .= ",vr_icon=".mq($q['range_icon']);
+  $query .= ",vr_icon_style=".mq($q['range_icon_style']);
+  $query .= ",ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= " WHERE vr_id=".mq($q['range_id']);
+
+  run_query($query);
+
+  $query="DELETE FROM gvrrs WHERE gvrr_fk_vr_id=".mq($q['range_id']);
+  run_query($query);
+
+  foreach($q['groups_rights'] as $gr_id => $rmask) {
+    $query="INSERT INTO gvrrs SET";
+    $query .= " gvrr_fk_vr_id=".mq($q['range_id']);
+    $query .= ",gvrr_fk_group_id=".mq($gr_id);
+    $query .= ",gvrr_rmask=".mq($rmask);
+    $query .= ",$set_fk_user_id";
+    $query .= ",ts=$time";
+    run_query($query);
+  };
+
+  run_query("UPDATE vds SET vd_check=vd_check+1 WHERE vd_id=".mq($prev_row['vr_fk_vd_id']));
+
+  $query="SELECT vrs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gvrr_fk_group_id, ':', gvrr_rmask)) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id ORDER BY gvrr_fk_group_id) as groups_rights";
+  $query .= " FROM vrs WHERE vr_id=".mq($q['range_id']);
+  $new_row=return_one($query, TRUE, "Диапазон не существует");
+
+  audit_log("vrange", $q['range_id'], "vrs,gvrrs", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
