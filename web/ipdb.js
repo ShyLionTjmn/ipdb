@@ -490,7 +490,9 @@ function take_vlan() {
       rmask=Number(split_row.data("rmask"));
     };
 
-    let vlan_row=vlans_vlan_row(ret_data['ok'], rmask);
+    let opts={ "opt": tbody.data("opt"), "presel": tbody.data("presel"), "donefunc": tbody.data("donefunc")};
+
+    let vlan_row=vlans_vlan_row(ret_data['ok'], rmask, opts);
     if(split_row != undefined) {
       vlan_row.append( split_row.find(".vlan_ranges_td").clone(true) );
     } else {
@@ -795,7 +797,7 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
   return this;
 };
 
-function vlans_vlan_row(vlan, rmask) {
+function vlans_vlan_row(vlan, rmask, opts) {
   let ret=$(TR).addClass("bg_colored")
    .addClass("vlan_"+vlan['vlan_number'])
    .addClass("vlan_row")
@@ -803,9 +805,74 @@ function vlans_vlan_row(vlan, rmask) {
    .data("rmask", rmask)
   ;
 
+  if(opts == undefined) { error_at(); throw("Error"); };
+
+  let can_change_sel=opts['opt'] != undefined && opts['opt']['return'] != undefined && opts['donefunc'] != undefined;
+  let presel = false;
+  if(opts['presel'] != undefined) {
+    if(typeof(opts['presel']) === "object") {
+      presel = in_array(opts['presel'], vlan['vlan_id']);
+    } else {
+      presel = opts['presel'] == vlan['vlan_id'];
+    };
+  };
+  if(opts['presel'] != undefined || can_change_sel) {
+    let sel_td=$(TD);
+
+    if(opts['opt']['return'] == 'one') {
+      if(can_change_sel) {
+        sel_td
+         .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-select").addClass("ui-button")
+           .title("Выбрать этот VLAN/BD и вернуться на предыдущий экран")
+           .data("donefunc", opts['donefunc'])
+           .click(function() {
+             let data=$(this).closest(".vlan_row").data("data");
+             $(this).closest(".dialog_start").dialog("close");
+             let donefunc=$(this).data("donefunc");
+             if(donefunc != undefined) {
+               donefunc(data);
+             };
+           })
+         )
+        ;
+      } else {
+        sel_td
+         .append( $(LABEL).addClass("ui-icon").addClass(presel?"ui-icon-check":"ui-icon-blank").addClass("ui-button")
+           .title(presel?"Этот VLAN/BD выбран":"")
+         )
+        ;
+      };
+    } else {
+      sel_td
+       .append( $(INPUT).prop({"type": "checkbox", "checked": presel})
+         .addClass("select_checkbox")
+         .data("can_change_sel", can_change_sel)
+         .click( function() { return $(this).data("can_change_sel"); })
+         .on("change", function() {
+           $(this).closest("TABLE").trigger("sel_change");
+         })
+       )
+      ;
+    };
+    if(presel) {
+      sel_td.css({"background-color": "lightgreen"});
+    };
+
+    sel_td.appendTo( ret );
+  };
+
+
   let num_td=$(TD)
    .css({"position": "relative", "padding-left": "0.9em"})
   ;
+
+  if(_debug_opts) {
+    num_td
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"})
+       .title(jstr(vlan))
+     )
+    ;
+  };
 
   if(has_right(R_SUPER)) {
     num_td
@@ -914,8 +981,13 @@ function vlans_vlan_row(vlan, rmask) {
          let _vlan=prev_row.data("data");
          let _rmask=prev_row.data("rmask");
          let query={"action": "save_vlan", "vlan_id": _vlan['vlan_id'], "vlan_name": _vlan['vlan_name'], "vlan_descr": _vlan['vlan_descr']};
+
+         let tbody=prev_row.closest("TBODY");
+
+         let opts={ "opt": tbody.data("opt"), "presel": tbody.data("presel"), "donefunc": tbody.data("donefunc") };
+
          run_query(query, function(ret_data) {
-           let new_row=vlans_vlan_row(ret_data['ok'], _rmask);
+           let new_row=vlans_vlan_row(ret_data['ok'], _rmask, opts);
            new_row.append( prev_row.find(".vlan_ranges_td").clone() );
            prev_row.replaceWith( new_row );
          });
@@ -1265,12 +1337,14 @@ function vr_info() {
 
   let data=$(this).data("data");
 
-  vr_info
-   .append( $(LABEL)
-     .addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"})
-     .title(jstr(data))
-   ) 
-  ;
+  if(_debug_opts) {
+    vr_info
+     .append( $(LABEL)
+       .addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"})
+       .title(jstr(data))
+     ) 
+    ;
+  };
 
   let style;
   let icon_style;
@@ -1444,12 +1518,14 @@ function vlans_ranges_td(vrs, current_ranges, vlans_display) {
     ret.addClass("with_ranges");
   };
 
-  ret
-   .append( $(LABEL)
-     .addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"})
-     .title(jstr({"current_ranges": current_ranges, "vlans_display": vlans_display}))
-   ) 
-  ;
+  if(_debug_opts) {
+    ret
+     .append( $(LABEL)
+       .addClass("ui-icon").addClass("ui-icon-info").css({"color": "lightgray", "font-size": "xx-small"})
+       .title(jstr({"current_ranges": current_ranges, "vlans_display": vlans_display}))
+     ) 
+    ;
+  };
   return ret;
 };
 
@@ -1533,8 +1609,10 @@ function populate_vlans_table(tbody, data) {
       vlan_effective_rmask = (vlan_effective_rmask | vrs[r]['rmask']) >>> 0;
     };
 
+    let opts={ "opt": tbody.data("opt"), "presel": tbody.data("presel"), "donefunc": tbody.data("donefunc")};
+
     if(vlans_display[vlan_key]["vlan"] != undefined) {
-      row=vlans_vlan_row(vlan, vlan_effective_rmask);
+      row=vlans_vlan_row(vlan, vlan_effective_rmask, opts);
     } else {
       row=vlans_take_row(vlan_number, vlan_number, vlan_effective_rmask);
     };
@@ -1866,50 +1944,71 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
 
   dialog.append( table_div );
 
+  let head_tr=$(TR).css({"position": "relative"});
+
+  if( presel_vlan_id != undefined || (opt != undefined && opt['return'] != undefined && donefunc != undefined)) {
+    head_tr
+     .append( $(TH).text("")
+       .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+     )
+    ;
+  };
+  head_tr
+   .append( $(TH).text("VLAN/BD")
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+   )
+   .append( $(TH).text("Краткое имя")
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+   )
+   .append( $(TH).text("Описание")
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+   )
+   .append( $(TH)
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+   ) //for buttons
+   .append( $(TH)
+     .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
+     .append( !has_right(R_SUPER)? $(LABEL) : $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .css({"color": color_table_buttons})
+       .click(function() {
+         $(".range_btn").show();
+         let table_div=$("#vlans_list").find(".table_div");
+         vlan_range_dialog(undefined, function() {
+           let scroll=table_div.scrollTop();
+
+           table_div.data("scroll", scroll);
+           $("#vlans_list").find("SELECT.domain_sel").trigger("change");
+         })
+       })
+     )
+   ) //for ranges
+  ;
+
   let table=$(TABLE).addClass("vlans_table")
    .append( $(THEAD)
-     .append( $(TR).css({"position": "relative"})
-       .append( $(TH).text("VLAN/BD")
-         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
-       )
-       .append( $(TH).text("Краткое имя")
-         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
-       )
-       .append( $(TH).text("Описание")
-         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
-       )
-       .append( $(TH)
-         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
-       ) //for buttons
-       .append( $(TH)
-         .css({"position": "sticky", "top": "0", "background-color": "white", "z-index": 1, "border-bottom": "1px solid gray", "border-right": "1px solid gray"})
-         .append( !has_right(R_SUPER)? $(LABEL) : $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
-           .css({"color": color_table_buttons})
-           .click(function() {
-             $(".range_btn").show();
-             let table_div=$("#vlans_list").find(".table_div");
-             vlan_range_dialog(undefined, function() {
-               let scroll=table_div.scrollTop();
-
-               table_div.data("scroll", scroll);
-               $("#vlans_list").find("SELECT.domain_sel").trigger("change");
-             })
-           })
-         )
-       ) //for ranges
-     )
+     .append( head_tr )
    )
    .appendTo( table_div )
   ;
 
   let tbody=$(TBODY).addClass("vlans_list")
+   .data("opt", opt)
+   .data("presel", presel_vlan_id)
+   .data("donefunc", donefunc)
    .append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете домен") ) )
    .appendTo( table )
   ;
 
   let query={"action": "get_vdomains"};
   if(presel_vlan_id != undefined) {
-    query['focus_on_vlan_id']=presel_vlan_id;
+    if(typeof(presel_vlan_id) === 'object') {
+      if(presel_vlan_id.length > 0) {
+        query['focus_on_vlan_id']=presel_vlan_id[0];
+      };
+    } else {
+      query['focus_on_vlan_id']=presel_vlan_id;
+    };
+    
   };
 
   run_query(query, function(ret_data) {
@@ -4807,7 +4906,10 @@ $( document ).ready(function() {
          .append( $(SPAN).addClass("ui-button").text("VLAN/BDs")
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
-             vlans_list(undefined, {});
+             //vlans_list(undefined, {});
+             vlans_list(82, {"return": "one"}, function(data) {
+               $("#debug").text(jstr(data));
+             });
            })
          )
         ;

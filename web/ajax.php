@@ -999,7 +999,7 @@ if($q['action'] == 'v4get_net') {
   $ret['vds']=$vds;
 
   if(isset($q['focus_on_vlan_id'])) {
-    $ret['select_vd_id']=return_only("SELECT vlan_fk_vd_id WHERE vlan_id=".mq($q['focus_on_vlan_id']), TRUE, "VLAN не существует");
+    $ret['select_vd_id']=return_single("SELECT vlan_fk_vd_id FROM vlans WHERE vlan_id=".mq($q['focus_on_vlan_id']), TRUE, "VLAN не существует");
   };
 
   ok_exit($ret);
