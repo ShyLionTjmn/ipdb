@@ -1133,8 +1133,8 @@ if($q['action'] == 'v4get_net') {
       if($vrange['vr_start'] <= $vlan_num && $vrange['vr_stop'] >= $vlan_num && $vrange['rmask'] !== NULL) { $effective_rmask = $effective_rmask | $vrange['rmask']; };
     };
 
-    if(!has_nright($effective_rmask, NR_VIEWNAME)) { $vlans[$i]['vlan_name'] = 'hidden';  $vlans[$i]['vlan_descr'] = 'hidden'; };
-    if(!has_nright($effective_rmask, NR_VIEWOTHER)) { $vlans[$i]['vlan_descr'] = 'hidden'; };
+    if(!has_nright($effective_rmask, NR_VIEWNAME | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $vlans[$i]['vlan_name'] = 'hidden';  $vlans[$i]['vlan_descr'] = 'hidden'; };
+    if(!has_nright($effective_rmask, NR_VIEWOTHER | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $vlans[$i]['vlan_descr'] = 'hidden'; };
 
   };
 
@@ -1198,8 +1198,8 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM vlans WHERE vlan_id=".mq($id);
   $ret=return_one($query, TRUE);
 
-  if(!has_nright($effective_rmask, NR_VIEWNAME)) { $ret['vlan_name'] = 'hidden';  $ret['vlan_descr'] = 'hidden'; };
-  if(!has_nright($effective_rmask, NR_VIEWOTHER)) { $ret['vlan_descr'] = 'hidden'; };
+  if(!has_nright($effective_rmask, NR_VIEWNAME | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $ret['vlan_name'] = 'hidden';  $ret['vlan_descr'] = 'hidden'; };
+  if(!has_nright($effective_rmask, NR_VIEWOTHER | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $ret['vlan_descr'] = 'hidden'; };
 
   ok_exit($ret);
 
@@ -1344,8 +1344,8 @@ if($q['action'] == 'v4get_net') {
 
   $ret=$new_row;
 
-  if(!has_nright($effective_rmask, NR_VIEWNAME)) { $ret['vlan_name'] = 'hidden';  $ret['vlan_descr'] = 'hidden'; };
-  if(!has_nright($effective_rmask, NR_VIEWOTHER)) { $ret['vlan_descr'] = 'hidden'; };
+  if(!has_nright($effective_rmask, NR_VIEWNAME | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $ret['vlan_name'] = 'hidden';  $ret['vlan_descr'] = 'hidden'; };
+  if(!has_nright($effective_rmask, NR_VIEWOTHER | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $ret['vlan_descr'] = 'hidden'; };
 
   ok_exit($ret);
 
@@ -1374,6 +1374,7 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit($ret);
 } else if($q['action'] == 'vlan_edit_range') {
+  require_right(R_SUPER);
   require_p('range_id', "/^\d+$/");
   require_p('range_start', "/^\d+$/");
   require_p('range_stop', "/^\d+$/");
@@ -1427,6 +1428,61 @@ if($q['action'] == 'v4get_net') {
   $new_row=return_one($query, TRUE, "Диапазон не существует");
 
   audit_log("vrange", $q['range_id'], "vrs,gvrrs", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
+} else if($q['action'] == 'vlan_add_range') {
+  require_right(R_SUPER);
+  require_p('vd_id', "/^\d+$/");
+  require_p('range_start', "/^\d+$/");
+  require_p('range_stop', "/^\d+$/");
+  if($q['range_start'] > $q['range_stop']) { error_exit("Invalid range"); };
+  require_p('range_name');
+  require_p('range_descr');
+  require_p('range_style');
+  require_p('range_icon');
+  require_p('range_icon_style');
+  require_p('groups_rights',  Array("type" => "num2num"));
+
+  trans_start();
+
+  $prev_row=[];
+
+  $query="INSERT INTO vrs SET";
+  $query .= " vr_start=".mq($q['range_start']);
+  $query .= ",vr_stop=".mq($q['range_stop']);
+  $query .= ",vr_name=".mq($q['range_name']);
+  $query .= ",vr_descr=".mq($q['range_descr']);
+  $query .= ",vr_style=".mq($q['range_style']);
+  $query .= ",vr_icon=".mq($q['range_icon']);
+  $query .= ",vr_icon_style=".mq($q['range_icon_style']);
+  $query .= ",vr_fk_vd_id=".mq($q['vd_id']);
+  $query .= ",ts=$time";
+  $query .= ",$set_fk_user_id";
+
+  run_query($query);
+
+  $id=mysqli_insert_id($db);
+  if($id == 0) { error_exit("Bad insert ID returned"); };
+
+
+  foreach($q['groups_rights'] as $gr_id => $rmask) {
+    $query="INSERT INTO gvrrs SET";
+    $query .= " gvrr_fk_vr_id=".mq($id);
+    $query .= ",gvrr_fk_group_id=".mq($gr_id);
+    $query .= ",gvrr_rmask=".mq($rmask);
+    $query .= ",$set_fk_user_id";
+    $query .= ",ts=$time";
+    run_query($query);
+  };
+
+  run_query("UPDATE vds SET vd_check=vd_check+1 WHERE vd_id=".mq($q['vd_id']));
+
+  $query="SELECT vrs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gvrr_fk_group_id, ':', gvrr_rmask)) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id ORDER BY gvrr_fk_group_id) as groups_rights";
+  $query .= " FROM vrs WHERE vr_id=".mq($id);
+  $new_row=return_one($query, TRUE, "Диапазон не существует");
+
+  audit_log("vrange", $id, "vrs,gvrrs", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
 } else {
