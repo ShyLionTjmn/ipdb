@@ -153,9 +153,6 @@ CREATE TABLE vds (
   vd_max_num	BIGINT UNSIGNED NOT NULL DEFAULT 4095,
   vd_name	VARCHAR(190) NOT NULL DEFAULT '',
   vd_descr	VARCHAR(1024) NOT NULL DEFAULT '',
-  check		BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time vlans data changed and periodiaclly checked by front-end to notify user if out of sync',
-  check_ts	BIGINT UNSIGNED NOT NULL COMMENT 'time of last change',
-  check_by	BIGINT UNSIGNED COMMENT 'user_id by which check changed',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (vd_id),
@@ -541,3 +538,11 @@ CREATE TABLE audit_log(
   al_prev_data	VARCHAR(4096) NOT NULL DEFAULT '',
   al_new_data	VARCHAR(4096) NOT NULL DEFAULT ''
 ) ENGINE=MyISAM;
+
+CREATE TABLE checks(
+  check_count	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time data changed and periodiaclly checked by front-end to notify user if out of sync',
+  check_ts	BIGINT UNSIGNED NOT NULL COMMENT 'time of last change',
+  check_by	BIGINT UNSIGNED COMMENT 'user_id by which check changed',
+  check_subject	VARCHAR(64) NOT NULL COMMENT 'user, group, vd, vr, v4net, etc',
+  check_subject_id BIGINT UNSIGNED NOT NULL COMMENT 'id of subject, 0 for global',
+  UNIQUE KEY uk_checks

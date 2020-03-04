@@ -1485,6 +1485,24 @@ if($q['action'] == 'v4get_net') {
   audit_log("vrange", $id, "vrs,gvrrs", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'vlan_delete_range') {
+  require_right(R_SUPER);
+  require_p('range_id', "/^\d+$/");
+
+  trans_start();
+
+  $query="SELECT vrs.*";
+  $query .= ", (SELECT GROUP_CONCAT(CONCAT(gvrr_fk_group_id, ':', gvrr_rmask)) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id ORDER BY gvrr_fk_group_id) as groups_rights";
+  $query .= " FROM vrs WHERE vr_id=".mq($q['range_id']);
+  $prev_row=return_one($query, TRUE, "Диапазон не существует");
+
+  run_query("DELETE FROM vrs WHERE vr_id=".mq($q['range_id']);
+
+  $new_row=[];
+
+  audit_log("vrange", $id, "vrs,gvrrs", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

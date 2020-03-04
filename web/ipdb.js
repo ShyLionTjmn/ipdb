@@ -1427,8 +1427,8 @@ function vr_info() {
        let table_div=$("#vlans_list").find(".table_div");
        vlan_range_dialog(_id, can_edit?(function() {
          let scroll=table_div.scrollTop();
-
          table_div.data("scroll", scroll);
+
          $("#vlans_list").find("SELECT.domain_sel").trigger("change");
        }):undefined);
      })
@@ -1440,13 +1440,19 @@ function vr_info() {
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
        .css({"margin-left": "0.5em", "color": "coral"})
        .title("Удалить")
+       .data("id", data['vr_id'])
        .click(function() {
          let _id=$(this).data('id');
          if(_id == undefined) { error_at(); return; };
 
+         let table_div=$("#vlans_list").find(".table_div");
+
          show_confirm("Подтвердите удаление диапазона VLAN", function() {
-           let query={"action": "delete_vlan_range", "range_id": _id};
+           let query={"action": "vlan_delete_range", "range_id": _id};
            run_query(query, function() {
+             let scroll=table_div.scrollTop();
+             table_div.data("scroll", scroll);
+
              $("#vlans_list").find("SELECT.domain_sel").trigger("change");
            });
          });
