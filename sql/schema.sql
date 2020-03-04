@@ -274,9 +274,6 @@ CREATE TABLE v4nets (
   v4net_fk_vlan_id	BIGINT UNSIGNED DEFAULT NULL,
   v4net_name	VARCHAR(256) NOT NULL DEFAULT '',
   v4net_descr	VARCHAR(1024) NOT NULL DEFAULT '',
-  check		BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
-  check_ts	BIGINT UNSIGNED NOT NULL COMMENT 'time of last change',
-  check_by	BIGINT UNSIGNED COMMENT 'user_id by which check changed',
   v4net_fk_tp_id	BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
@@ -308,9 +305,6 @@ CREATE TABLE v6nets (
   v6net_fk_vlan_id      BIGINT UNSIGNED DEFAULT NULL,
   v6net_name    VARCHAR(256) NOT NULL DEFAULT '',
   v6net_descr   VARCHAR(1024) NOT NULL DEFAULT '',
-  check		BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'should be incremented each time IPs data changed and periodiaclly checked by front-end to notify user if out of sync',
-  check_ts	BIGINT UNSIGNED NOT NULL COMMENT 'time of last change',
-  check_by	BIGINT UNSIGNED COMMENT 'user_id by which check changed',
   v6net_fk_tp_id	BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id    BIGINT UNSIGNED,
@@ -545,4 +539,5 @@ CREATE TABLE checks(
   check_by	BIGINT UNSIGNED COMMENT 'user_id by which check changed',
   check_subject	VARCHAR(64) NOT NULL COMMENT 'user, group, vd, vr, v4net, etc',
   check_subject_id BIGINT UNSIGNED NOT NULL COMMENT 'id of subject, 0 for global',
-  UNIQUE KEY uk_checks
+  UNIQUE KEY uk_checks(check_subject,check_subject_id)
+);

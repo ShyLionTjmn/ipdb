@@ -65,6 +65,35 @@ function get_v4net_rights($netrow) {
 };
 */
 
+function check_tick($subject, $id, $and_global=FALSE) {
+  $query="INSERT INTO checks SET";
+  $query .= " check_ts=$time";
+  $query .= ",check_by=".mq($_SESSION['user']['user_id']);
+  $query .= ",check_subject=".mq($subject);
+  $query .= ",check_subject_id=".mq($id);
+  $query .= ",check_count=0";
+  $query .= " ON DUPLICATE KEY UPDATE";
+  $query .= " check_ts=VALUES(check_ts)";
+  $query .= ",check_by=VALUES(check_by)";
+  $query .= ",check_count=check_count+1";
+
+  run_query($query);
+
+  $query="INSERT INTO checks SET";
+  $query .= " check_ts=$time";
+  $query .= ",check_by=".mq($_SESSION['user']['user_id']);
+  $query .= ",check_subject=".mq($subject);
+  $query .= ",check_subject_id=0";
+  $query .= ",check_count=0";
+  $query .= " ON DUPLICATE KEY UPDATE";
+  $query .= " check_ts=VALUES(check_ts)";
+  $query .= ",check_by=VALUES(check_by)";
+  $query .= ",check_count=check_count+1";
+
+  run_query($query);
+
+};
+
 function get_closest_v4netinfo($n, $m) {
   # validate n and m prior call !!
   $ret=Array();
@@ -417,6 +446,8 @@ if(!isset($_SESSION['user'])) {
 $this_user_id = $_SESSION['user']['user_id'];
 $set_fk_user_id = "fk_user_id=".mq($this_user_id);
 
+trans_start();
+
 if($q['action'] == 'v4get_net') {
   require_p('net', [ "type" => "v4long" ]);
   require_p('mask', [ "type" => "v4masklen" ]);
@@ -607,7 +638,6 @@ if($q['action'] == 'v4get_net') {
   require_p('range_visible', "/^[01]$/");
   require_p('groups_rights',  Array("type" => "num2num"));
 
-  trans_start();
 
   $query="SELECT v4rs.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(gr4r_fk_group_id, ':', gr4r_rmask)) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id ORDER BY gr4r_fk_group_id) as groups_rights";
@@ -647,6 +677,8 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM v4rs WHERE v4r_id=".mq($q['range_id']);
   $new_row=return_one($query, TRUE, "Диапазон не существует");
 
+  check_tick("v4r", $q['range_id'], TRUE);
+
   audit_log("v4range", $q['range_id'], "v4rs,gr4rs", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
@@ -676,8 +708,6 @@ if($q['action'] == 'v4get_net') {
   $query .= ",$set_fk_user_id";
   $query .= ",ts=$time";
 
-  trans_start();
-
   run_query($query);
 
   $id=mysqli_insert_id($db);
@@ -704,8 +734,6 @@ if($q['action'] == 'v4get_net') {
 } else if($q['action'] == 'v4_delete_global_range') {
   require_right(R_SUPER);
   require_p('range_id', "/^\d+$/");
-
-  trans_start();
 
   $query="SELECT v4rs.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(gr4r_fk_group_id, ':', gr4r_rmask)) FROM gr4rs WHERE gr4r_fk_v4r_id=v4r_id ORDER BY gr4r_fk_group_id) as groups_rights";
@@ -791,8 +819,6 @@ if($q['action'] == 'v4get_net') {
     error_exit("Нельзя изменить собственный статус");
   };
 
-  trans_start();
-
   $query="SELECT users.*, aps.ap_off, aps.ap_name";
   $query .= ", (SELECT GROUP_CONCAT(ug_fk_group_id) FROM ugs WHERE ug_fk_user_id=user_id ORDER BY ug_fk_group_id) as user_groups";
   $query .= " FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']);
@@ -839,8 +865,6 @@ if($q['action'] == 'v4get_net') {
   require_p('group_name', "/\S+/");
   require_p('group_rights', "/^(?:[a-z0-9_]+(?:,[a-z0-9_]+)*)?$/");
   require_p('group_users', Array("type" => "num_any"));
-
-  trans_start();
 
   $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
   $prev_row=return_one($query, TRUE, "Группа не существует");
@@ -900,8 +924,6 @@ if($q['action'] == 'v4get_net') {
     error_exit("Нельзя добавлять группу по умолчанию");
   };
 
-  trans_start();
-
   $query="INSERT INTO groups SET";
   $query .= " ts=$time";
   $query .= ",$set_fk_user_id";
@@ -934,8 +956,6 @@ if($q['action'] == 'v4get_net') {
 } else if($q['action'] == 'delete_group') {
   require_right(R_SUPER);
   require_p('group_id', "/^\d+$/");
-
-  trans_start();
 
   # save for history
   $query="SELECT groups.*";
@@ -1022,8 +1042,6 @@ if($q['action'] == 'v4get_net') {
   require_p('vd_name', "/^\S(?:.*\S)?$/");
   require_p('vd_descr');
 
-  trans_start();
-
   $prev_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
   $query="UPDATE vds SET";
@@ -1049,8 +1067,6 @@ if($q['action'] == 'v4get_net') {
   require_p('vd_name', "/^\S(?:.*\S)?$/");
   require_p('vd_descr');
 
-  trans_start();
-
   $prev_row=[];
 
   $query="INSERT INTO vds SET";
@@ -1075,8 +1091,6 @@ if($q['action'] == 'v4get_net') {
 } else if($q['action'] == 'delete_vdomain') {
   require_right(R_SUPER);
   require_p('vd_id', "/^\d+$/");
-
-  trans_start();
 
   $prev_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
@@ -1170,8 +1184,6 @@ if($q['action'] == 'v4get_net') {
     error_exit("Недостаточно прав");
   };
 
-  trans_start();
-
   $prev_row=[];
 
   $query="INSERT INTO vlans SET";
@@ -1205,8 +1217,6 @@ if($q['action'] == 'v4get_net') {
 
 } else if($q['action'] == 'free_vlan') {
   require_p('vlan_id', "/^\d+$/");
-
-  trans_start();
 
   $query="SELECT vlans.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(v4net_id,':',v4net_addr,'/',v4net_mask)) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id GROUP BY v4net_fk_vlan_id ORDER BY v4net_addr) as v4nets";
@@ -1248,8 +1258,6 @@ if($q['action'] == 'v4get_net') {
   } else {
     require_p('value');
   };
-
-  trans_start();
 
   $query="SELECT vlans.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(v4net_id,':',v4net_addr,'/',v4net_mask)) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id GROUP BY v4net_fk_vlan_id ORDER BY v4net_addr) as v4nets";
@@ -1297,8 +1305,6 @@ if($q['action'] == 'v4get_net') {
   require_p('vlan_id', "/^\d+$/");
   require_p('vlan_name', "/^[0-9a-zA-Z_]{1,64}$/");
   require_p('vlan_descr');
-
-  trans_start();
 
   $query="SELECT vlans.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(v4net_id,':',v4net_addr,'/',v4net_mask)) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id GROUP BY v4net_fk_vlan_id ORDER BY v4net_addr) as v4nets";
@@ -1386,8 +1392,6 @@ if($q['action'] == 'v4get_net') {
   require_p('range_icon_style');
   require_p('groups_rights',  Array("type" => "num2num"));
 
-  trans_start();
-
   $query="SELECT vrs.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(gvrr_fk_group_id, ':', gvrr_rmask)) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id ORDER BY gvrr_fk_group_id) as groups_rights";
   $query .= " FROM vrs WHERE vr_id=".mq($q['range_id']);
@@ -1443,8 +1447,6 @@ if($q['action'] == 'v4get_net') {
   require_p('range_icon_style');
   require_p('groups_rights',  Array("type" => "num2num"));
 
-  trans_start();
-
   $prev_row=[];
 
   $query="INSERT INTO vrs SET";
@@ -1489,14 +1491,12 @@ if($q['action'] == 'v4get_net') {
   require_right(R_SUPER);
   require_p('range_id', "/^\d+$/");
 
-  trans_start();
-
   $query="SELECT vrs.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(gvrr_fk_group_id, ':', gvrr_rmask)) FROM gvrrs WHERE gvrr_fk_vr_id=vr_id ORDER BY gvrr_fk_group_id) as groups_rights";
   $query .= " FROM vrs WHERE vr_id=".mq($q['range_id']);
   $prev_row=return_one($query, TRUE, "Диапазон не существует");
 
-  run_query("DELETE FROM vrs WHERE vr_id=".mq($q['range_id']);
+  run_query("DELETE FROM vrs WHERE vr_id=".mq($q['range_id']));
 
   $new_row=[];
 
