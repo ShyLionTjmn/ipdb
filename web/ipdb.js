@@ -3180,12 +3180,13 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
   dialog.dialog(d);
 
   run_query({"action": "get_groups"}, function(data) {
-    for(let i=0; i < data['ok'].length; i++) {
-      let check=in_array(presel_list, data['ok'][i]['group_id']);
-      data['ok'][i]['_presel'] = check;
+    let groups=data['ok'];
+    for(let i=0; i < groups.length; i++) {
+      let check=in_array(presel_list, groups[i]['group_id']);
+      groups[i]['_presel'] = check;
     };
 
-    data['ok'].sort(function(a, b) {
+    groups.sort(function(a, b) {
       if(a['_presel'] != b['_presel']) {
         if(a['_presel']) { return -1; } else { return 1; };
       } else {
@@ -3193,8 +3194,8 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       };
     });
 
-    for(let i=0; i < data['ok'].length; i++) {
-      let group=data['ok'][i];
+    for(let i=0; i < groups.length; i++) {
+      let group=groups[i];
       if(in_array(exclude_list, group['group_id'])) continue;
 
       if(opt['return'] == "one") {
@@ -4575,10 +4576,10 @@ function v4get_net() {
   ;
 
   run_query({"action": "v4get_net", "net": $R['net'], "mask": $R['masklen']}, function(data) {
-    if(data["ok"]["type"] == "nav") {
-      v4nav(data["ok"]);
+    if(data['ok']['type'] == "nav") {
+      v4nav(data['ok']);
     } else {
-      v4view(data["ok"]);
+      v4view(data['ok']);
     };
   });
 };
@@ -4815,9 +4816,9 @@ $( document ).ready(function() {
   };
 
   run_query({"action": "check_auth"}, function(data) {
-    ud=data["ok"];
-    if(data["ok"]["status"] == "unauth") {
-      showLoginWindow(data["ok"]["providers"], "Необходимо пройти авторизацию.");
+    ud=data['ok'];
+    if(data['ok']['status'] == "unauth") {
+      showLoginWindow(data['ok']['providers'], "Необходимо пройти авторизацию.");
     } else {
 
       let menu_bar = $(DIV).id("top_menu")
@@ -4891,12 +4892,12 @@ $( document ).ready(function() {
        )
       ;
 
-      $("#user_info").append( $(SPAN).text(data["ok"]["user"]["user_name"]) );
+      $("#user_info").append( $(SPAN).text(data['ok']['user']['user_name']) );
 
 
-      if(data["ok"]["user"]["user_state"] < 1) {
+      if(data['ok']['user']['user_state'] < 1) {
         let message;
-        switch(Number(data["ok"]["user"]["user_state"])) {
+        switch(Number(data['ok']['user']['user_state'])) {
         case 0:
           message="Пользователь отключен администратором.";
           break;
@@ -4907,7 +4908,7 @@ $( document ).ready(function() {
           message="Пользователь удален администратором.";
         };
 
-        message += "\nId пользователя: "+data["ok"]["user"]["user_id"];
+        message += "\nId пользователя: "+data['ok']['user']['user_id'];
 
         show_dialog(message);
       } else {

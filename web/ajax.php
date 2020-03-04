@@ -42,7 +42,19 @@ const NR_EDIT_NET	= 1 << 8;
 const RR_TAKE_NET	= 1 << 9;
 const RR_DENY_TAKE_IP	= 1 << 10; //also deny editing
 
+const TICK_v4r		= "v4r";
+const TICK_v6r		= "v6r";
+const TICK_v4net	= "v4net";
+const TICK_v6net	= "v6net";
+const TICK_vd		= "vd";
+const TICK_vlan		= "vlan";
+const TICK_vr		= "vr";
+const TICK_user		= "user";
+const TICK_group	= "group";
+
 const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
+
+$checks=Array();
 
 function len2mask($m) {
   return 0xFFFFFFFF & ( 0xFFFFFFFF << (32-$m));
@@ -65,13 +77,42 @@ function get_v4net_rights($netrow) {
 };
 */
 
-function check_tick($subject, $id, $and_global=FALSE) {
+function check_check() {
+  global $q;
+  if(isset($q['_checks'])) {
+    foreach($q['_checks'] as $subject => $ids) {
+      foreach($ids as $id => $check_count) {
+        $db_count=return_single("SELECT IFNULL((SELECT check_count FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=".mq($id)."), 0) as c", TRUE);
+        if($check_count != $db_count) {
+          error_exit("Данные были изменены в другом сеансе,\nобновите страницу и повторите операцию");
+        };
+      };
+    };
+  };
+  return TRUE;
+};
+
+function check_push($subject, $id) {
+  global $checks;
+  array_push($checks, Array($subject, $id));
+};
+
+function check_get($subject, $id) {
+  $ret=Array($subject => Array());
+  $ret[$subject][$id] = return_single("SELECT IFNULL((SELECT check_count FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=".mq($id)."), 0) as c", TRUE);
+  if($id != 0) {
+    $ret[$subject]['0'] = return_single("SELECT IFNULL((SELECT check_count FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=0), 0) as c", TRUE);
+  };
+  return $ret;
+};
+
+function check_tick($subject, $id, $push=TRUE) {
   $query="INSERT INTO checks SET";
   $query .= " check_ts=$time";
   $query .= ",check_by=".mq($_SESSION['user']['user_id']);
   $query .= ",check_subject=".mq($subject);
   $query .= ",check_subject_id=".mq($id);
-  $query .= ",check_count=0";
+  $query .= ",check_count=1";
   $query .= " ON DUPLICATE KEY UPDATE";
   $query .= " check_ts=VALUES(check_ts)";
   $query .= ",check_by=VALUES(check_by)";
@@ -79,19 +120,23 @@ function check_tick($subject, $id, $and_global=FALSE) {
 
   run_query($query);
 
-  $query="INSERT INTO checks SET";
-  $query .= " check_ts=$time";
-  $query .= ",check_by=".mq($_SESSION['user']['user_id']);
-  $query .= ",check_subject=".mq($subject);
-  $query .= ",check_subject_id=0";
-  $query .= ",check_count=0";
-  $query .= " ON DUPLICATE KEY UPDATE";
-  $query .= " check_ts=VALUES(check_ts)";
-  $query .= ",check_by=VALUES(check_by)";
-  $query .= ",check_count=check_count+1";
+  if($id != 0) {
+    $query="INSERT INTO checks SET";
+    $query .= " check_ts=$time";
+    $query .= ",check_by=".mq($_SESSION['user']['user_id']);
+    $query .= ",check_subject=".mq($subject);
+    $query .= ",check_subject_id=0";
+    $query .= ",check_count=1";
+    $query .= " ON DUPLICATE KEY UPDATE";
+    $query .= " check_ts=VALUES(check_ts)";
+    $query .= ",check_by=VALUES(check_by)";
+    $query .= ",check_count=check_count+1";
+    run_query($query);
+  };
 
-  run_query($query);
-
+  if($push) {
+    check_push($subject, $id);
+  };
 };
 
 function get_closest_v4netinfo($n, $m) {
@@ -133,12 +178,27 @@ function error_exit($redtext) {
 };
 
 function ok_exit($redtext) {
+  global $checks;
+  $ret=Array();
+
+  if(count($checks) > 0) {
+    $chk=Array();
+    foreach($checks as $chk_pair) {
+      $chk=array_merge_recursive($chk, check_get($chk_pair[0], $chk_pair[1]));
+    };
+    $ret['_check'] = $chk;
+  };
+
   close_db();
   global $curl;
   global $ajax_start;
   if(isset($curl) && $curl !== FALSE) { curl_close($curl); };
   $ajax_time = microtime(TRUE) - $ajax_start;
-  echo JSON_encode(array("ok" => $redtext, "_time" => round($ajax_time, 6)));
+
+  $ret['ok'] = $redtext;
+  $ret['_time'] = round($ajax_time, 6);
+
+  echo JSON_encode($ret);
   exit;
 };
 
@@ -364,8 +424,11 @@ if(isset($_SESSION['user'])) {
       $_SESSION['user'] = $user;
       $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
       if($groups === NULL) {
-        run_query("INSERT INTO ugs SET ts=$time, ug_fk_group_id=(SELECT group_id FROM groups WHERE group_default=1 LIMIT 1), ug_fk_user_id=".mq($_SESSION['user']['user_id']));
+        $default_group_id=return_single("SELECT group_id FROM groups WHERE group_default=1 LIMIT 1", TRUE, "Группа по умолчанию не найдена!");
+        run_query("INSERT INTO ugs SET ts=$time, ug_fk_group_id=".mq($default_group_id).", ug_fk_user_id=".mq($_SESSION['user']['user_id']));
         $groups=return_single("SELECT GROUP_CONCAT(ug_fk_group_id SEPARATOR ',') FROM ugs WHERE ug_fk_user_id=".mq($_SESSION['user']['user_id']));
+        check_tick(TICK_group, $default_group_id, FALSE);
+        check_tick(TICK_user, $_SESSION['user']['user_id'], FALSE);
       };
       if($groups === NULL || $groups === "") { eror_exit("User is not in any group"); };
       $_SESSION['user']['groups'] = $groups;
@@ -448,6 +511,8 @@ $set_fk_user_id = "fk_user_id=".mq($this_user_id);
 
 trans_start();
 
+check_check();
+
 if($q['action'] == 'v4get_net') {
   require_p('net', [ "type" => "v4long" ]);
   require_p('mask', [ "type" => "v4masklen" ]);
@@ -525,6 +590,8 @@ if($q['action'] == 'v4get_net') {
       };
     };
 
+
+    check_push(TICK_v4net, $netrow['v4net_id']);
     ok_exit($ret);
   } else {
 
@@ -599,6 +666,7 @@ if($q['action'] == 'v4get_net') {
 
 
   };
+  check_push(TICK_v4net, 0);
   ok_exit($ret);
 } else if($q['action'] == 'v4_get_range') {
   require_p('range_id', "/^\d+$/");
@@ -623,6 +691,7 @@ if($q['action'] == 'v4get_net') {
 
   $ret['range_group_rights']=return_query($query);
 
+  check_push(TICK_v4r, $q['range_id']);
   ok_exit($ret);
 } else if($q['action'] == 'v4_edit_global_range') {
   require_right(R_SUPER);
@@ -677,7 +746,7 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM v4rs WHERE v4r_id=".mq($q['range_id']);
   $new_row=return_one($query, TRUE, "Диапазон не существует");
 
-  check_tick("v4r", $q['range_id'], TRUE);
+  check_tick(TICK_v4r, $q['range_id']);
 
   audit_log("v4range", $q['range_id'], "v4rs,gr4rs", $q['action'], $prev_row, $new_row);
 
@@ -728,7 +797,10 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM v4rs WHERE v4r_id=".mq($id);
   $new_row=return_one($query, TRUE, "Диапазон не существует");
 
+  check_tick(TICK_v4r, $id);
+
   audit_log("v4range", $id, "v4rs,gr4rs", $q['action'], [], $new_row);
+
   ok_exit("done");
 
 } else if($q['action'] == 'v4_delete_global_range') {
@@ -745,6 +817,7 @@ if($q['action'] == 'v4get_net') {
 
   run_query($query);
 
+  check_tick(TICK_v4r, 0);
   audit_log("v4range", $q['range_id'], "v4rs,gr4rs", $q['action'], $prev_row, []);
 
   ok_exit("done");
@@ -755,7 +828,10 @@ if($q['action'] == 'v4get_net') {
       $ret[$key]['group_name'] = "hidden";
     };
   };
+  check_push(TICK_group, 0);
+
   ok_exit($ret);
+
 } else if($q['action'] == 'get_group') {
   require_p('group_id');
 
@@ -781,10 +857,12 @@ if($q['action'] == 'v4get_net') {
     };
   };
 
+  check_push(TICK_group, $q['group_id']);
   ok_exit($ret);
 } else if($q['action'] == 'get_users') {
   require_right(R_VIEWANY);
   $ret=return_query("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id");
+  check_push(TICK_user, 0);
   ok_exit($ret);
 } else if($q['action'] == 'get_user') {
   require_p('user_id');
@@ -808,6 +886,7 @@ if($q['action'] == 'v4get_net') {
     };
   };
 
+  check_push(TICK_user, $q['user_id']);
   ok_exit($ret);
 } else if($q['action'] == 'save_user') {
   require_right(R_SUPER);
@@ -854,9 +933,11 @@ if($q['action'] == 'v4get_net') {
   $query .= " FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']);
   $new_row=return_one($query, TRUE, "Пользователь не существует");
 
-  audit_log("user", $q['user_id'], "users,ugs", $q['action'], $prev_row, $new_row);
+  check_tick(TICK_user, $q['user_id']);
 
   $ret=return_one("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id WHERE user_id=".mq($q['user_id']));
+
+  audit_log("user", $q['user_id'], "users,ugs", $q['action'], $prev_row, $new_row);
   
   ok_exit($ret);
 } else if($q['action'] == 'save_group') {
@@ -909,11 +990,15 @@ if($q['action'] == 'v4get_net') {
   $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($q['group_id']);
   $new_row=return_one($query, TRUE, "Группа не существует");
 
-  audit_log("group", $q['group_id'], "groups,ugs", $q['action'], $prev_row, $new_row);
+  check_tick(TICK_group, $q['group_id']);
 
   $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($q['group_id']);
+  $ret=return_one($query, TRUE, "Группа не существует");
 
-  ok_exit(return_one($query, TRUE, "Группа не существует"));
+  audit_log("group", $q['group_id'], "groups,ugs", $q['action'], $prev_row, $new_row);
+
+  ok_exit($ret);
+
 } else if($q['action'] == 'add_group') {
   require_right(R_SUPER);
   require_p('group_name', "/\S+/");
@@ -948,11 +1033,14 @@ if($q['action'] == 'v4get_net') {
   $query="SELECT groups.*, (SELECT GROUP_CONCAT(ug_fk_user_id) FROM ugs WHERE ug_fk_group_id=group_id ORDER BY ug_fk_user_id) as group_users FROM groups WHERE group_id=".mq($id);
   $new_row=return_one($query, TRUE, "Группа не существует");
 
-  audit_log("group", $id, "groups,ugs", $q['action'], [], $new_row);
+  check_tick(TICK_group, $id);
 
   $query="SELECT groups.*, (SELECT COUNT(*) FROM ugs WHERE ug_fk_group_id=group_id) as users_count FROM groups WHERE group_id=".mq($id);
+  $ret=return_one($query, TRUE, "Группа не существует");
 
-  ok_exit(return_one($query, TRUE, "Группа не существует"));
+  audit_log("group", $id, "groups,ugs", $q['action'], [], $new_row);
+
+  ok_exit($ret);
 } else if($q['action'] == 'delete_group') {
   require_right(R_SUPER);
   require_p('group_id', "/^\d+$/");
@@ -998,6 +1086,8 @@ if($q['action'] == 'v4get_net') {
     error_exit("Операция приведет к потере права суперпользователя\nтекущим администратором. Операция отменена");
   };
 
+  check_tick(TICK_group, 0);
+
   audit_log("group", $q['group_id'], "groups,ugs", $q['action'], $prev_row, []);
 
   ok_exit("done");
@@ -1022,6 +1112,8 @@ if($q['action'] == 'v4get_net') {
     $ret['select_vd_id']=return_single("SELECT vlan_fk_vd_id FROM vlans WHERE vlan_id=".mq($q['focus_on_vlan_id']), TRUE, "VLAN не существует");
   };
 
+  check_push(TICK_vd, 0);
+
   ok_exit($ret);
 } else if($q['action'] == 'get_vdomain') {
   require_p('vd_id', "/^\d+$/");
@@ -1033,6 +1125,8 @@ if($q['action'] == 'v4get_net') {
     $vdomain['vd_name']=substr($vdomain['vd_name'], 0, 1)."...";
     $vdomain['vd_descr']='hidden';
   };
+
+  check_push(TICK_vd, $q['vd_id']);
 
   ok_exit($vdomain);
 } else if($q['action'] == 'edit_vdomain') {
@@ -1057,6 +1151,7 @@ if($q['action'] == 'v4get_net') {
 
   $new_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
+  check_tick(TICK_vd, $q['vd_id']);
 
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
 
@@ -1084,6 +1179,7 @@ if($q['action'] == 'v4get_net') {
 
   $new_row=return_one("SELECT vds.*, (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) as vlans_count FROM vds WHERE vd_id=".mq($q['vd_id']), TRUE);
 
+  check_tick(TICK_vd, $q['vd_id']);
 
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
 
@@ -1098,6 +1194,8 @@ if($q['action'] == 'v4get_net') {
   run_query($query);
 
   $new_row=[];
+
+  check_tick(TICK_vd, 0);
 
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
 
@@ -1162,6 +1260,10 @@ if($q['action'] == 'v4get_net') {
     $ret['vlans_stop']=$max_vlan;
   };
 
+  check_push(TICK_vlan, 0);
+  check_push(TICK_vr, 0);
+  check_push(TICK_vd, $q['vd_id']);
+
   ok_exit($ret);
 } else if($q['action'] == 'take_vlan') {
   require_p('vd_id', "/^\d+$/");
@@ -1202,8 +1304,6 @@ if($q['action'] == 'v4get_net') {
   
   $new_row=return_one("SELECT * FROM vlans WHERE vlan_id=".mq($id), TRUE);
 
-  audit_log("vlan", $id, "vlans", $q['action'], $prev_row, $new_row);
-
   $query="SELECT vlans.*";
   $query .= ", NULL as v4nets";
   $query .= ", NULL as v6nets";
@@ -1213,6 +1313,10 @@ if($q['action'] == 'v4get_net') {
   if(!has_nright($effective_rmask, NR_VIEWNAME | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $ret['vlan_name'] = 'hidden';  $ret['vlan_descr'] = 'hidden'; };
   if(!has_nright($effective_rmask, NR_VIEWOTHER | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN)) { $ret['vlan_descr'] = 'hidden'; };
 
+  check_tick(TICK_vlan, $id);
+  check_tick(TICK_vd, $q['vd_id']);
+
+  audit_log("vlan", $id, "vlans", $q['action'], $prev_row, $new_row);
   ok_exit($ret);
 
 } else if($q['action'] == 'free_vlan') {
@@ -1243,8 +1347,9 @@ if($q['action'] == 'v4get_net') {
 
   run_query("DELETE FROM vlans WHERE vlan_id=".mq($q['vlan_id']));
 
-  run_query("UPDATE vds SET vd_check=vd_check+1 WHERE vd_id=".mq($q['vd_id']));
   $new_row=[];
+
+  check_tick(TICK_vd, $prev_row['vlan_fk_vd_id']);
 
   audit_log("vlan", $q['vlan_id'], "vlans", $q['action'], $prev_row, $new_row);
 
