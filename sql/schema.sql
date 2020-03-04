@@ -154,6 +154,8 @@ CREATE TABLE vds (
   vd_name	VARCHAR(190) NOT NULL DEFAULT '',
   vd_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   vd_check	BIGINT NOT NULL DEFAULT 0 COMMENT 'should be incremented each time vlans data changed and periodiaclly checked by front-end to notify user if out of sync',
+  check_ts	BIGINT UNSIGNED NOT NULL COMMENT 'time of last change',
+  check_by	BIGINT UNSIGNED COMMENT 'user_id by which check changed',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (vd_id),
