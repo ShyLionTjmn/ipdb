@@ -373,6 +373,14 @@ function run_query(query, successfunc, completefunc, errorfunc) {
           showLoginWindow(data["ok"]["no_auth"], "Истекло время неактивности сеанса, необходимо пройти авторизацию.");
           return;
         };
+        if(data["_check"] != undefined && g_checks != undefined) {
+          for(let c_subj in data["_check"]) {
+            if(g_checks[c_subj] == undefined) { g_checks[c_subj] = {}; };
+            for(let c_id in data["_check"][c_subj]) {
+              g_checks[c_subj][c_id] = data["_check"][c_subj][c_id];
+            };
+          };
+        };
         if(successfunc != null) {
           successfunc(data);
         };

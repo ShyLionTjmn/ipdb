@@ -92,21 +92,22 @@ function check_check() {
   return TRUE;
 };
 
-function check_push($subject, $id) {
+function check_push($subject, $id, $zero=TRUE) {
   global $checks;
-  array_push($checks, Array($subject, $id));
+  if(!isset($checks[$subject])) { $checks[$subject] = Array(); };
+  $checks[$subject][$id]=TRUE;
+
+  if($id != 0 && $zero) {
+    $checks[$subject]['0']=TRUE;
+  };
 };
 
 function check_get($subject, $id) {
-  $ret=Array($subject => Array());
-  $ret[$subject][$id] = return_single("SELECT IFNULL((SELECT check_count FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=".mq($id)."), 0) as c", TRUE);
-  if($id != 0) {
-    $ret[$subject]['0'] = return_single("SELECT IFNULL((SELECT check_count FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=0), 0) as c", TRUE);
-  };
-  return $ret;
+  return return_single("SELECT IFNULL((SELECT check_count FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=".mq($id)."), 0) as c", TRUE);
 };
 
 function check_tick($subject, $id, $push=TRUE, $zero=TRUE) {
+  global $time;
   $query="INSERT INTO checks SET";
   $query .= " check_ts=$time";
   $query .= ",check_by=".mq($_SESSION['user']['user_id']);
@@ -121,7 +122,7 @@ function check_tick($subject, $id, $push=TRUE, $zero=TRUE) {
   run_query($query);
 
   if($push) {
-    check_push($subject, $id);
+    check_push($subject, $id, FALSE);
   };
 
   if($id != 0 && $zero) {
@@ -138,7 +139,7 @@ function check_tick($subject, $id, $push=TRUE, $zero=TRUE) {
     run_query($query);
 
     if($push) {
-      check_push($subject, 0);
+      check_push($subject, 0, FALSE);
     };
   };
 
@@ -188,11 +189,16 @@ function ok_exit($redtext) {
 
   if(count($checks) > 0) {
     $chk=Array();
-    foreach($checks as $chk_pair) {
-      $chk=array_merge_recursive($chk, check_get($chk_pair[0], $chk_pair[1]));
+    foreach($checks as $subject => $ids) {
+      foreach($ids as $id => $ignore) {
+        $chk_val=check_get($subject, $id);
+        $chk=array_merge_recursive($chk, Array( $subject => Array( $id => $chk_val)));
+      };
     };
     $ret['_check'] = $chk;
   };
+
+  $ret['_check_debug'] = $checks;
 
   close_db();
   global $curl;
@@ -1163,7 +1169,6 @@ if($q['action'] == 'v4get_net') {
   $query .= ",vd_name=".mq($q['vd_name']);
   $query .= ",vd_max_num=".mq($q['vd_max_num']);
   $query .= ",vd_descr=".mq($q['vd_descr']);
-  $query .= ",vd_check=vd_check+1";
   $query .= " WHERE vd_id=".mq($q['vd_id']);
 
   run_query($query);
@@ -1189,7 +1194,6 @@ if($q['action'] == 'v4get_net') {
   $query .= ",vd_name=".mq($q['vd_name']);
   $query .= ",vd_max_num=".mq($q['vd_max_num']);
   $query .= ",vd_descr=".mq($q['vd_descr']);
-  $query .= ",vd_check=vd_check+1";
 
   run_query($query);
 
@@ -1319,8 +1323,6 @@ if($q['action'] == 'v4get_net') {
   $id=mysqli_insert_id($db);
   if($id == 0) { error_exit("Bad insert ID returned"); };
 
-  run_query("UPDATE vds SET vd_check=vd_check+1 WHERE vd_id=".mq($q['vd_id']));
-  
   $new_row=return_one("SELECT * FROM vlans WHERE vlan_id=".mq($id), TRUE);
 
   $query="SELECT vlans.*";
@@ -1462,8 +1464,6 @@ if($q['action'] == 'v4get_net') {
   $query .= " WHERE vlan_id=".mq($q['vlan_id']);
 
   run_query($query);
-
-  run_query("UPDATE vds SET vd_check=vd_check+1 WHERE vd_id=".mq($prev_row['vlan_fk_vd_id']));
 
   $query="SELECT vlans.*";
   $query .= ", (SELECT GROUP_CONCAT(CONCAT(v4net_id,':',v4net_addr,'/',v4net_mask)) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id GROUP BY v4net_fk_vlan_id ORDER BY v4net_addr) as v4nets";

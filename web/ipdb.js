@@ -4,6 +4,8 @@ var ud;
 var $R={};
 var page_root;
 
+var g_checks={};
+
 var _debug_opts=true;
 
 var VLANS_AUTOSAVE=true;
@@ -3958,7 +3960,6 @@ function v4nav(data) {
   };
 
   contents.empty();
-  unwatch();
 
   let page_title="Навигация: "+data['net_info']['net_text']+"/"+data['net_info']['masklen'];
 
@@ -4699,6 +4700,8 @@ function v4get_net() {
    )
    .appendTo( contents )
   ;
+
+  unwatch();
 
   run_query({"action": "v4get_net", "net": $R['net'], "mask": $R['masklen']}, function(data) {
     if(data['ok']['type'] == "nav") {
