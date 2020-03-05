@@ -194,10 +194,20 @@ $.fn.moveToTop = function() {
 
 function watcherFunc() {
   watchTimer = undefined;
-  if( $.isEmptyObject(watches) ) {
+  if( $.isEmptyObject(watches) || !WATCH ) {
     watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
   } else {
-    run_query({"action": "watch", "checks": watches}, function(ret_data) {
+    let w={};
+    for(let subject in watches) {
+      if(g_checks[subject] == undefined) { error_at(); throw("Error"); };
+      if(w[subject] == undefined) w[subject] = {};
+      for(let id in watches[subject]) {
+        if(g_checks[subject][id] == undefined) { error_at(); throw("Error"); };
+        w[subject][id] = g_checks[subject][id];
+      };
+    };
+
+    run_query({"action": "watch", "checks": w}, function(ret_data) {
       if(ret_data['ok']['result'] == 'ok') {
       } else {
         let warn_cont=$(DIV)
@@ -236,6 +246,8 @@ function watcherFunc() {
 };
 
 function watch(subject, id) {
+  if(g_checks[subject] == undefined) { error_at(); throw("Error"); };
+  if(g_checks[subject][id] == undefined) { error_at(); throw("Error"); };
   if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
   if(watches[subject] == undefined) { watches[subject] = {}; };
   if(watches[subject][id] == undefined) { watches[subject][id] = 0; };
@@ -255,6 +267,7 @@ function unwatch(subject, id) {
   if(subject == undefined) {
     if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
     watches={};
+    g_checks={};
     return;
   };
 
@@ -4705,8 +4718,13 @@ function v4get_net() {
 
   run_query({"action": "v4get_net", "net": $R['net'], "mask": $R['masklen']}, function(data) {
     if(data['ok']['type'] == "nav") {
+      watch(TICK_v4net, 0);
+      watch(TICK_v4r, 0);
       v4nav(data['ok']);
     } else {
+      watch(TICK_v4net, data['ok']['net']['v4net_id']);
+      watch(TICK_v4net, 0);
+      watch(TICK_v4r, 0);
       v4view(data['ok']);
     };
   });

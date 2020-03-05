@@ -192,13 +192,14 @@ function ok_exit($redtext) {
     foreach($checks as $subject => $ids) {
       foreach($ids as $id => $ignore) {
         $chk_val=check_get($subject, $id);
-        $chk=array_merge_recursive($chk, Array( $subject => Array( $id => $chk_val)));
+        if(!isset($chk[$subject])) { $chk[$subject] = Array(); };
+        $chk[$subject][$id] = $chk_val;
       };
     };
     $ret['_check'] = $chk;
   };
 
-  $ret['_check_debug'] = $checks;
+  #$ret['_check_debug'] = $checks;
 
   close_db();
   global $curl;
@@ -603,7 +604,7 @@ if($q['action'] == 'v4get_net') {
 
 
     check_push(TICK_v4net, $netrow['v4net_id']);
-    check_push(TICK_vr, 0);
+    check_push(TICK_v4r, 0);
     ok_exit($ret);
   } else {
 
@@ -679,7 +680,7 @@ if($q['action'] == 'v4get_net') {
 
   };
   check_push(TICK_v4net, 0);
-  check_push(TICK_vr, 0);
+  check_push(TICK_v4r, 0);
   ok_exit($ret);
 } else if($q['action'] == 'v4_get_range') {
   require_p('range_id', "/^\d+$/");
