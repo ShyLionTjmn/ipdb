@@ -10,6 +10,11 @@ var VLANS_AUTOSAVE=true;
 
 const INPUT_STOP_TIMER	= 500;
 
+var SAFE_MODE=true;
+var WATCH=true;
+
+const WATCH_PERIOD	= 3000;
+
 const R_SUPER='r_super';
 const R_VIEWANY='r_viewany';
 
@@ -158,6 +163,108 @@ const v4len2mask=[
   4294967294, //255.255.255.254
   4294967295 //255.255.255.255
 ];
+
+var watchTimer;
+var watches={};
+
+$.fn.moveToTop = function() {
+  let z_index=1000;
+  $(".ui-dialog").each(function() {
+    let dz_index=Number($(this).css("zIndex"));
+    if(!isNaN(dz_index) && dz_index > z_index) z_index = dz_index + 1;
+  });
+
+  this.css("zIndex", z_index);
+  return this;
+};
+
+
+function watcherFunc() {
+  watchTimer = undefined;
+  if( $.isEmptyObject(watches) ) {
+    watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
+  } else {
+    run_query({"action": "watch", "checks": watches}, function(ret_data) {
+      if(ret_data['ok']['result'] == 'ok') {
+      } else {
+        let warn_cont=$(DIV)
+         .css({"position": "fixed", "top": "0px", "left": "0px", "right": "0px", "height": "auto", "text-align": "center"})
+         .moveToTop()
+         .appendTo("BODY") 
+        ;
+        let warn=$(DIV)
+         .css({"display": "inline-block", "background-color": "salmon", "border": "2px solid red", "padding": "1ema", "text-align": "left"})
+         .appendTo( warn_cont )
+        ;
+        warn
+         .append( $(DIV).text("Внимание, данные были изменены в стороннем сеансе и могут не соответствовать отображаемым прямо сейчас. Настоятельно рекомендуем обновить экран") )
+        ;
+        if(has_right(R_VIEWANY)) {
+          let table=$(TABLE)
+           .append( $(TR)
+             .append( $(TD).text("Пользователь") )
+             .append( $(TD).text("Время крайнего изменения") )
+           )
+          ;
+
+          ret_data['ok']['users'].sort(function(a, b) { return Number(b['ts']) - Number(a['ts']); });
+
+          for(let i=0; i < ret_data['ok']['users'].length; i++) {
+            $(TR)
+             .append( $(TD).text(ret_data['ok']['users'][i]['user_name']).title(ret_data['ok']['users'][i]['user_login']) )
+             .append( $(TD).text(from_unix_time(ret_data['ok']['users'][i]['ts'])) )
+             .appendTo( table )
+            ;
+          };
+        };
+      };
+    });
+  };
+};
+
+function watch(subject, id) {
+  if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
+  if(watches[subject] == undefined) { watches[subject] = {}; };
+  if(watches[subject][id] == undefined) { watches[subject][id] = 0; };
+  watches[subject][id]++;
+
+  if(watches[subject][id] > 3) {
+    error_at();
+    throw("Error");
+  };
+
+  if(SAFE_MODE) {
+    watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
+  };
+};
+
+function unwatch(subject, id) {
+  if(watches[subject] == undefined) {
+    if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
+    error_at();
+    throw("Error");
+  };
+  if(watches[subject][id] == undefined) {
+    if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
+    error_at();
+    throw("Error");
+  };
+  watches[subject][id] --;
+  if(watches[subject][id] < 0) {
+    if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
+    error_at(); throw("Error");
+  };
+  if(watches[subject][id] == 0) {
+    delete watches[subject][id];
+    if( $.isEmptyObject(watches[subject]) ) {
+      delete watches[subject];
+      if( $.isEmptyObject(watches) && watchTimer != undefined) {
+        clearTimeout(watchTimer);
+        watchTimer = undefined;
+      };
+    };
+  };
+};
 
 function range_icon(icon_str) {
   if(String(icon_str).match(/^ui-icon(?:-[a-z0-9]+)+$/)) {

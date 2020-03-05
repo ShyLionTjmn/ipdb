@@ -350,7 +350,7 @@ function showLoginWindow(prov_list, message) {
 };
 
 
-function run_query(query, successfunc) {
+function run_query(query, successfunc, completefunc, errorfunc) {
   if(AJAX == undefined) {
     error_dialog("AJAX uri not set");
     return;
@@ -391,10 +391,11 @@ function run_query(query, successfunc) {
       error_dialog(message);
       $("#led").css("background-color", "lightcoral");
     },
-    error: function(e) {
+    error: errorfunc != undefined?errorfunc:function(e) {
       error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:""));
       $("#led").css("background-color", "lightcoral");
-    }
+    },
+    complete: completefunc != undefined?completefunc:undefined
   });
 };
 
