@@ -34,6 +34,17 @@ const NR_EDIT_NET       = 1 << 8;
 const RR_TAKE_NET       = 1 << 9;
 const RR_DENY_TAKE_IP   = 1 << 10; //also deny editing
 
+const TICK_v4r          = "v4r";
+const TICK_v6r          = "v6r";
+const TICK_v4net        = "v4net";
+const TICK_v6net        = "v6net";
+const TICK_vd           = "vd";
+const TICK_vlan         = "vlan";
+const TICK_vr           = "vr";
+const TICK_user         = "user";
+const TICK_group        = "group";
+
+
 const group_rights=Array(
   { "right": R_SUPER,
     "label_text": "Супер",
@@ -239,6 +250,12 @@ function watch(subject, id) {
 };
 
 function unwatch(subject, id) {
+  if(subject == undefined) {
+    if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
+    watches={};
+    return;
+  };
+
   if(watches[subject] == undefined) {
     if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
     error_at();
@@ -3941,6 +3958,7 @@ function v4nav(data) {
   };
 
   contents.empty();
+  unwatch();
 
   let page_title="Навигация: "+data['net_info']['net_text']+"/"+data['net_info']['masklen'];
 
