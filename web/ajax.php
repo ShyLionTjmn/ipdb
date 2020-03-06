@@ -706,6 +706,7 @@ if($q['action'] == 'v4get_net') {
   $ret['range_group_rights']=return_query($query);
 
   check_push(TICK_v4r, $q['range_id']);
+  check_push(TICK_group, 0);
   ok_exit($ret);
 } else if($q['action'] == 'v4_edit_global_range') {
   require_right(R_SUPER);
@@ -872,10 +873,20 @@ if($q['action'] == 'v4get_net') {
   };
 
   check_push(TICK_group, $q['group_id']);
+  check_push(TICK_user, 0);
   ok_exit($ret);
 } else if($q['action'] == 'get_users') {
   require_right(R_VIEWANY);
   $ret=return_query("SELECT users.*, aps.ap_off, aps.ap_name FROM users INNER JOIN aps ON ap_id=user_fk_ap_id");
+  if(!has_right(R_VIEWANY)) {
+    foreach($ret as $i => $row) {
+      if($row['user_id'] != $this_user_id) {
+        foreach(user_hide as $field) {
+          $ret[$i][$field] = "hidden";
+        };
+      };
+    };
+  };
   check_push(TICK_user, 0);
   ok_exit($ret);
 } else if($q['action'] == 'get_user') {
@@ -901,6 +912,7 @@ if($q['action'] == 'v4get_net') {
   };
 
   check_push(TICK_user, $q['user_id']);
+  check_push(TICK_group, 0);
   ok_exit($ret);
 } else if($q['action'] == 'save_user') {
   require_right(R_SUPER);
@@ -1645,9 +1657,7 @@ if($q['action'] == 'v4get_net') {
   foreach($q['checks'] as $subject => $ids) {
     foreach($ids as $id => $check_count) {
       $row=return_one("SELECT * FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=".mq($id));
-      if($id != 0 && $row === NULL) {
-        error_exit("watch error: nonexistent $subject : $id");
-      } else if($row === NULL) {
+      if($row === NULL) {
         $row=Array('check_count' => 0, 'check_ts' => 0, 'check_by' => 0, 'check_subject' => $subject, 'check_subject_id' => $id);
       };
       if($row['check_count'] < $check_count) {
@@ -1656,22 +1666,24 @@ if($q['action'] == 'v4get_net') {
       if($row['check_count'] != $check_count) {
         $has_changes=TRUE;
 
-        if(!isset($ret_users[$row['check_by']])) {
-          $query="SELECT CONCAT(user_username, '@', ap_name) as user_login";
-          $query .= ", user_name";
-          $query .= " FROM users INNER JOIN aps ON user_fk_ap_id=ap_id";
-          $query .= " WHERE user_id=".mq($row['check_by']);
-          $user_row=return_one($query, TRUE);
+        if($row['check_by'] != 0) {
+          if(!isset($ret_users[$row['check_by']])) {
+            $query="SELECT CONCAT(user_username, '@', ap_name) as user_login";
+            $query .= ", user_name";
+            $query .= " FROM users INNER JOIN aps ON user_fk_ap_id=ap_id";
+            $query .= " WHERE user_id=".mq($row['check_by']);
+            $user_row=return_one($query, TRUE);
 
-          if(!has_right(R_VIEWANY)) {
-            $user_row['user_login'] = 'hidden';
-            $user_row['user_name'] = 'hidden';
+            if(!has_right(R_VIEWANY)) {
+              $user_row['user_login'] = 'hidden';
+              $user_row['user_name'] = 'hidden';
+            };
+
+            $user_row['ts']=$row['check_ts'];
+            $ret_users[$row['check_by']] = $user_row;
+          } else if($ret_users[$row['check_by']]['check_ts'] < $row['check_ts']) {
+            $ret_users[$row['check_by']]['check_ts'] = $row['check_ts'];
           };
-
-          $user_row['ts']=$row['check_ts'];
-          $ret_users[$row['check_by']] = $user_row;
-        } else if($ret_users[$row['check_by']]['check_ts'] < $row['check_ts']) {
-          $ret_users[$row['check_by']]['check_ts'] = $row['check_ts'];
         };
       };
     };

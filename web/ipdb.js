@@ -207,6 +207,7 @@ function watcherFunc() {
       };
     };
 
+    $("#watch_debug").text(jstr(watches)+"\n"+jstr(w)+"\n"+( new Date().toLocaleTimeString('ru')));
     run_query({"action": "watch", "checks": w}, function(ret_data) {
       if(ret_data['ok']['result'] == 'ok') {
         if(WATCH) {
@@ -271,6 +272,7 @@ function unwatch(subject, id) {
     if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
     watches={};
     g_checks={};
+    $("#watch_debug").text("none");
     return;
   };
 
@@ -293,9 +295,12 @@ function unwatch(subject, id) {
     delete watches[subject][id];
     if( $.isEmptyObject(watches[subject]) ) {
       delete watches[subject];
-      if( $.isEmptyObject(watches) && watchTimer != undefined) {
-        clearTimeout(watchTimer);
-        watchTimer = undefined;
+      if( $.isEmptyObject(watches) ) {
+        $("#watch_debug").text("none");
+        if(watchTimer != undefined) {
+          clearTimeout(watchTimer);
+          watchTimer = undefined;
+        };
       };
     };
   };
@@ -1227,6 +1232,7 @@ function vlan_range_dialog(vr_id, donefunc) {
     close: function() {
       let _id=$(this).data("id");
       if(_id != undefined) unwatch(TICK_vr, _id);
+      unwatch(TICK_group, 0);
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
@@ -1462,8 +1468,12 @@ function vlan_range_dialog(vr_id, donefunc) {
       };
 
       watch(TICK_vr, vr_id);
+      watch(TICK_group, 0);
     });
   } else {
+    run_query({"action": "get_groups"}, function() {
+      watch(TICK_group, 0);
+    });
   };
 
 };
@@ -2841,8 +2851,8 @@ function group_edit(group_id, opt, donefunc) {
       let _id=$(this).data("id");
       if(_id != undefined) {
         unwatch(TICK_group, _id);
-        unwatch(TICK_user, 0);
       };
+      unwatch(TICK_user, 0);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -3086,6 +3096,10 @@ function group_edit(group_id, opt, donefunc) {
       watch(TICK_group, group_id);
       watch(TICK_user, 0);
     });
+  } else {
+    run_query({"action": "get_users"}, function() {
+      watch(TICK_user, 0);
+    });
   };
 
   dialog.dialog(d);
@@ -3276,6 +3290,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
+      unwatch(TICK_group, 0);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -3396,6 +3411,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       let row=groups_list_row(group, donefunc);
       row.appendTo( tbody );
     };
+    watch(TICK_group, 0);
   });
 };
 
@@ -3584,6 +3600,9 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     width: "auto",
     buttons: [],
     close: function() {
+      let _id=$(this).data("id");
+      if(_id != undefined) unwatch(TICK_v4r, _id);
+      unwatch(TICK_group, 0);
       $(".range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
@@ -3809,8 +3828,14 @@ function v4_global_range_dialog(v4r_id, donefunc) {
       for(let i=0; i < data['ok']['range_group_rights'].length; i++) {
         $("DIV#v4range_rights").append( group_net_right_div(group_net_rights, data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
       };
+
+      watch(TICK_v4r, v4r_id);
+      watch(TICK_group, 0);
     });
   } else {
+    run_query({"action": "get_groups"}, function() {
+      watch(TICK_group, 0);
+    });
   };
 
 };
@@ -4980,6 +5005,27 @@ $( document ).ready(function() {
        "position": "absolute", "right": "0em", "top": "0em", "left": "0em",
        "text-align": "center", "font-size": "3em"
      })
+   )
+   .append( $(DIV)
+     .css({
+       "position": "fixed", "bottom": "0em", "left": "0em", "width": "auto", "height": "auto",
+       "z-index": 1000000
+     })
+     .append( $(DIV)
+       .css({"border": "1px solid black", "display": "inline-block", "background-color": "white"})
+       .css({"padding": "0.2em"})
+       .append( $(LABEL).text("W")
+         .click(function() {
+           $("#watch_debug").toggle();
+         })
+       )
+     )
+     .append( $(DIV).id("watch_debug")
+       .css({"padding": "0.2em"})
+       .css({"border": "1px solid black", "background-color": "white"})
+       .css({"white-space": "pre"})
+       //.hide()
+     )
    )
    .append( $(DIV).id("calc")
      .css({
