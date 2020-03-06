@@ -15,7 +15,7 @@ const INPUT_STOP_TIMER	= 500;
 var SAFE_MODE=true;
 var WATCH=true;
 
-const WATCH_PERIOD	= 3000;
+const WATCH_PERIOD	= 1000;
 
 const R_SUPER='r_super';
 const R_VIEWANY='r_viewany';
@@ -209,7 +209,11 @@ function watcherFunc() {
 
     run_query({"action": "watch", "checks": w}, function(ret_data) {
       if(ret_data['ok']['result'] == 'ok') {
+        if(WATCH) {
+          watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
+        };
       } else {
+        WATCH = false;
         let warn_cont=$(DIV)
          .css({"position": "fixed", "top": "0px", "left": "0px", "right": "0px", "height": "auto", "text-align": "center"})
          .moveToTop()
@@ -222,23 +226,22 @@ function watcherFunc() {
         warn
          .append( $(DIV).text("Внимание, данные были изменены в стороннем сеансе и могут не соответствовать отображаемым прямо сейчас. Настоятельно рекомендуем обновить экран") )
         ;
-        if(has_right(R_VIEWANY)) {
-          let table=$(TABLE)
-           .append( $(TR)
-             .append( $(TD).text("Пользователь") )
-             .append( $(TD).text("Время крайнего изменения") )
-           )
+        let table=$(TABLE)
+         .append( $(TR)
+           .append( $(TD).text("Пользователь") )
+           .append( $(TD).text("Время крайнего изменения") )
+         )
+         .appendTo( warn )
+        ;
+
+        ret_data['ok']['users'].sort(function(a, b) { return Number(b['ts']) - Number(a['ts']); });
+
+        for(let i=0; i < ret_data['ok']['users'].length; i++) {
+          $(TR)
+           .append( $(TD).text(ret_data['ok']['users'][i]['user_name']).title(ret_data['ok']['users'][i]['user_login']) )
+           .append( $(TD).text(from_unix_time(ret_data['ok']['users'][i]['ts'])) )
+           .appendTo( table )
           ;
-
-          ret_data['ok']['users'].sort(function(a, b) { return Number(b['ts']) - Number(a['ts']); });
-
-          for(let i=0; i < ret_data['ok']['users'].length; i++) {
-            $(TR)
-             .append( $(TD).text(ret_data['ok']['users'][i]['user_name']).title(ret_data['ok']['users'][i]['user_login']) )
-             .append( $(TD).text(from_unix_time(ret_data['ok']['users'][i]['ts'])) )
-             .appendTo( table )
-            ;
-          };
         };
       };
     });
@@ -258,7 +261,7 @@ function watch(subject, id) {
     throw("Error");
   };
 
-  if(SAFE_MODE) {
+  if(SAFE_MODE && WATCH) {
     watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
   };
 };
@@ -1222,6 +1225,8 @@ function vlan_range_dialog(vr_id, donefunc) {
     width: "auto",
     buttons: [],
     close: function() {
+      let _id=$(this).data("id");
+      if(_id != undefined) unwatch(TICK_vr, _id);
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
@@ -1232,7 +1237,9 @@ function vlan_range_dialog(vr_id, donefunc) {
     d['buttons'].push({
       "text": (vr_id == undefined?"Создать":"Сохранить"),
       "click": function() {
-        let vd_id=$("#vlans_list").find("SELECT.domain_sel").val();
+        let _sel=$("#vlans_list").find("SELECT.domain_sel");
+        if(_sel.length == 0) return;
+        let vd_id=_sel.val();
         if(vd_id == "") { return };
         if(vd_id == undefined) { error_at(); throw("error"); };
         let _this=this;
@@ -1453,6 +1460,8 @@ function vlan_range_dialog(vr_id, donefunc) {
       for(let i=0; i < data['ok']['range_group_rights'].length; i++) {
         $("DIV#vlan_range_rights").append( group_net_right_div(group_vlan_rights, data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
       };
+
+      watch(TICK_vr, vr_id);
     });
   } else {
   };
@@ -1837,6 +1846,8 @@ function vdomain_edit(vd_id, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
+      let _id=$(this).data("id");
+      if(_id != undefined) { unwatch(TICK_vd, _id); };
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -1918,6 +1929,7 @@ function vdomain_edit(vd_id, opt, donefunc) {
       dialog.find(".vd_max_num").val(ret_data['ok']['vd_max_num']);
       dialog.find(".vd_descr").val(ret_data['ok']['vd_descr']);
       dialog.data("data", ret_data['ok']);
+      watch(TICK_vd, vd_id);
     });
   };
 

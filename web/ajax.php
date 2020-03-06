@@ -1638,6 +1638,60 @@ if($q['action'] == 'v4get_net') {
   audit_log("vrange", $id, "vrs,gvrrs", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'watch') {
+  require_p('checks');
+  if(!is_array($q['checks'])) { error_exit("Not array"); };
+  $ret_users=Array();
+  $has_changes=FALSE;
+
+  foreach($q['checks'] as $subject => $ids) {
+    foreach($ids as $id => $check_count) {
+      $row=return_one("SELECT * FROM checks WHERE check_subject=".mq($subject)." AND check_subject_id=".mq($id));
+      if($id != 0 && $row === NULL) {
+        error_exit("watch error: nonexistent $subject : $id");
+      } else if($row === NULL) {
+        $row=Array('check_count' => 0, 'check_ts' => 0, 'check_by' => 0, 'check_subject' => $subject, 'check_subject_id' => $id);
+      };
+      if($row['check_count'] < $check_count) {
+        error_exit("watch error: bad value $subject : $id = DB:".$row['check_count']." vs WEB:$check_count");
+      };
+      if($row['check_count'] != $check_count) {
+        $has_changes=TRUE;
+
+        if(!isset($ret_users[$row['check_by']])) {
+          $query="SELECT CONCAT(user_username, '@', ap_name) as user_login";
+          $query .= ", user_name";
+          $query .= " FROM users INNER JOIN aps ON user_fk_ap_id=ap_id";
+          $query .= " WHERE user_id=".mq($row['check_by']);
+          $user_row=return_one($query, TRUE);
+
+          if(!has_right(R_VIEWANY)) {
+            $user_row['user_login'] = 'hidden';
+            $user_row['user_name'] = 'hidden';
+          };
+
+          $user_row['ts']=$row['check_ts'];
+          $ret_users[$row['check_by']] = $user_row;
+        } else if($ret_users[$row['check_by']]['check_ts'] < $row['check_ts']) {
+          $ret_users[$row['check_by']]['check_ts'] = $row['check_ts'];
+        };
+      };
+    };
+  };
+
+  if(!$has_changes) {
+    $ret= Array('result' => 'ok');
+  } else {
+    $users_array=Array();
+    foreach($ret_users as $ignore => $u) {
+      array_push($users_array, $u);
+    };
+    $ret= Array('result' => 'has_changes', 'users' => $users_array);
+  };
+  $ret['_debug'] = $q['checks'];
+  $ret['_strtime'] = strftime('%c');
+  ok_exit($ret);
+
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
