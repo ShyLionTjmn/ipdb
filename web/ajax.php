@@ -831,7 +831,7 @@ if($q['action'] == 'v4get_net') {
 
   run_query($query);
 
-  check_tick(TICK_v4r, 0);
+  check_tick(TICK_v4r, $q['range_id']);
   audit_log("v4range", $q['range_id'], "v4rs,gr4rs", $q['action'], $prev_row, []);
 
   ok_exit("done");
@@ -1110,7 +1110,7 @@ if($q['action'] == 'v4get_net') {
     error_exit("Операция приведет к потере права суперпользователя\nтекущим администратором. Операция отменена");
   };
 
-  check_tick(TICK_group, 0);
+  check_tick(TICK_group, $q['group_id']);
   check_tick(TICK_user, 0);
   ## TODO tick all affected groups and users
 
@@ -1219,7 +1219,7 @@ if($q['action'] == 'v4get_net') {
 
   $new_row=[];
 
-  check_tick(TICK_vd, 0);
+  check_tick(TICK_vd, $q['vd_id']);
 
   audit_log("vd", $q['vd_id'], "vds", $q['action'], $prev_row, $new_row);
 
@@ -1284,8 +1284,6 @@ if($q['action'] == 'v4get_net') {
     $ret['vlans_stop']=$max_vlan;
   };
 
-  check_push(TICK_vlan, 0);
-  check_push(TICK_vr, 0);
   check_push(TICK_vd, $q['vd_id']);
 
   ok_exit($ret);
@@ -1688,6 +1686,7 @@ if($q['action'] == 'v4get_net') {
     };
     $ret= Array('result' => 'has_changes', 'users' => $users_array);
   };
+  $ret['_is_watch'] = TRUE;
   $ret['_debug'] = $q['checks'];
   $ret['_strtime'] = strftime('%c');
   ok_exit($ret);

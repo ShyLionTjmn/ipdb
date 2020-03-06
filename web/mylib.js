@@ -367,7 +367,9 @@ function run_query(query, successfunc, completefunc, errorfunc) {
       if(data["ok"] != undefined) {
         $("#led").css("background-color", "lightgreen");
         if(DEBUG) {
-          $("#debug").text(JSON.stringify(data, null, 2));
+          if(data["ok"]["_is_watch"] == undefined) {
+            $("#debug").text(JSON.stringify(data, null, 2));
+          };
         };
         if(data["ok"]["no_auth"] != undefined) {
           showLoginWindow(data["ok"]["no_auth"], "Истекло время неактивности сеанса, необходимо пройти авторизацию.");

@@ -249,8 +249,8 @@ function watcherFunc() {
 };
 
 function watch(subject, id) {
-  if(g_checks[subject] == undefined) { error_at(); throw("Error"); };
-  if(g_checks[subject][id] == undefined) { error_at(); throw("Error"); };
+  if(g_checks[subject] == undefined) { error_at("Unwatchable subject: "+subject+" id: "+id); throw("Unwatchable subject: "+subject+" id: "+id); };
+  if(g_checks[subject][id] == undefined) { error_at("Unwatchable subject: "+subject+" id: "+id); throw("Unwatchable subject: "+subject+" id: "+id); };
   if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
   if(watches[subject] == undefined) { watches[subject] = {}; };
   if(watches[subject][id] == undefined) { watches[subject][id] = 0; };
@@ -1973,7 +1973,14 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
     minHeight: $(window).height()-10,
     //width: "auto",
     buttons: [],
+    open: function() {
+    },
     close: function() {
+      unwatch(TICK_vd, 0);
+      let _sel_id=$(this).find("SELECT.domain_sel").val();
+      if(_sel_id != "") {
+        unwatch(TICK_vd, _sel_id);
+      };
       $(this).dialog("destroy");
       $(this).remove();
       $("#vr_info_parent").remove();
@@ -2019,6 +2026,13 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
      let _sel_id=_sel.val();
      let _opt_elm=_sel.find("OPTION:selected");
 
+     let _prev_id=$(this).data("prev_id");
+
+     if(_prev_id != undefined) {
+       if(_prev_id != "") unwatch(TICK_vd, _prev_id);
+     };
+     $(this).data("prev_id", _sel_id);
+
      if(_sel_id != undefined && _sel_id != "") {
        _sel.title(_opt_elm.data("data")['vd_descr']);
        _dialog.find(".vdomain_edit_btn").show();
@@ -2046,6 +2060,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
          };
          table_div.scrollTop(scroll);
          _tbody.trigger("sel_change");
+         watch(TICK_vd, _sel_id);
        });
      } else { 
        _tbody.append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете домен") ) );
@@ -2212,6 +2227,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   };
 
   run_query(query, function(ret_data) {
+    watch(TICK_vd, 0);
     ret_data['ok']['vds'].sort(function(a, b) {
       return String(a['vd_name']).localeCompare(String(b['vd_name']));
     });
@@ -2256,6 +2272,11 @@ function user_edit(user_id, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
+      let _id=$(this).data("id");
+      if(_id != undefined) {
+        unwatch(TICK_user, _id);
+        unwatch(TICK_group, 0);
+      };
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -2576,6 +2597,9 @@ function user_edit(user_id, opt, donefunc) {
     };
     
     groups_table.data("redo_data", data['ok']['user_groups']);
+
+    watch(TICK_user, user_id);
+    watch(TICK_group, 0);
   });
 
   dialog.dialog(d);
@@ -2706,6 +2730,7 @@ function users_list(exclude_list, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
+      unwatch(TICK_user, 0);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -2775,6 +2800,8 @@ function users_list(exclude_list, opt, donefunc) {
       let row=users_list_row(user);
       row.appendTo( table );
     };
+
+    watch(TICK_user, 0);
   });
 };
 
@@ -2811,6 +2838,11 @@ function group_edit(group_id, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
+      let _id=$(this).data("id");
+      if(_id != undefined) {
+        unwatch(TICK_group, _id);
+        unwatch(TICK_user, 0);
+      };
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -3051,6 +3083,8 @@ function group_edit(group_id, opt, donefunc) {
        .data("redo_data", data['ok']['group_users'])
        .trigger("list_change")
       ;
+      watch(TICK_group, group_id);
+      watch(TICK_user, 0);
     });
   };
 
@@ -4735,8 +4769,8 @@ function v4get_net() {
       v4nav(data['ok']);
     } else {
       watch(TICK_v4net, data['ok']['net']['v4net_id']);
-      watch(TICK_v4net, 0);
-      watch(TICK_v4r, 0);
+      //watch(TICK_v4net, 0);
+      //watch(TICK_v4r, 0);
       v4view(data['ok']);
     };
   });
@@ -4867,6 +4901,7 @@ function ipv4() {
 };
 
 function process_R() {
+  unwatch();
   if($R['action'] == "ipv4") {
     ipv4();
   } else if($R['action'] == "v4get_net") {
@@ -4885,6 +4920,7 @@ $( document ).ready(function() {
   };
 
   window.onerror = function AllErrorsHandler(errorMsg, url, lineNumber) {
+    WATCH=false;
     alert("Error occured: " + errorMsg + "\nIn: "+url+"\nAt: "+ lineNumber);//or any message
     return false;
   };
@@ -5087,7 +5123,7 @@ $( document ).ready(function() {
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
              $R={"action": "ipv4"};
-             ipv4();
+             process_R();
            })
          )
         ;
