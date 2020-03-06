@@ -9,6 +9,7 @@ var g_checks={};
 var _debug_opts=true;
 
 var VLANS_AUTOSAVE=true;
+var TEMPLATES_AUTOSAVE=true;
 
 const INPUT_STOP_TIMER	= 500;
 
@@ -45,6 +46,8 @@ const TICK_vlan         = "vlan";
 const TICK_vr           = "vr";
 const TICK_user         = "user";
 const TICK_group        = "group";
+const TICK_tp           = "tp";
+const TICK_ic           = "ic";
 
 
 const group_rights=Array(
@@ -1978,10 +1981,8 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
     modal:true,
     position: { my: "center top", at: "center top", of: window },
     maxHeight: $(window).height(),
-    //maxWidth:1200,
-    minWidth:1000,
     minHeight: $(window).height()-10,
-    //width: "auto",
+    minWidth:1000,
     buttons: [],
     open: function() {
     },
@@ -4925,6 +4926,63 @@ function ipv4() {
   ;
 };
 
+function templates_list(opt) {
+  if(opt == undefined) { error_at(); return; };
+  if($("#templates_list").length != 0) return;
+
+  if(has_right(R_SUPER)) {
+    title = "Управление шаблонами";
+  } else {
+    title = "Просмотр шаблонов";
+  };
+
+  let dialog=$(DIV).id("templates_list")
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    position: { my: "center top", at: "center top", of: window },
+    maxHeight: $(window).height(),
+    minHeight: $(window).height()-10,
+    minWidth:1000,
+    buttons: [],
+    close: function() {
+      unwatch(TICK_tp, 0);
+      unwatch(TICK_ic, 0);
+      $(".vlan_range_btn").hide();
+      $(this).dialog("destroy");
+      $(this).remove();
+    }
+  };
+
+  dialog
+   .append( $(DIV).css({"position": "absolute", "top": "1em", "left": "1em", "right": "1em"})
+     .append( $(DIV).css({"display": "inline-block", "float": "right", "white-space": "pre"})
+       .append( $(LABEL).prop("for", "templates_autosave").text("Автосохранение: ")
+         .title("Автосохранение данных")
+       )
+       .append( $(INPUT).id("templates_autosave").prop({"type": "checkbox", "checked": TEMPLATES_AUTOSAVE})
+         .on("change", function() {
+           TEMPLATES_AUTOSAVE=$(this).is(":checked");
+         })
+       )
+     )
+   ) 
+  ;
+
+  dialog
+   .append( $(DIV).css({"position": "absolute", "top": "3em", "left": "1em", "right": "1em", "bottom": "1em"})
+   )
+  ;
+
+  dialog.dialog(d);
+
+};
+
 function process_R() {
   unwatch();
   if($R['action'] == "ipv4") {
@@ -5198,6 +5256,16 @@ $( document ).ready(function() {
            .click(function() {
              //vlans_list(undefined, {});
              vlans_list([], {"return": "any"}, function(ret_data){ $("#debug").text(jstr(ret_data)); });
+           })
+         )
+        ;
+
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("Шаблоны")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             //vlans_list(undefined, {});
+             templates_list({});
            })
          )
         ;
