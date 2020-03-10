@@ -1710,6 +1710,7 @@ if($q['action'] == 'v4get_net') {
 
   $ret=return_query($query);
   check_push(TICK_tp, 0);
+  check_push(TICK_ic, 0);
 
   ok_exit($ret);
 } else if($q['action'] == 'get_template') {
@@ -1789,6 +1790,93 @@ if($q['action'] == 'v4get_net') {
   audit_log("tp", $q['tp_id'], "tps", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'add_column') {
+  require_right(R_SUPER);
+  require_p('ic_name', "/\S/");
+  require_p('ic_regexp');
+  require_p('ic_descr');
+  require_p('ic_default', '/^[01]$/');
+  require_p('ic_style');
+  require_p('ic_icon');
+  require_p('ic_icon_style');
+
+  $prev_row=[];
+
+  $query = "INSERT INTO ics SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= ",ic_name=".mq($q['ic_name']);
+  $query .= ",ic_descr=".mq($q['ic_descr']);
+  $query .= ",ic_default=".mq($q['ic_default']);
+  $query .= ",ic_regexp=".mq($q['ic_regexp']);
+  $query .= ",ic_style=".mq($q['ic_style']);
+  $query .= ",ic_icon=".mq($q['ic_icon']);
+  $query .= ",ic_icon_style=".mq($q['ic_icon_style']);
+
+  run_query($query);
+
+  $q['ic_id'] = mysqli_insert_id($db);
+
+  check_tick(TICK_ic, $q['ic_id']);
+
+  $query="SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $new_row=return_one($query, TRUE);
+  
+  audit_log("ic", $q['ic_id'], "ics", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
+} else if($q['action'] == 'edit_column') {
+  require_right(R_SUPER);
+  require_p('ic_id', "/^\d+$/");
+  require_p('ic_name', "/\S/");
+  require_p('ic_regexp');
+  require_p('ic_descr');
+  require_p('ic_default', '/^[01]$/');
+  require_p('ic_style');
+  require_p('ic_icon');
+  require_p('ic_icon_style');
+
+  $query="SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $prev_row=return_one($query, TRUE);
+
+  $query = "UPDATE ics SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= ",ic_name=".mq($q['ic_name']);
+  $query .= ",ic_descr=".mq($q['ic_descr']);
+  $query .= ",ic_default=".mq($q['ic_default']);
+  $query .= ",ic_regexp=".mq($q['ic_regexp']);
+  $query .= ",ic_style=".mq($q['ic_style']);
+  $query .= ",ic_icon=".mq($q['ic_icon']);
+  $query .= ",ic_icon_style=".mq($q['ic_icon_style']);
+  $query .= " WHERE ic_id=".mq($q['ic_id']);
+
+  run_query($query);
+
+  check_tick(TICK_ic, $q['ic_id']);
+
+  $query="SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $new_row=return_one($query, TRUE);
+  
+  audit_log("ic", $q['ic_id'], "ics", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
+} else if($q['action'] == 'get_columns') {
+  $query = "SELECT * FROM ics ORDER BY ic_sort";
+
+  $ret=return_query($query);
+  check_push(TICK_tp, 0);
+  check_push(TICK_ic, 0);
+
+  ok_exit($ret);
+} else if($q['action'] == 'get_column') {
+  require_p('ic_id', "/^\d+$/");
+
+  $query = "SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $ret=return_one($query, TRUE);
+  check_push(TICK_tp, $q['ic_id']);
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

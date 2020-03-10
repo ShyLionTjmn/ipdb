@@ -309,6 +309,31 @@ function unwatch(subject, id) {
   };
 };
 
+function any_icon(icon_str) {
+  if(String(icon_str).match(/^ui-icon(?:-[a-z0-9]+)+$/)) {
+    return $(LABEL)
+     .addClass("ui-icon")
+     .addClass( icon_str )
+    ;
+  } else if(String(icon_str).match(/^&#[xX]?[0-9a-fA-F]+;$/)) {
+    return $(LABEL)
+     .html( icon_str )
+    ;
+  } else if(String(icon_str).match(/\.(?:png|jpg|jpeg|ico|gif)$/)) {
+    return $(IMG)
+     .prop("src", icon_str )
+    ;
+  } else {
+    return $(LABEL)
+     .addClass("ui-icon")
+     .addClass("ui-icon-alert")
+     .addClass("wrong")
+     .css({"color": "red"})
+     .title("Неверное значение поля")
+    ;
+  };
+};
+
 function range_icon(icon_str) {
   if(String(icon_str).match(/^ui-icon(?:-[a-z0-9]+)+$/)) {
     return $(LABEL)
@@ -4926,6 +4951,321 @@ function ipv4() {
   ;
 };
 
+function edit_column(ic_id, donefunc) {
+  if(ic_id == undefined && donefunc == undefined) { error_at(); return; };
+  if(ic_id == undefined && !has_right(R_SUPER)) { error_at(); return; };
+
+  if( $("#column_edit").length != 0) { error_at(); return; };
+
+  let title="Просмотр поля IP";
+  if(ic_id == undefined) {
+    title="Создание поля IP";
+  } else if(donefunc != undefined) {
+    title="Изменение поля IP";
+  };
+
+  let dialog=$(DIV).id("column_edit")
+   .data("id", ic_id)
+   .data("donefunc", donefunc)
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    maxHeight: 1000,
+    minHeight: 600,
+    minWidth:800,
+    buttons: [],
+    close: function() {
+      let _id=$(this).data("id");
+      if( _id != undefined ) unwatch(TICK_ic, _id);
+      $(this).dialog("destroy");
+      $(this).remove();
+    },
+    open: function() {
+      $(this).dialog("widget").find(".ui-dialog-buttonset").css({"width": "100%", "text-align": "right"});
+    }
+  };
+
+  if(donefunc != undefined) {
+    d['buttons'].push({
+      "text": (ic_id == undefined?"Создать":"Сохранить"),
+      "click": function() {
+        let _dialog=$(this);
+        let _donefunc=$(this).data("donefunc");
+        let name_input=$(this).find("INPUT.ic_name");
+        let ic_name=name_input.val();
+
+        if(!ic_name.match(/\S/)) {
+          name_input.animateHighlight();
+          return;
+        };
+        let ic_descr=$(this).find("TEXTAREA.ic_descr").val();
+        if(ic_descr == undefined) { error_at(); return; };
+
+        let query={"ic_name": ic_name, "ic_descr": ic_descr};
+
+        let ic_default=$(this).find("INPUT.ic_default").is(":checked")?1:0;
+        query['ic_default']=ic_default;
+
+        let ic_style_input=$(this).find(".ic_style");
+        if(ic_style_input.length != 1) { error_at(); throw("error"); };
+        let ic_style=ic_style_input.val();
+        try {
+          JSON.parse(ic_style);
+          query['ic_style']=ic_style;
+        } catch(err) {
+          ic_style_input.animateHighlight();
+          return;  
+        };
+
+        let ic_icon_style_input=$(this).find(".ic_icon_style");
+        if(ic_icon_style_input.length != 1) { error_at(); throw("error"); };
+        let ic_icon_style=ic_icon_style_input.val();
+        try {
+          JSON.parse(ic_icon_style);
+          query['ic_icon_style']=ic_icon_style;
+        } catch(err) {
+          ic_icon_style_input.animateHighlight();
+          return;  
+        };
+
+        let ic_regexp_input=$(this).find(".ic_regexp");
+        if(ic_regexp_input.length != 1) { error_at(); throw("error"); };
+        let ic_regexp=ic_regexp_input.val();
+        try {
+          new RegExp(ic_regexp);
+          query['ic_regexp']=ic_regexp;
+        } catch(err) {
+          ic_regexp_input.animateHighlight();
+          return;  
+        };
+
+        let ic_icon_input=$(this).find(".ic_icon");
+        if(ic_icon_input.length != 1) { error_at(); throw("error"); };
+        let ic_icon=ic_icon_input.val();
+        query['ic_icon']=ic_icon;
+
+        let _id=$(this).data("id");
+        if(_id == undefined) {
+          query['action'] = "add_column";
+        } else {
+          query['action'] = "edit_column";
+          query['ic_id'] = _id;
+        };
+        run_query(query, function(data) {
+          _dialog.dialog("close");
+          if(_donefunc != undefined) {
+            _donefunc(data['ok']);
+          };
+        });
+      }
+    });
+  };
+
+  d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+  let readonly= donefunc == undefined;
+
+  dialog
+   .append( $(TABLE)
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right")
+         .text( "Наименование:" )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("ic_name")
+           .css({"width": "25em"})
+           .prop("readonly", readonly)
+         )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right")
+         .text( "По умолчанию:" )
+         .dotted( "Назначать по умолчанию на вновь создаваемые шаблоны.\nНе влияет на уже созданные!" )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("ic_default")
+           .prop("type", "checkbox")
+           .data("readonly", readonly)
+           .click(function() { return !$(this).data("readonly"); })
+         )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right")
+         .text( "Regexp:" )
+         .dotted( "Регулярное выражение, с помощью которого проверять ввод пользователя." )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("ic_regexp")
+           .css({"width": "25em"})
+           .prop("readonly", readonly)
+           .on("input", function() {
+             let example=$(this).closest(".dialog_start").find("INPUT.ic_style_example");
+             try {
+               let r=new RegExp( $(this).val() );
+               $(this).css({"background-color": "lightgreen"});
+               if(r.test( example.val() )) {
+                 example.css({"background-color": "lightgreen"});
+               } else {
+                 example.css({"background-color": "coral"});
+               };
+             } catch(err) {
+               $(this).css({"background-color": "coral"});
+               example.css({"background-color": "gray"});
+             };
+           })
+         )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right").css({"vertical-align": "top"})
+         .text( "Стиль (JSON):" )
+         .dotted( "Стиль отображения поля, применяется к INPUT или LABEL элемента ввода/отображения значения поля.\nДолжен содержать JSON объект, которы будет передан в функцию jQuery.css()" )
+       )
+       .append( $(TD).css({"vertical-align": "top"})
+         .append( $(INPUT).addClass("ic_style")
+           .val("{}")
+           .css({"width": "25em"})
+           .prop("readonly", readonly)
+           .prop("placeholder", "{\"width\": \"10em\"}")
+           .on("input", function() {
+             let v;
+             try {
+               v=JSON.parse( $(this).val() );
+               $(this).parent().find(".ic_style_example").css(v);
+               $(this).css({"background-color": "lightgreen"});
+             } catch(err) {
+               $(this).css({"background-color": "coral"});
+             };
+           })
+         )
+         .append( $(BR) )
+         .append( $(INPUT).addClass("ic_style_example").val("Пример INPUT")
+           .on("input", function() {
+             try {
+               let r=new RegExp( $(this).closest(".dialog_start").find(".ic_regexp").val() );
+               if(r.test( $(this).val() )) {
+                 $(this).css({"background-color": "lightgreen"});
+               } else {
+                 $(this).css({"background-color": "coral"});
+               };
+             } catch(err) {
+               $(this).css({"background-color": "gray"});
+             };
+           })
+         )
+         .append( $(BR) )
+         .append( $(LABEL).addClass("ic_style_example").text("Пример LABEL").css({"display": "inline-block", "border": "1px solid gray", "margin-top": "0.2em"}) )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right").css({"vertical-align": "top"})
+         .text( "Значек:" )
+         .dotted( "ui-icon-xxx - Класс jQuery UI icon\n&#NNNN; - HTML Unicode символ\nURL - Ссылка на .png, .jpg, .jpeg, .ico, .gif" )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("ic_icon").prop("placeholder", "ui-icon-blank")
+           .css({"width": "25em"})
+           .on("input", function() {
+             let new_icon;
+
+             if($(this).val().length > 5) {
+               new_icon=any_icon($(this).val()).addClass("ic_icon_example");
+             } else {
+               new_icon=$(LABEL).addClass("ui-icon").addClass("ui-icon-blank").addClass("ic_icon_example");
+             };
+
+             let style;
+             try {
+               style=JSON.parse($(this).closest(".dialog_start").find(".ic_icon_style").val());
+             } catch(err) {
+               style={};
+             };
+
+             if(!new_icon.hasClass("wrong")) {
+               new_icon.css(style);
+               $(this).css({"background-color": "lightgreen"});
+             } else {
+               $(this).css({"background-color": "coral"});
+             };
+
+             $(this).parent().find(".ic_icon_example").replaceWith(new_icon);
+           })
+         )
+         .append( $(BR) )
+         .append( $(LABEL).text("Пример: ") )
+         .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-blank").addClass("ic_icon_example") )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right")
+         .text( "Стиль зачка (JSON):" )
+         .dotted( "Стиль отображения значка, применяется к IMG или LABEL элемента отображения значка.\nДолжен содержать JSON объект, которы будет передан в функцию jQuery.css()" )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("ic_icon_style")
+           .val("{}")
+           .css({"width": "25em"})
+           .prop("readonly", readonly)
+           .prop("placeholder", "{\"color\": \"green\"}")
+           .on("input", function() {
+             let v;
+             try {
+               v=JSON.parse( $(this).val() );
+               let icon_example=$(this).closest(".dialog_start").find(".ic_icon_example");
+               if(!icon_example.hasClass("wrong")) {
+                 icon_example.css(v);
+               };
+               $(this).css({"background-color": "lightgreen"});
+             } catch(err) {
+               $(this).css({"background-color": "coral"});
+             };
+           })
+         )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css({"text-align": "right", "vertical-align": "top"})
+         .text( "Коментарий:" )
+       )
+       .append( $(TD)
+         .append( $(TEXTAREA).addClass("ic_descr")
+           .css({"width": "25em"})
+           .prop("readonly", readonly)
+         )
+       )
+     )
+   )
+  ;
+
+  if(ic_id != undefined) {
+    run_query({"action": "get_column", "ic_id": ic_id}, function(data) {
+      dialog.find(".ic_name").val(data['ok']['ic_name']);
+      dialog.find(".ic_descr").val(data['ok']['ic_descr']);
+      dialog.find(".ic_default").prop("checked", Number(data['ok']['ic_default']) > 0);
+      dialog.find(".ic_regexp").val(data['ok']['ic_regexp']);
+      dialog.find(".ic_style").val(data['ok']['ic_style']);
+      dialog.find(".ic_icon").val(data['ok']['ic_icon']);
+      dialog.find(".ic_icon_style").val(data['ok']['ic_icon_style']);
+
+      dialog.find(".ic_icon").trigger("input");
+      dialog.find(".ic_icon_style").trigger("input");
+      dialog.find(".ic_style").trigger("input");
+      dialog.find(".ic_regexp").trigger("input");
+
+      watch(TICK_ic, ic_id);
+    });
+  };
+
+  dialog.dialog(d);
+};
+
 function edit_template(tp_id, donefunc) {
   if(tp_id == undefined && donefunc == undefined) { error_at(); return; };
   if(tp_id == undefined && !has_right(R_SUPER)) { error_at(); return; };
@@ -5230,6 +5570,15 @@ function templates_list(opt) {
        let ic_list=root.find(".columns_list");
        let tp_id=root.find(".templates_list").data("id");
 
+     })
+   )
+  ;
+
+  let columns_list;
+  right_pane
+   .append( columns_list=$(DIV).addClass("columns_list")
+     .css({"position": "absolute", "top": cols_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
+     .on("sortstop", function() {
      })
    )
   ;
