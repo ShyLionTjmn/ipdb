@@ -1518,6 +1518,7 @@ if($q['action'] == 'v4get_net') {
   $ret['range_group_rights']=return_query($query);
 
   check_push(TICK_vr, $q['range_id']);
+  check_push(TICK_group, 0);
   ok_exit($ret);
 } else if($q['action'] == 'vlan_edit_range') {
   require_right(R_SUPER);

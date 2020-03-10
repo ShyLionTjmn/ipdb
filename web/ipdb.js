@@ -4951,11 +4951,21 @@ function templates_list(opt) {
     minWidth:1000,
     buttons: [],
     close: function() {
-      unwatch(TICK_tp, 0);
-      unwatch(TICK_ic, 0);
+      //unwatch(TICK_tp, 0);
+      //unwatch(TICK_ic, 0);
+      let did=$(this).prop("id");
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
+      $(window).off("resize."+did);
+    },
+    open: function() {
+      let _dialog=$(this);
+      let did=$(this).prop("id");
+      $(window).on("resize."+did, function() {
+        _dialog.dialog("option", "maxHeight", $(window).height());
+        _dialog.dialog("option", "minHeight", $(window).height() - 10);
+      });
     }
   };
 
@@ -4974,10 +4984,46 @@ function templates_list(opt) {
    ) 
   ;
 
+  let root_pane;
+  let left_pane;
+  let right_pane;
   dialog
-   .append( $(DIV).css({"position": "absolute", "top": "3em", "left": "1em", "right": "1em", "bottom": "1em"})
+   .append( root_pane=$(DIV).css({"position": "absolute", "top": "3em", "left": "1em", "right": "1em", "bottom": "1em"}).addClass("root_pane")
+     .css({"vertical-align": "top"})
+     .append( left_pane=$(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "0px", "bottom": "0px", "width": "300px", "background-color": "lightgreen"}).addClass("left_pane") )
+     .append( $(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "300px", "bottom": "0px", "width": "10px"}).addClass("drag_bar") )
+     .append( right_pane=$(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "310px", "bottom": "0px", "right": "0px", "background-color": "lightblue"}).addClass("right_pane") )
    )
   ;
+
+  root_pane.find(".drag_bar")
+   .css({"background-color": "lightgray", "cursor": "col-resize"})
+   .draggable({"axis": "x", "containment": "parent", "zIndex": 10000, "stop": function(e, ui) {
+     let x_pos=ui.position.left;
+     if(x_pos < 200) x_pos=200;
+     
+     let _root=$(this).closest(".root_pane");
+     _root.find(".left_pane").css("width", x_pos);
+     $(this).css("left", x_pos);
+     _root.find(".right_pane").css("left", x_pos+$(this).width());
+   }})
+  ;
+
+  left_pane
+   .append( $(DIV).text("Шаблоны") )
+  ;
+
+  if(has_right(R_SUPER)) {
+    left_pane
+     .append( $(DIV)
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+         .css({"color": color_table_buttons})
+         .click(function() {
+         })
+       )
+     )
+    ;
+  };
 
   dialog.dialog(d);
 
