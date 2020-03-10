@@ -1767,11 +1767,28 @@ if($q['action'] == 'v4get_net') {
 
   $query="SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
   $new_row=return_one($query, TRUE);
-
   
   audit_log("tp", $q['tp_id'], "tps", $q['action'], $prev_row, $new_row);
 
   ok_exit($new_row);
+} else if($q['action'] == 'delete_template') {
+  require_right(R_SUPER);
+  require_p('tp_id', "/^\d+$/");
+
+  $query = "SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
+  $prev_row=return_one($query, TRUE);
+
+  $query = "DELETE FROM tps";
+  $query .= " WHERE tp_id=".mq($q['tp_id']);
+
+  run_query($query);
+  check_tick(TICK_tp, $q['tp_id']);
+
+  $new_row=[];
+  
+  audit_log("tp", $q['tp_id'], "tps", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

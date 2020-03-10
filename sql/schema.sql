@@ -230,6 +230,7 @@ CREATE TABLE ics(
   ic_id		BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   ic_default	INTEGER NOT NULL DEFAULT 0 COMMENT 'auto-add to created templates',
   ic_name	VARCHAR(128) NOT NULL DEFAULT '',
+  ic_regexp	VARCHAR(256) NOT NULL DEFAULT '',
   ic_icon	VARCHAR(1024) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
   ic_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
   ic_descr	VARCHAR(1024) NOT NULL DEFAULT '',

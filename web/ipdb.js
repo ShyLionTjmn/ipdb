@@ -5041,8 +5041,14 @@ function edit_template(tp_id, donefunc) {
 function get_teplate_list_row(tp) {
   let ret=$(DIV).addClass("template")
    .data("id", tp['tp_id'])
-   .css({"margin": "5px", "white-space": "pre"})
+   .css({"margin": "5px", "white-space": "pre", "background-color": "white", "border": "1px solid gray", "padding": "5px"})
    .click(function() {
+     let list=$(this).parent();
+     list.find(".template").css({"font-weight": "normal", "border-right": "1px solid gray"}).removeClass("selected");
+     $(this).addClass("selected").css({"font-weight": "bold", "border-right": "10px solid limegreen"});
+     let id=$(this).data("id");
+     list.data("id", id);
+     list.trigger("sel_change");
    })
    .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
      .css({"color": color_table_buttons})
@@ -5068,7 +5074,7 @@ function get_teplate_list_row(tp) {
          let row=$(this).closest(".template");
          let list=row.parent();
          let selected=row.hasClass("selected");
-         let id=row.data("id");
+         let _id=row.data("id");
          show_confirm_checkbox("Подтвердите удаление шаблона.", function() {
            run_query({"action": "delete_template", "tp_id": _id}, function() {
              row.remove();
@@ -5175,8 +5181,10 @@ function templates_list(opt) {
   ;
 
   let templ_list_top="0em";
+  let cols_list_top="0em";
   if(has_right(R_SUPER)) {
     templ_list_top="1.5em";
+    cols_list_top="1.5em";
     left_pane
      .append( $(DIV)
        .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": templ_list_top, "background-color": "#FFAAAA"})
@@ -5194,6 +5202,23 @@ function templates_list(opt) {
        )
      )
     ;
+    right_pane
+     .append( $(DIV)
+       .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": cols_list_top, "background-color": "#FFAAAA"})
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+         .title("Создать поле")
+         .css({"color": color_table_buttons})
+         .click(function() {
+           let _list=$(this).closest(".root_pane").find(".columns_list");
+           edit_column(undefined, function(ret_data) {
+             let new_row=get_columns_list_row(ret_data);
+             _list.prepend(new_row);
+             _list_trigger("sortstop");
+           });
+         })
+       )
+     )
+    ;
   };
 
   let templ_list;
@@ -5201,6 +5226,10 @@ function templates_list(opt) {
    .append( templ_list=$(DIV).addClass("templates_list")
      .css({"position": "absolute", "top": templ_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
      .on("sel_change", function() {
+       let root=$(this).find(".root_pane");
+       let ic_list=root.find(".columns_list");
+       let tp_id=root.find(".templates_list").data("id");
+
      })
    )
   ;
