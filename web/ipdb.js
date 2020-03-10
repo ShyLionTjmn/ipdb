@@ -4964,7 +4964,7 @@ function get_columns_list_row(ic) {
     ret
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrow-2-n-s").addClass("handle")
        .css({"margin-right": "0.5em"})
-       .title("Переместите вверх-вниз для изменения порядка сортировки")
+       .title("Переместите вверх-вниз для изменения порядка сортировки.\nПорядок сортировки ОБЩИЙ для всех шаблонов и сетей!")
      )
     ;
   };
@@ -4980,7 +4980,7 @@ function get_columns_list_row(ic) {
        .on("change", function() {
          if(!TEMPLATES_AUTOSAVE) {
            $(this).addClass("unsaved");
-           $("#templates_autosave_label").css({"background-color": "yellow"}).animateHightlight("yellow");
+           $("#templates_autosave_label").css({"background-color": "yellow"});
            return;
          };
          let _templates_list=$(this).closest(".root_pane").find(".templates_list");
@@ -5491,8 +5491,6 @@ function get_template_list_row(tp) {
      let list=$(this).parent();
      list.find(".template").css({"font-weight": "normal", "border-right": "1px solid gray"}).removeClass("selected");
      $(this).addClass("selected").css({"font-weight": "bold", "border-right": "10px solid limegreen"});
-     let id=$(this).data("id");
-     list.data("id", id);
      list.trigger("sel_change");
    })
    .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
@@ -5591,7 +5589,7 @@ function templates_list(opt) {
    .append( $(DIV).css({"position": "absolute", "top": "1em", "left": "1em", "right": "1em"})
      .append( $(DIV).css({"display": "inline-block", "float": "right", "white-space": "pre"})
        .append( $(LABEL).prop("for", "templates_autosave").text("Автосохранение: ")
-         .addClass("templates_autosave_label")
+         .id("templates_autosave_label")
          .title("Автосохранение данных")
        )
        .append( $(INPUT).id("templates_autosave").prop({"type": "checkbox", "checked": TEMPLATES_AUTOSAVE})
@@ -5611,17 +5609,18 @@ function templates_list(opt) {
   let root_pane;
   let left_pane;
   let right_pane;
+  let bar_width=20;
   dialog
    .append( root_pane=$(DIV).css({"position": "absolute", "top": "3em", "left": "1em", "right": "1em", "bottom": "1em"}).addClass("root_pane")
      .css({"vertical-align": "top"})
-     .append( left_pane=$(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "0px", "bottom": "0px", "width": "300px", "background-color": "lightgreen"}).addClass("left_pane") )
-     .append( $(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "300px", "bottom": "0px", "width": "10px"}).addClass("drag_bar") )
-     .append( right_pane=$(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "310px", "bottom": "0px", "right": "0px", "background-color": "lightblue"}).addClass("right_pane") )
+     .append( left_pane=$(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "0px", "bottom": "0px", "width": "300px"}).addClass("left_pane") )
+     .append( $(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": "300px", "bottom": "0px", "width": bar_width+"px"}).addClass("drag_bar") )
+     .append( right_pane=$(DIV).css({"display": "inline-block", "position": "absolute", "top": "0px", "left": (300+bar_width)+"px", "bottom": "0px", "right": "0px" }).addClass("right_pane") )
    )
   ;
 
   root_pane.find(".drag_bar")
-   .css({"background-color": "lightgray", "cursor": "col-resize"})
+   .css({"background-color": "white", "cursor": "col-resize"})
    .draggable({"axis": "x", "containment": "parent", "zIndex": 10000, "stop": function(e, ui) {
      let x_pos=ui.position.left;
      if(x_pos < 200) x_pos=200;
@@ -5633,48 +5632,66 @@ function templates_list(opt) {
    }})
   ;
 
-  let templ_list_top="0em";
-  let cols_list_top="0em";
+  let templ_list_top="1.5em";
+  let cols_list_top="1.5em";
+  let left_head;
+  let right_head;
+
+  root_pane.find(".drag_bar")
+   .append( $(DIV)
+     .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": templ_list_top, "background-color": "white"})
+   )
+   .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-grip-solid-vertical")
+     .css({"position": "absolute", "top": "49%", "left": "0px", "right": "0px", "height": "1em"})
+   )
+  ;
+
+  left_pane
+   .append( left_head=$(DIV)
+     .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": templ_list_top, "background-color": "white"})
+     .append( $(LABEL).text("Шаблоны ") )
+   )
+  ;
+
+  right_pane
+   .append( right_head=$(DIV)
+     .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": cols_list_top, "background-color": "white"})
+     .append( $(LABEL).text("Поля ") )
+   )
+  ;
+
   if(has_right(R_SUPER)) {
-    templ_list_top="1.5em";
-    cols_list_top="1.5em";
-    left_pane
-     .append( $(DIV)
-       .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": templ_list_top, "background-color": "#FFAAAA"})
-       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
-         .title("Создать шаблон")
-         .css({"color": color_table_buttons})
-         .click(function() {
-           let _list=$(this).closest(".root_pane").find(".templates_list");
-           edit_template(undefined, function(ret_data) {
-             let new_row=get_template_list_row(ret_data);
-             _list.prepend(new_row);
-             new_row.trigger("click");
-           });
-         })
-       )
+    left_head
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .title("Создать шаблон")
+       .css({"color": color_table_buttons})
+       .click(function() {
+         let _list=$(this).closest(".root_pane").find(".templates_list");
+         edit_template(undefined, function(ret_data) {
+           let new_row=get_template_list_row(ret_data);
+           _list.prepend(new_row);
+           new_row.trigger("click");
+         });
+       })
      )
     ;
-    right_pane
-     .append( $(DIV)
-       .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": cols_list_top, "background-color": "#FFAAAA"})
-       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
-         .title("Создать поле")
-         .css({"color": color_table_buttons})
-         .click(function() {
-           let _list=$(this).closest(".root_pane").find(".columns_list");
-           edit_column(undefined, function(ret_data) {
-             let _templates_list=_list.closest(".root_pane").find(".templates_list");
-             if(_templates_list.length != 1) { error_at(); throw("Error"); };
-             if(_templates_list.data("id") != undefined) {
-               ret_data['checked'] = 0;
-             };
-             let new_row=get_columns_list_row(ret_data);
-             _list.prepend(new_row);
-             _list.trigger("sortstop");
-           });
-         })
-       )
+    right_head
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .title("Создать поле")
+       .css({"color": color_table_buttons})
+       .click(function() {
+         let _list=$(this).closest(".root_pane").find(".columns_list");
+         edit_column(undefined, function(ret_data) {
+           let _templates_list=_list.closest(".root_pane").find(".templates_list");
+           if(_templates_list.length != 1) { error_at(); throw("Error"); };
+           if(_templates_list.data("id") != undefined) {
+             ret_data['checked'] = 0;
+           };
+           let new_row=get_columns_list_row(ret_data);
+           _list.prepend(new_row);
+           _list.trigger("sortstop");
+         });
+       })
      )
     ;
   };
@@ -5682,11 +5699,21 @@ function templates_list(opt) {
   let templ_list;
   left_pane
    .append( templ_list=$(DIV).addClass("templates_list")
-     .css({"position": "absolute", "top": templ_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
+     .css({"position": "absolute", "top": templ_list_top, "left": "0px", "right": "0px", "bottom": "0px",
+           "background-color": "#EEEEEE", "overflow-y": "scroll", "border": "1px solid lightgray"
+     })
      .on("sel_change", function() {
        let root=$(this).closest(".root_pane");
        let ic_list=root.find(".columns_list");
-       let tp_id=root.find(".templates_list").data("id");
+       let tp_id=undefined;
+
+       let selected=$(this).find(".template.selected");
+       if(selected.length > 1) { error_at(); throw("Error"); };
+       if(selected.length == 1) {
+         tp_id=selected.data("id");
+       };
+
+       $(this).data("id", tp_id);
 
        let query={"action": "get_columns"};
        if(tp_id != undefined) {
@@ -5706,7 +5733,9 @@ function templates_list(opt) {
   let columns_list;
   right_pane
    .append( columns_list=$(DIV).addClass("columns_list")
-     .css({"position": "absolute", "top": cols_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
+     .css({"position": "absolute", "top": cols_list_top, "left": "0px", "right": "0px", "bottom": "0px",
+           "background-color": "#EEEEEE", "overflow-y": "scroll", "border": "1px solid lightgray"
+     })
    )
   ;
 
@@ -5715,7 +5744,7 @@ function templates_list(opt) {
      .sortable({"handle": ".handle", "containment": "parent", "axis": "y"})
      .on("sortstop", function() {
        if(!TEMPLATES_AUTOSAVE) {
-         $("#templates_autosave_label").css({"background-color": "yellow"}).animateHightlight("yellow");
+         $("#templates_autosave_label").css({"background-color": "yellow"});
          return;
        };
        let sort=10;

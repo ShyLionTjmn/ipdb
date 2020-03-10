@@ -50,6 +50,7 @@ const TICK_vd		= "vd";
 const TICK_vlan		= "vlan";
 const TICK_vr		= "vr";
 const TICK_user		= "user";
+const TICK_group	= "group";
 const TICK_tp		= "tp";
 const TICK_ic		= "ic";
 const TICK_n4c		= "n4c";
@@ -1770,6 +1771,9 @@ if($q['action'] == 'v4get_net') {
 
   check_tick(TICK_tp, $q['tp_id']);
 
+  $query="INSERT INTO tcs(tc_fk_tp_id,tc_fk_ic_id) SELECT ".mq($q['tp_id']).", ic_id FROM ics WHERE ic_default > 0";
+  run_query($query);
+
   $query="SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
   $new_row=return_one($query, TRUE);
   
@@ -1905,7 +1909,7 @@ if($q['action'] == 'v4get_net') {
     $query .= ",ic_sort=".mq($ic_sort);
     $query .= " WHERE ic_id=".mq($ic_id); 
     run_query($query);
-    check_tick(TICK_ic, $ic_id, TRUE, FALSE);
+    check_tick(TICK_ic, $ic_id, FALSE, FALSE);
   };
   check_tick(TICK_ic, 0);
 
@@ -1915,6 +1919,83 @@ if($q['action'] == 'v4get_net') {
   audit_log("ic", 0, "ics", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'add_template_column') {
+  require_right(R_SUPER);
+  require_p('tp_id', '/^\d+$/');
+  require_p('ic_id', '/^\d+$/');
+
+  $query="SELECT IFNULL(GROUP_CONCAT(tc_fk_ic_id), '') FROM tcs WHERE tc_fk_tp_id=".mq($q['tp_id']);
+  $prev_row=return_single($query, TRUE);
+
+  $query="INSERT INTO tcs SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= ",tc_fk_ic_id=".mq($q['ic_id']);
+  $query .= ",tc_fk_tp_id=".mq($q['tp_id']);
+  
+  run_query($query);
+
+  $query="SELECT IFNULL(GROUP_CONCAT(tc_fk_ic_id), '') FROM tcs WHERE tc_fk_tp_id=".mq($q['tp_id']);
+  $new_row=return_single($query, TRUE);
+
+  check_tick(TICK_ic, $q['ic_id']);
+  check_tick(TICK_tp, $q['tp_id']);
+
+  audit_log("tp", $q['tp_id'], "tcs", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
+
+} else if($q['action'] == 'delete_template_column') {
+  require_right(R_SUPER);
+  require_p('tp_id', '/^\d+$/');
+  require_p('ic_id', '/^\d+$/');
+
+  $query="SELECT IFNULL(GROUP_CONCAT(tc_fk_ic_id), '') FROM tcs WHERE tc_fk_tp_id=".mq($q['tp_id']);
+  $prev_row=return_single($query, TRUE);
+
+  $query="DELETE FROM tcs WHERE TRUE";
+  $query .= " AND tc_fk_ic_id=".mq($q['ic_id']);
+  $query .= " AND tc_fk_tp_id=".mq($q['tp_id']);
+  run_query($query);
+
+  $query="SELECT IFNULL(GROUP_CONCAT(tc_fk_ic_id), '') FROM tcs WHERE tc_fk_tp_id=".mq($q['tp_id']);
+  $new_row=return_single($query, TRUE);
+
+  check_tick(TICK_ic, $q['ic_id']);
+  check_tick(TICK_tp, $q['tp_id']);
+
+  audit_log("tp", $q['tp_id'], "tcs", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
+
+} else if($q['action'] == 'delete_column') {
+  require_right(R_SUPER);
+  require_p('ic_id', '/^\d+$/');
+
+  $prev_row=Array();
+
+  $query="SELECT IFNULL(GROUP_CONCAT(tc_fk_tp_id), '') FROM tcs WHERE tc_fk_ic_id=".mq($q['ic_id']);
+  $prev_row['tps']=return_one($query, TRUE);
+
+  $query="SELECT IFNULL(GROUP_CONCAT(nc_fk_v4net_id), '') FROM n4cs WHERE nc_fk_ic_id=".mq($q['ic_id']);
+  $prev_row['n4cs']=return_one($query, TRUE);
+
+  $query="SELECT IFNULL(GROUP_CONCAT(nc_fk_v6net_id), '') FROM n6cs WHERE nc_fk_ic_id=".mq($q['ic_id']);
+  $prev_row['n6cs']=return_one($query, TRUE);
+
+  run_query("DELETE FROM ics WHERE ic_id=".mq($q['ic_id']));
+
+  check_tick(TICK_ic, $q['ic_id']);
+  check_tick(TICK_tp, 0);
+  check_tick(TICK_n4c, 0);
+  check_tick(TICK_n6c, 0);
+
+  $new_row=[];
+
+  audit_log("ic", $q['ic_id'], "ics", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
+
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
