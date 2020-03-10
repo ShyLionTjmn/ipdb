@@ -50,7 +50,8 @@ const TICK_vd		= "vd";
 const TICK_vlan		= "vlan";
 const TICK_vr		= "vr";
 const TICK_user		= "user";
-const TICK_group	= "group";
+const TICK_tp		= "tp";
+const TICK_ic		= "ic";
 
 const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
 
@@ -1704,6 +1705,73 @@ if($q['action'] == 'v4get_net') {
   $ret['_strtime'] = strftime('%c');
   ok_exit($ret);
 
+} else if($q['action'] == 'get_templates') {
+  $query = "SELECT * FROM tps ORDER BY tp_name";
+
+  $ret=return_query($query);
+  check_push(TICK_tp, 0);
+
+  ok_exit($ret);
+} else if($q['action'] == 'get_template') {
+  require_p('tp_id', "/^\d+$/");
+
+  $query = "SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
+  $ret=return_one($query, TRUE);
+  check_push(TICK_tp, $q['tp_id']);
+
+  ok_exit($ret);
+} else if($q['action'] == 'edit_template') {
+  require_right(R_SUPER);
+  require_p('tp_id', "/^\d+$/");
+  require_p('tp_name', "/\S/");
+  require_p('tp_descr');
+
+  $query = "SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
+  $prev_row=return_one($query, TRUE);
+
+  $query = "UPDATE tps SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= ",tp_name=".mq($q['tp_name']);
+  $query .= ",tp_descr=".mq($q['tp_descr']);
+  $query .= " WHERE tp_id=".mq($q['tp_id']);
+
+  run_query($query);
+  check_tick(TICK_tp, $q['tp_id']);
+
+  $query="SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
+  $new_row=return_one($query, TRUE);
+
+  
+  audit_log("tp", $q['tp_id'], "tps", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
+} else if($q['action'] == 'add_template') {
+  require_right(R_SUPER);
+  require_p('tp_name', "/\S/");
+  require_p('tp_descr');
+
+  $prev_row=[];
+
+  $query = "INSERT INTO tps SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= ",tp_name=".mq($q['tp_name']);
+  $query .= ",tp_descr=".mq($q['tp_descr']);
+
+  run_query($query);
+
+  $q['tp_id'] = mysqli_insert_id($db);
+
+  check_tick(TICK_tp, $q['tp_id']);
+
+  $query="SELECT * FROM tps WHERE tp_id=".mq($q['tp_id']);
+  $new_row=return_one($query, TRUE);
+
+  
+  audit_log("tp", $q['tp_id'], "tps", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

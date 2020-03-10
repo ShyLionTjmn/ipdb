@@ -4926,6 +4926,171 @@ function ipv4() {
   ;
 };
 
+function edit_template(tp_id, donefunc) {
+  if(tp_id == undefined && donefunc == undefined) { error_at(); return; };
+  if(tp_id == undefined && !has_right(R_SUPER)) { error_at(); return; };
+
+  if( $("#template_edit").length != 0) { error_at(); return; };
+
+  let title="Просмотр шаблона";
+  if(tp_id == undefined) {
+    title="Создание шаблона";
+  } else if(donefunc != undefined) {
+    title="Изменение шаблона";
+  };
+
+  let dialog=$(DIV).id("template_edit")
+   .data("id", tp_id)
+   .data("donefunc", donefunc)
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    maxHeight: 1000,
+    minHeight: 600,
+    minWidth:800,
+    buttons: [],
+    close: function() {
+      let _id=$(this).data("id");
+      if( _id != undefined ) unwatch(TICK_tp, _id);
+      $(this).dialog("destroy");
+      $(this).remove();
+    },
+    open: function() {
+      $(this).dialog("widget").find(".ui-dialog-buttonset").css({"width": "100%", "text-align": "right"});
+    }
+  };
+
+  if(donefunc != undefined) {
+    d['buttons'].push({
+      "text": (tp_id == undefined?"Создать":"Сохранить"),
+      "click": function() {
+        let _dialog=$(this);
+        let _donefunc=$(this).data("donefunc");
+        let name_input=$(this).find("INPUT.tp_name");
+        let tp_name=name_input.val();
+        if(!tp_name.match(/\S/)) {
+          name_input.animateHighlight();
+          return;
+        };
+        let tp_descr=$(this).find("TEXTAREA.tp_descr").val();
+        if(tp_descr == undefined) { error_at(); return; };
+
+        let query={"tp_name": tp_name, "tp_descr": tp_descr};
+        let _id=$(this).data("id");
+        if(_id == undefined) {
+          query['action'] = "add_template";
+        } else {
+          query['action'] = "edit_template";
+          query['tp_id'] = _id;
+        };
+        run_query(query, function(data) {
+          _dialog.dialog("close");
+          if(_donefunc != undefined) {
+            _donefunc(data['ok']);
+          };
+        });
+      }
+    });
+  };
+
+  d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+  let readonly= donefunc == undefined;
+
+  dialog
+   .append( $(TABLE)
+     .append( $(TR)
+       .append( $(TD).css("text-align", "right")
+         .text( "Наименование:" )
+       )
+       .append( $(TD)
+         .append( $(INPUT).addClass("tp_name")
+           .prop("readonly", readonly)
+         )
+       )
+     )
+     .append( $(TR)
+       .append( $(TD).css({"text-align": "right", "vertical-align": "top"})
+         .text( "Коментарий:" )
+       )
+       .append( $(TD)
+         .append( $(TEXTAREA).addClass("tp_descr")
+           .prop("readonly", readonly)
+         )
+       )
+     )
+   )
+  ;
+
+  if(tp_id != undefined) {
+    run_query({"action": "get_template", "tp_id": tp_id}, function(data) {
+      dialog.find(".tp_name").val(data['ok']['tp_name']);
+      dialog.find(".tp_descr").val(data['ok']['tp_descr']);
+      watch(TICK_tp, tp_id);
+    });
+  };
+
+  dialog.dialog(d);
+};
+
+function get_teplate_list_row(tp) {
+  let ret=$(DIV).addClass("template")
+   .data("id", tp['tp_id'])
+   .css({"margin": "5px", "white-space": "pre"})
+   .click(function() {
+   })
+   .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+     .css({"color": color_table_buttons})
+     .click(function(e) {
+       e.stopPropagation();
+       let row=$(this).closest(".template");
+       let selected=row.hasClass("selected");
+       let id=row.data("id");
+       edit_template(id, !has_right(R_SUPER)?undefined:function(data) {
+         let new_row=get_teplate_list_row(data);
+         if(selected) new_row.addClass("selected");
+         row.replaceWith(new_row);
+       })
+     })
+   )
+  ;
+  if(has_right(R_SUPER)) {
+    ret
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
+       .css({"color": "coral", "margin-left": "0.5em"})
+       .click(function(e) {
+         e.stopPropagation();
+         let row=$(this).closest(".template");
+         let list=row.parent();
+         let selected=row.hasClass("selected");
+         let id=row.data("id");
+         show_confirm_checkbox("Подтвердите удаление шаблона.", function() {
+           run_query({"action": "delete_template", "tp_id": _id}, function() {
+             row.remove();
+             list.trigger("sel_change");
+           });
+         });
+       })
+     )
+    ;
+  };
+
+  ret
+   .append( $(LABEL)
+     .css({"margin-left": "0.5em"})
+     .text(tp['tp_name'])
+     .title(tp['tp_descr'])
+   )
+  ;
+
+  return ret;
+};
+
 function templates_list(opt) {
   if(opt == undefined) { error_at(); return; };
   if($("#templates_list").length != 0) return;
@@ -4951,7 +5116,7 @@ function templates_list(opt) {
     minWidth:1000,
     buttons: [],
     close: function() {
-      //unwatch(TICK_tp, 0);
+      unwatch(TICK_tp, 0);
       //unwatch(TICK_ic, 0);
       let did=$(this).prop("id");
       $(".vlan_range_btn").hide();
@@ -5009,24 +5174,47 @@ function templates_list(opt) {
    }})
   ;
 
-  left_pane
-   .append( $(DIV).text("Шаблоны") )
-  ;
-
+  let templ_list_top="0em";
   if(has_right(R_SUPER)) {
+    templ_list_top="1.5em";
     left_pane
      .append( $(DIV)
+       .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": templ_list_top, "background-color": "#FFAAAA"})
        .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+         .title("Создать шаблон")
          .css({"color": color_table_buttons})
          .click(function() {
+           let _list=$(this).closest(".root_pane").find(".templates_list");
+           edit_template(undefined, function(ret_data) {
+             let new_row=get_teplate_list_row(ret_data);
+             _list.prepend(new_row);
+             new_row.trigger("click");
+           });
          })
        )
      )
     ;
   };
 
+  let templ_list;
+  left_pane
+   .append( templ_list=$(DIV).addClass("templates_list")
+     .css({"position": "absolute", "top": templ_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
+     .on("sel_change", function() {
+     })
+   )
+  ;
+
   dialog.dialog(d);
 
+  run_query({"action": "get_templates"}, function(data) {
+    watch(TICK_tp, 0);
+    for(let i=0; i < data['ok'].length; i++) {
+      let row=get_teplate_list_row(data['ok'][i]);
+      templ_list.append(row);
+    };
+    templ_list.trigger("sel_change");
+  });
 };
 
 function process_R() {
