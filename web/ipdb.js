@@ -48,6 +48,9 @@ const TICK_user         = "user";
 const TICK_group        = "group";
 const TICK_tp           = "tp";
 const TICK_ic           = "ic";
+const TICK_n4c          = "n4c";
+const TICK_n6c          = "n6c";
+
 
 
 const group_rights=Array(
@@ -4951,6 +4954,108 @@ function ipv4() {
   ;
 };
 
+function get_columns_list_row(ic) {
+  let ret=$(DIV).addClass("column")
+   .data("id", ic['ic_id'])
+   .css({"margin": "5px", "white-space": "pre", "background-color": "white", "border": "1px solid gray", "padding": "5px"})
+  ;
+
+  if(has_right(R_SUPER)) {
+    ret
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-arrow-2-n-s").addClass("handle")
+       .css({"margin-right": "0.5em"})
+       .title("Переместите вверх-вниз для изменения порядка сортировки")
+     )
+    ;
+  };
+
+  if(ic['checked'] != undefined) {
+    ret
+     .append( $(INPUT).addClass("select_checkbox")
+       .prop({"type": "checkbox", "checked": Number(ic['checked']) > 0})
+       .data("readonly", !has_right(R_SUPER))
+       .click(function() {
+         return !$(this).data("readonly");
+       })
+       .on("change", function() {
+         if(!TEMPLATES_AUTOSAVE) {
+           $(this).addClass("unsaved");
+           $("#templates_autosave_label").css({"background-color": "yellow"}).animateHightlight("yellow");
+           return;
+         };
+         let _templates_list=$(this).closest(".root_pane").find(".templates_list");
+         if(_templates_list.length != 1) { error_at(); return; };
+         let _tp_id=_templates_list.data("id");
+         if(_tp_id == undefined) { error_at(); return; };
+         let _ic_id = $(this).closest(".column").data("id");
+         if(_ic_id == undefined) { error_at(); return; };
+
+         let query={"tp_id": _tp_id, "ic_id": _ic_id};
+         if($(this).is(":checked")) {
+           query['action'] = "add_template_column";
+         } else {
+           query['action'] = "delete_template_column";
+         };
+
+         let _this=$(this);
+         run_query(query, function() {
+           _this.removeClass("unsaved");
+         });
+       })
+     )
+    ;
+  };
+
+  ret
+   .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button")
+     .css({"color": color_table_buttons})
+     .click(function(e) {
+       e.stopPropagation();
+       let row=$(this).closest(".column");
+       let selected=row.find("INPUT.select_checkbox").is(":checked");
+       let id=row.data("id");
+       edit_column(id, !has_right(R_SUPER)?undefined:function(data) {
+         if(row.find("INPUT.select_checkbox").length == 1) {
+           data['checked'] = selected?1:0;
+         };
+         let new_row=get_columns_list_row(data);
+         row.replaceWith(new_row);
+       })
+     })
+   )
+  ;
+  if(has_right(R_SUPER)) {
+    ret
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
+       .css({"color": ic['uses'] == 0?"coral":"gray", "margin-left": "0.5em"})
+       .title(ic['uses'] == 0?"Удалить поле":"Удаление невозможно, так как поле используется в "+ic['uses']+" сетях")
+       .click(ic['uses'] > 0? function(e) {e.stopPropagation();} : function(e) {
+         e.stopPropagation();
+         let row=$(this).closest(".column");
+         let list=row.parent();
+         let _id=row.data("id");
+         show_confirm_checkbox("Подтвердите удаление поля.", function() {
+           run_query({"action": "delete_column", "ic_id": _id}, function() {
+             row.remove();
+             list.trigger("sel_change");
+           });
+         });
+       })
+     )
+    ;
+  };
+
+  ret
+   .append( $(LABEL)
+     .css({"margin-left": "0.5em"})
+     .text(ic['ic_name'])
+     .title(ic['ic_descr'])
+   )
+  ;
+
+  return ret;
+};
+
 function edit_column(ic_id, donefunc) {
   if(ic_id == undefined && donefunc == undefined) { error_at(); return; };
   if(ic_id == undefined && !has_right(R_SUPER)) { error_at(); return; };
@@ -5378,7 +5483,7 @@ function edit_template(tp_id, donefunc) {
   dialog.dialog(d);
 };
 
-function get_teplate_list_row(tp) {
+function get_template_list_row(tp) {
   let ret=$(DIV).addClass("template")
    .data("id", tp['tp_id'])
    .css({"margin": "5px", "white-space": "pre", "background-color": "white", "border": "1px solid gray", "padding": "5px"})
@@ -5398,7 +5503,7 @@ function get_teplate_list_row(tp) {
        let selected=row.hasClass("selected");
        let id=row.data("id");
        edit_template(id, !has_right(R_SUPER)?undefined:function(data) {
-         let new_row=get_teplate_list_row(data);
+         let new_row=get_template_list_row(data);
          if(selected) new_row.addClass("selected");
          row.replaceWith(new_row);
        })
@@ -5463,7 +5568,9 @@ function templates_list(opt) {
     buttons: [],
     close: function() {
       unwatch(TICK_tp, 0);
-      //unwatch(TICK_ic, 0);
+      unwatch(TICK_ic, 0);
+      unwatch(TICK_n4c, 0);
+      unwatch(TICK_n6c, 0);
       let did=$(this).prop("id");
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
@@ -5484,11 +5591,17 @@ function templates_list(opt) {
    .append( $(DIV).css({"position": "absolute", "top": "1em", "left": "1em", "right": "1em"})
      .append( $(DIV).css({"display": "inline-block", "float": "right", "white-space": "pre"})
        .append( $(LABEL).prop("for", "templates_autosave").text("Автосохранение: ")
+         .addClass("templates_autosave_label")
          .title("Автосохранение данных")
        )
        .append( $(INPUT).id("templates_autosave").prop({"type": "checkbox", "checked": TEMPLATES_AUTOSAVE})
          .on("change", function() {
            TEMPLATES_AUTOSAVE=$(this).is(":checked");
+           if(TEMPLATES_AUTOSAVE) {
+             $(".columns_list").trigger("sortstop");
+             $(".columns_list").find(".column").find("INPUT.select_checkbox.unsaved").trigger("change");
+             $("#templates_autosave_label").css({"background-color": "white"}).title("");
+           };
          })
        )
      )
@@ -5534,7 +5647,7 @@ function templates_list(opt) {
          .click(function() {
            let _list=$(this).closest(".root_pane").find(".templates_list");
            edit_template(undefined, function(ret_data) {
-             let new_row=get_teplate_list_row(ret_data);
+             let new_row=get_template_list_row(ret_data);
              _list.prepend(new_row);
              new_row.trigger("click");
            });
@@ -5551,9 +5664,14 @@ function templates_list(opt) {
          .click(function() {
            let _list=$(this).closest(".root_pane").find(".columns_list");
            edit_column(undefined, function(ret_data) {
+             let _templates_list=_list.closest(".root_pane").find(".templates_list");
+             if(_templates_list.length != 1) { error_at(); throw("Error"); };
+             if(_templates_list.data("id") != undefined) {
+               ret_data['checked'] = 0;
+             };
              let new_row=get_columns_list_row(ret_data);
              _list.prepend(new_row);
-             _list_trigger("sortstop");
+             _list.trigger("sortstop");
            });
          })
        )
@@ -5566,10 +5684,21 @@ function templates_list(opt) {
    .append( templ_list=$(DIV).addClass("templates_list")
      .css({"position": "absolute", "top": templ_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
      .on("sel_change", function() {
-       let root=$(this).find(".root_pane");
+       let root=$(this).closest(".root_pane");
        let ic_list=root.find(".columns_list");
        let tp_id=root.find(".templates_list").data("id");
 
+       let query={"action": "get_columns"};
+       if(tp_id != undefined) {
+         query['tp_id'] = tp_id;
+       };
+       ic_list.empty();
+       run_query(query, function(data) {
+         for(let i=0; i < data['ok'].length; i++) {
+           let row = get_columns_list_row(data['ok'][i]);
+           ic_list.append( row );
+         };
+       });
      })
    )
   ;
@@ -5578,17 +5707,39 @@ function templates_list(opt) {
   right_pane
    .append( columns_list=$(DIV).addClass("columns_list")
      .css({"position": "absolute", "top": cols_list_top, "left": "0px", "right": "0px", "bottom": "0px", "background-color": "#AAAAFF", "overflow-y": "scroll"})
-     .on("sortstop", function() {
-     })
    )
   ;
+
+  if(has_right(R_SUPER)) {
+    columns_list
+     .sortable({"handle": ".handle", "containment": "parent", "axis": "y"})
+     .on("sortstop", function() {
+       if(!TEMPLATES_AUTOSAVE) {
+         $("#templates_autosave_label").css({"background-color": "yellow"}).animateHightlight("yellow");
+         return;
+       };
+       let sort=10;
+       let positions={};
+       $(this).find(".column").each(function() {
+         let _id=$(this).data("id");
+         positions[_id] = sort;
+         sort += 10;
+       });
+       run_query({"action": "reorder_columns", "positions": positions});
+     })
+    ;
+  };
 
   dialog.dialog(d);
 
   run_query({"action": "get_templates"}, function(data) {
     watch(TICK_tp, 0);
+    watch(TICK_ic, 0);
+    watch(TICK_n4c, 0);
+    watch(TICK_n6c, 0);
+
     for(let i=0; i < data['ok'].length; i++) {
-      let row=get_teplate_list_row(data['ok'][i]);
+      let row=get_template_list_row(data['ok'][i]);
       templ_list.append(row);
     };
     templ_list.trigger("sel_change");

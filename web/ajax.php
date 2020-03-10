@@ -52,6 +52,8 @@ const TICK_vr		= "vr";
 const TICK_user		= "user";
 const TICK_tp		= "tp";
 const TICK_ic		= "ic";
+const TICK_n4c		= "n4c";
+const TICK_n6c		= "n6c";
 
 const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
 
@@ -1711,6 +1713,8 @@ if($q['action'] == 'v4get_net') {
   $ret=return_query($query);
   check_push(TICK_tp, 0);
   check_push(TICK_ic, 0);
+  check_push(TICK_n4c, 0);
+  check_push(TICK_n6c, 0);
 
   ok_exit($ret);
 } else if($q['action'] == 'get_template') {
@@ -1819,7 +1823,7 @@ if($q['action'] == 'v4get_net') {
 
   check_tick(TICK_ic, $q['ic_id']);
 
-  $query="SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $query="SELECT ics.*, 0 as uses FROM ics WHERE ic_id=".mq($q['ic_id']);
   $new_row=return_one($query, TRUE);
   
   audit_log("ic", $q['ic_id'], "ics", $q['action'], $prev_row, $new_row);
@@ -1836,7 +1840,8 @@ if($q['action'] == 'v4get_net') {
   require_p('ic_icon');
   require_p('ic_icon_style');
 
-  $query="SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $query = "SELECT ics.*, ((SELECT COUNT(*) FROM n4cs WHERE nc_fk_ic_id=ic_id)+(SELECT COUNT(*) FROM n6cs WHERE nc_fk_ic_id=ic_id)) as uses FROM ics";
+  $query .= " WHERE ic_id=".mq($q['ic_id']);
   $prev_row=return_one($query, TRUE);
 
   $query = "UPDATE ics SET";
@@ -1855,14 +1860,22 @@ if($q['action'] == 'v4get_net') {
 
   check_tick(TICK_ic, $q['ic_id']);
 
-  $query="SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $query = "SELECT ics.*, ((SELECT COUNT(*) FROM n4cs WHERE nc_fk_ic_id=ic_id)+(SELECT COUNT(*) FROM n6cs WHERE nc_fk_ic_id=ic_id)) as uses FROM ics";
+  $query .= " WHERE ic_id=".mq($q['ic_id']);
   $new_row=return_one($query, TRUE);
   
   audit_log("ic", $q['ic_id'], "ics", $q['action'], $prev_row, $new_row);
 
   ok_exit($new_row);
 } else if($q['action'] == 'get_columns') {
-  $query = "SELECT * FROM ics ORDER BY ic_sort";
+  optional_p('tp_id', '/^\d+$/');
+
+  $query = "SELECT ics.*";
+  $query .= ", ((SELECT COUNT(*) FROM n4cs WHERE nc_fk_ic_id=ic_id)+(SELECT COUNT(*) FROM n6cs WHERE nc_fk_ic_id=ic_id)) as uses";
+  if(isset($q['tp_id'])) {
+    $query .= ", (SELECT COUNT(*) FROM tcs WHERE tc_fk_ic_id=ic_id AND tc_fk_tp_id=".mq($q['tp_id']).") as checked";
+  };
+  $query .= " FROM ics ORDER BY ic_sort";
 
   $ret=return_query($query);
   check_push(TICK_tp, 0);
@@ -1872,11 +1885,36 @@ if($q['action'] == 'v4get_net') {
 } else if($q['action'] == 'get_column') {
   require_p('ic_id', "/^\d+$/");
 
-  $query = "SELECT * FROM ics WHERE ic_id=".mq($q['ic_id']);
+  $query = "SELECT ics.*, ((SELECT COUNT(*) FROM n4cs WHERE nc_fk_ic_id=ic_id)+(SELECT COUNT(*) FROM n6cs WHERE nc_fk_ic_id=ic_id)) as uses FROM ics";
+  $query .= " WHERE ic_id=".mq($q['ic_id']);
   $ret=return_one($query, TRUE);
-  check_push(TICK_tp, $q['ic_id']);
+  check_push(TICK_ic, $q['ic_id']);
 
   ok_exit($ret);
+} else if($q['action'] == 'reorder_columns') {
+  require_right(R_SUPER);
+  require_p('positions', Array("type" => "num2num"));
+
+  $query="SELECT GROUP_CONCAT( CONCAT(ic_id, ':', ic_sort) ) FROM ics";
+  $prev_row=return_one($query, TRUE);
+
+  foreach($q['positions'] as $ic_id => $ic_sort) {
+    $query = "UPDATE ics SET";
+    $query .= " ts=$time";
+    $query .= ",$set_fk_user_id";
+    $query .= ",ic_sort=".mq($ic_sort);
+    $query .= " WHERE ic_id=".mq($ic_id); 
+    run_query($query);
+    check_tick(TICK_ic, $ic_id, TRUE, FALSE);
+  };
+  check_tick(TICK_ic, 0);
+
+  $query="SELECT GROUP_CONCAT( CONCAT(ic_id, ':', ic_sort) ) FROM ics";
+  $new_row=return_one($query, TRUE);
+
+  audit_log("ic", 0, "ics", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
