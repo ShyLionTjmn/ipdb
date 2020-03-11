@@ -356,6 +356,7 @@ function run_query(query, successfunc, completefunc, errorfunc) {
     return;
   };
   $("#led").css("background-color", "yellow");
+  if(query['action'] != 'watch') WATCH_SKIP=true;
   $.ajax({
     url: AJAX,
     method: 'POST',
@@ -386,6 +387,7 @@ function run_query(query, successfunc, completefunc, errorfunc) {
         if(successfunc != null) {
           successfunc(data);
         };
+        if(query['action'] != 'watch') WATCH_SKIP=false;
         return;
       };
       let message;

@@ -15,6 +15,7 @@ const INPUT_STOP_TIMER	= 500;
 
 var SAFE_MODE=true;
 var WATCH=true;
+var WATCH_SKIP=false;
 
 const WATCH_PERIOD	= 1000;
 
@@ -200,7 +201,7 @@ $.fn.moveToTop = function() {
 
 function watcherFunc() {
   watchTimer = undefined;
-  if( $.isEmptyObject(watches) || !WATCH ) {
+  if( $.isEmptyObject(watches) || !WATCH || WATCH_SKIP ) {
     watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
   } else {
     let w={};
@@ -215,7 +216,7 @@ function watcherFunc() {
 
     $("#watch_debug").text(jstr(watches)+"\n"+jstr(w)+"\n"+( new Date().toLocaleTimeString('ru')));
     run_query({"action": "watch", "checks": w}, function(ret_data) {
-      if(ret_data['ok']['result'] == 'ok') {
+      if(ret_data['ok']['result'] == 'ok' || WATCH_SKIP) {
         if(WATCH) {
           watchTimer = setTimeout(watcherFunc, WATCH_PERIOD);
         };
@@ -5642,7 +5643,7 @@ function templates_list(opt) {
      .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": templ_list_top, "background-color": "white"})
    )
    .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-grip-solid-vertical")
-     .css({"position": "absolute", "top": "49%", "left": "0px", "right": "0px", "height": "1em"})
+     .css({"position": "absolute", "top": "49%", "left": "0px", "right": "0px", "height": "1em", "cursor": "col-resize"})
    )
   ;
 
@@ -5773,6 +5774,76 @@ function templates_list(opt) {
     };
     templ_list.trigger("sel_change");
   });
+};
+
+function sites_list(presel, opt, donefunc) {
+  if(opt == undefined) { error_at(); return; };
+  if($("#sites_list").length != 0) return;
+
+  let title;
+
+  if(has_right(R_SUPER)) {
+    title = "Управление сайтами";
+  } else {
+    if(donefunc != undefined) {
+      title = "Выбор сайта";
+    } else {
+      title = "Просмотр сайтов";
+    };
+  };
+
+  let dialog=$(DIV).id("sites_list")
+   .data("opt", opt)
+   .data("donefunc", donefunc)
+   .data("presel", presel)
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    position: { my: "center top", at: "center top", of: window },
+    maxHeight: $(window).height(),
+    minHeight: $(window).height()-10,
+    minWidth:1000,
+    buttons: [],
+    close: function() {
+      //unwatch(TICK_site, 0);
+      let did=$(this).prop("id");
+      $(this).dialog("destroy");
+      $(this).remove();
+      $(window).off("resize."+did);
+    },
+    open: function() {
+      let _dialog=$(this);
+      let did=$(this).prop("id");
+      $(window).on("resize."+did, function() {
+        _dialog.dialog("option", "maxHeight", $(window).height());
+        _dialog.dialog("option", "minHeight", $(window).height() - 10);
+      });
+    }
+  };
+
+  if(donefunc != undefined) {
+    d['buttons'].push({
+      "text": "Выбрать",
+      "class": "confirm_btn",
+      "click": function() {
+        let _dialog=$(this);
+        let _donefunc=$(this).data("donefunc");
+
+        _dialog.dialog("close");
+      }
+    });
+  };
+
+  d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+
+  dialog.dialog(d);
+
 };
 
 function process_R() {
@@ -6058,6 +6129,16 @@ $( document ).ready(function() {
            .click(function() {
              //vlans_list(undefined, {});
              templates_list({});
+           })
+         )
+        ;
+
+        menu_bar
+         .append( $(SPAN).addClass("ui-button").text("Сайты")
+           .css({"padding": "0px 0.3em", "margin-left": "10px"})
+           .click(function() {
+             //vlans_list(undefined, {});
+             sites_list(undefined, {});
            })
          )
         ;
