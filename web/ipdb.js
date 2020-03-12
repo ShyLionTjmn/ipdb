@@ -5841,6 +5841,33 @@ function sites_list(presel, opt, donefunc) {
 
   d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
 
+  let head;
+  dialog
+   .append( head=$(DIV)
+     .css({})
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .click(function() {
+         console.log($("#tree").jstree().create_node("#", {"text": "node"}, "last"));
+       })
+     )
+   )
+  ;
+
+  let tree;
+
+  dialog
+   .append( tree=$(DIV).id("tree")
+     .css({})
+     .append( $(UL) )
+   )
+  ;
+
+  tree.jstree({
+    "core": {
+      "check_callback": true,
+    },
+    //"plugins" : [ "wholerow" ]
+  });
 
   dialog.dialog(d);
 

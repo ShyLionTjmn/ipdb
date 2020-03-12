@@ -17,6 +17,8 @@ const A="<A/>";
 const FORM="<FORM/>";
 const TEXTAREA="<TEXTAREA/>";
 const BUTTON="<BUTTON/>";
+const UL="<UL/>";
+const LI="<LI/>";
 
 let notLocked = true;
 $.fn.animateHighlight = function(highlightColor, duration) {
