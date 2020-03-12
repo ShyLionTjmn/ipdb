@@ -1,5 +1,4 @@
 // GLOBALS
-
 var ud;
 var $R={};
 var page_root;
@@ -5853,10 +5852,16 @@ function sites_list(presel, opt, donefunc) {
            let ref = $("#tree").jstree(true);
            if(ref === false) { error_at(); return; };
 
+           //run_query({"action": "add_site", "parent_id": "", "name": "Новый"
+
            let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
+           let elm = ref.get_node(new_id, true);
+           elm
+            .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button") )
+           ;
            ref.deselect_all(true);
            ref.select_node( new_id );
-           ref.edit( new_id );
+           //ref.edit( new_id );
          })
        )
        .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("add_subsite_btn")
