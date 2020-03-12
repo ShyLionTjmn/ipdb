@@ -5841,46 +5841,60 @@ function sites_list(presel, opt, donefunc) {
 
   d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
 
+  let head;
+
+  dialog
+   .append( head = $(DIV)
+     .css({"padding-bottom": "0.5em"})
+   )
+  ;
+
   if(has_right(R_SUPER)) {
-    dialog
-     .append( $(DIV)
-       .css({"padding-bottom": "0.5em"})
-       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
-         .css({"color": color_table_buttons, "margin-right": "0.5em", "padding": "0.1em"})
-         .title( "Добавить корневой сайт" )
-         .click(function() {
-           let ref = $("#tree").jstree(true);
-           if(ref === false) { error_at(); return; };
+    head
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .css({"color": color_table_buttons, "margin-right": "0.5em", "padding": "0.1em"})
+       .title( "Добавить корневой сайт" )
+       .click(function() {
+         let ref = $("#tree").jstree(true);
+         if(ref === false) { error_at(); return; };
 
-           //run_query({"action": "add_site", "parent_id": "", "name": "Новый"
+         //run_query({"action": "add_site", "parent_id": "", "name": "Новый"
 
-           let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
-           let elm = ref.get_node(new_id, true);
-           elm
-            .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button") )
-           ;
-           ref.deselect_all(true);
-           ref.select_node( new_id );
-           //ref.edit( new_id );
-         })
-       )
-       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("add_subsite_btn")
-         .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
-         .title( "Добавить вложенный сайт" )
-         .click(function() {
-           let ref = $("#tree").jstree(true);
-           if(ref === false) { error_at(); return; };
-           let selected_ids=ref.get_selected();
-           if(selected_ids.length == 0) { return; };
-           let new_id = ref.create_node(selected_ids[0], {"text": "Переименовать"}, "last");
-           ref.deselect_all(true);
-           ref.select_node( new_id );
-           ref.edit( new_id );
-         })
-       )
+         let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
+         ref.deselect_all(true);
+         ref.select_node( new_id );
+         ref.edit( new_id );
+       })
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("site_selected_btn")
+       .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
+       .title( "Добавить вложенный сайт" )
+       .click(function() {
+         let ref = $("#tree").jstree(true);
+         if(ref === false) { error_at(); return; };
+         let selected_ids=ref.get_selected();
+         if(selected_ids.length == 0) { return; };
+         let new_id = ref.create_node(selected_ids[0], {"text": "Переименовать"}, "last");
+         ref.deselect_all(true);
+         ref.select_node( new_id );
+         ref.edit( new_id );
+       })
      )
     ;
   };
+
+  head
+   .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button").addClass("site_selected_btn")
+     .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
+     .title( "Добавить вложенный сайт" )
+     .click(function() {
+       let ref = $("#tree").jstree(true);
+       if(ref === false) { error_at(); return; };
+       let selected_ids=ref.get_selected();
+       if(selected_ids.length == 0) { return; };
+     })
+   )
+  ;
 
   dialog.dialog(d);
 
@@ -5894,13 +5908,14 @@ function sites_list(presel, opt, donefunc) {
        },
        "plugins" : [ "wholerow", "contextmenu", "dnd" ]
      })
-     .on("select_node.jstree", function(e) {
-       $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": color_table_buttons});
-       $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', false).css({"color": "black"});
-     })
-     .on("deselect_node.jstree", function(e) {
-       $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": "lightgray"});
-       $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "gray"});
+     .on("changed.jstree", function(e, data) {
+       if(data.selected.length > 0) {
+         $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": color_table_buttons});
+         $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', false).css({"color": "black"});
+       } else {
+         $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": "lightgray"});
+         $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "lightgray"});
+       };
      })
    )
   ;
