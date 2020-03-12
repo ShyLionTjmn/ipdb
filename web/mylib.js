@@ -50,28 +50,23 @@ $.fn.inputStop = function (timeout, tabdown_func) {
    .data("input_stop_timeout", timeout)
    .data("tabdown_func", tabdown_func)
    .on("input", function() {
-//console.log("input");
      $(this).addClass("unsaved");
      $(this).removeClass("saved");
      let t=$(this).data("input_stop_timer");
      if(t !== undefined) {
-//console.log("Kill timer on input");
        clearTimeout(t);
      };
      let to=$(this).data("input_stop_timeout");
 
      let th=$(this);
      let timer=setTimeout(function() {
-//console.log("Timer fired");
        th.data("input_stop_timer", undefined);
        th.trigger("input_stop");
      }, to);
      $(this).data("input_stop_timer", timer);
      $(this).css({"background-color": "palegoldenrod"});
-//console.log("Timer set on input");
    })
    .on("keydown", function(e) {
-//console.log("keydown");
      if((e.keyCode || e.which) == '9') {
        let _tabdown_func=$(this).data("tabdown_func");
        if(_tabdown_func != undefined) {
@@ -82,7 +77,6 @@ $.fn.inputStop = function (timeout, tabdown_func) {
      };
      let t=$(this).data("input_stop_timer");
      if(t !== undefined) {
-//console.log("Kill timer no keydown");
        clearTimeout(t);
      };
    })
@@ -96,7 +90,7 @@ $.fn.title = function(title) {
   return this;
 };
 
-$.fn.id = function(idstring) {
+$.fn.myid = function(idstring) {
   $(this).prop("id", idstring);
   return this;
 };
@@ -106,7 +100,6 @@ $.fn.dotted = function(title) {
    .css({"text-decoration-style": "dotted", "text-decoration-line": "underline"});
   return this;
 };
-
 RegExp.escape= function(s) {
     return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 };

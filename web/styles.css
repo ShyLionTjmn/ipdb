@@ -16,3 +16,6 @@ TR.bg_colored:nth-child(odd)
 .wspre {
   white-space: pre-line;
 }
+.vakata-context { 
+     z-index:999 !important; 
+}

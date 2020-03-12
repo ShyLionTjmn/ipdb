@@ -1246,7 +1246,7 @@ function vlan_range_dialog(vr_id, donefunc) {
     };
   };
 
-  let dialog=$(DIV).id("vlan_range_dialog")
+  let dialog=$(DIV).myid("vlan_range_dialog")
    .data("id", vr_id)
    .addClass("dialog_start")
    .prop("title", title)
@@ -1365,7 +1365,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Начало:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_start").prop({"placeholder": "xxxx", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("vlan_range_start").prop({"placeholder": "xxxx", "readonly": !has_right(R_SUPER)})
          .on("change input", validate_vlan_range)
        )
      )
@@ -1375,7 +1375,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Окончание:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_stop").prop({"placeholder": "xxxx", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("vlan_range_stop").prop({"placeholder": "xxxx", "readonly": !has_right(R_SUPER)})
          .on("change input", validate_vlan_range)
        )
      )
@@ -1385,7 +1385,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Наименование:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_name").prop({"placeholder": "Краткое наименование", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("vlan_range_name").prop({"placeholder": "Краткое наименование", "readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -1394,7 +1394,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Описание:") )
      )
      .append( $(TD)
-       .append( $(TEXTAREA).id("vlan_range_descr").prop({"readonly": !has_right(R_SUPER)})
+       .append( $(TEXTAREA).myid("vlan_range_descr").prop({"readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -1403,7 +1403,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Скрытый:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_invisible").prop({"type": "checkbox"})
+       .append( $(INPUT).myid("vlan_range_invisible").prop({"type": "checkbox"})
          .click(function() { return has_right(R_SUPER); })
        )
      )
@@ -1413,7 +1413,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Стиль линии/текста (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("vlan_range_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
          .val("{}")
          .on("change input", function() { validate_json_elm.call(this, "lightgreen", "red"); })
        )
@@ -1426,7 +1426,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_icon").prop({"placeholder": "ui-icon-info", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("vlan_range_icon").prop({"placeholder": "ui-icon-info", "readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -1435,7 +1435,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Стиль значка (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("vlan_range_icon_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("vlan_range_icon_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
          .val("{}")
          .on("change input", function() { validate_json_elm.call(this, "lightgreen", "red"); })
        )
@@ -1446,7 +1446,7 @@ function vlan_range_dialog(vr_id, donefunc) {
        .append( $(LABEL).text("Права доступа:") )
      )
      .append( $(TD)
-       .append( $(DIV).id("vlan_range_rights") 
+       .append( $(DIV).myid("vlan_range_rights") 
        )
        .append( $(DIV)
          .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
@@ -1514,11 +1514,11 @@ function vlan_range_dialog(vr_id, donefunc) {
 function vr_info() {
   let vr_info=$("#vr_info");
   if(vr_info.length == 0) {
-    vr_info=$(DIV).id("vr_info")
+    vr_info=$(DIV).myid("vr_info")
      .css({"background-color": "white", "border": "1px solid gray", "padding": "0.5em", "white-space": "pre"})
     ;
 
-    $(DIV).id("vr_info_parent")
+    $(DIV).myid("vr_info_parent")
      .css({"display": "inline-block", "position": "fixed", "bottom": "1em", "right": "1em", "z-index": 1000001})
      .append( $(DIV)
        .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-close").addClass("ui-button")
@@ -1865,7 +1865,7 @@ function vdomain_edit(vd_id, opt, donefunc) {
 
   let readonly= !has_right(R_SUPER);
 
-  let dialog=$(DIV).id("vdomain_edit")
+  let dialog=$(DIV).myid("vdomain_edit")
    .data("opt", opt)
    .data("id", vd_id)
    .data("donefunc", donefunc)
@@ -1982,7 +1982,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   if(opt == undefined) { error_at(); return; };
   if( $("#vlans_list").length != 0) { return; };
 
-  let dialog=$(DIV).id("vlans_list")
+  let dialog=$(DIV).myid("vlans_list")
    .data("opt", opt)
    .data("donefunc", donefunc)
    .data("presel_id", presel_vlan_id)
@@ -2173,7 +2173,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
      .append( $(LABEL).prop("for", "vlans_autosave").text("Автосохранение: ")
        .title("Автосохранение данных")
      )
-     .append( $(INPUT).id("vlans_autosave").prop({"type": "checkbox", "checked": VLANS_AUTOSAVE})
+     .append( $(INPUT).myid("vlans_autosave").prop({"type": "checkbox", "checked": VLANS_AUTOSAVE})
        .on("change", function() {
          VLANS_AUTOSAVE=$(this).is(":checked");
        })
@@ -2290,7 +2290,7 @@ function user_edit(user_id, opt, donefunc) {
 
   if( $("#user_edit"+user_id).length != 0) { return; };
 
-  let dialog=$(DIV).id("user_edit"+user_id)
+  let dialog=$(DIV).myid("user_edit"+user_id)
    .data("opt", opt)
    .data("id", user_id)
    .addClass("dialog_start")
@@ -2749,7 +2749,7 @@ function users_list(exclude_list, opt, donefunc) {
 
   if( $("#users_list").length != 0) { error_at(); return; };
 
-  let dialog=$(DIV).id("users_list")
+  let dialog=$(DIV).myid("users_list")
    .data("opt", opt)
    .addClass("dialog_start")
    .title("Пользователи")
@@ -2856,7 +2856,7 @@ function group_edit(group_id, opt, donefunc) {
 
   let allow_group_edit = opt['allow_edit'];
 
-  let dialog=$(DIV).id(id)
+  let dialog=$(DIV).myid(id)
    .data("opt", opt)
    .data("id", group_id)
    .addClass("dialog_start")
@@ -3298,7 +3298,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     presel_list = [select_gr_ids];
   };
 
-  let dialog=$(DIV).id("groups_list")
+  let dialog=$(DIV).myid("groups_list")
    .data("opt", opt)
    .data("donefunc", donefunc)
    .addClass("dialog_start")
@@ -3614,7 +3614,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     };
   };
 
-  let dialog=$(DIV).id("v4_global_range_dialog")
+  let dialog=$(DIV).myid("v4_global_range_dialog")
    .data("id", v4r_id)
    .addClass("dialog_start")
    .prop("title", title)
@@ -3727,7 +3727,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Начало:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_start").prop({"placeholder": "x.x.x.x", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("v4range_start").prop({"placeholder": "x.x.x.x", "readonly": !has_right(R_SUPER)})
          .on("change input", validate_v4range)
        )
      )
@@ -3737,7 +3737,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Окончание:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_stop").prop({"placeholder": "x.x.x.x", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("v4range_stop").prop({"placeholder": "x.x.x.x", "readonly": !has_right(R_SUPER)})
          .on("change input", validate_v4range)
        )
      )
@@ -3747,7 +3747,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Наименование:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_name").prop({"placeholder": "Краткое наименование", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("v4range_name").prop({"placeholder": "Краткое наименование", "readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -3756,7 +3756,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Описание:") )
      )
      .append( $(TD)
-       .append( $(TEXTAREA).id("v4range_descr").prop({"readonly": !has_right(R_SUPER)})
+       .append( $(TEXTAREA).myid("v4range_descr").prop({"readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -3765,7 +3765,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Скрытый:") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_invisible").prop({"type": "checkbox"})
+       .append( $(INPUT).myid("v4range_invisible").prop({"type": "checkbox"})
          .click(function() { return has_right(R_SUPER); })
        )
      )
@@ -3775,7 +3775,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Стиль линии/текста (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("v4range_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
          .on("change input", function() { validate_json_elm.call(this, "lightgreen", "red"); })
        )
      )
@@ -3787,7 +3787,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_icon").prop({"placeholder": "ui-icon-info", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("v4range_icon").prop({"placeholder": "ui-icon-info", "readonly": !has_right(R_SUPER)})
        )
      )
    )
@@ -3796,7 +3796,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Стиль значка (JSON):") )
      )
      .append( $(TD)
-       .append( $(INPUT).id("v4range_icon_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
+       .append( $(INPUT).myid("v4range_icon_style").prop({"placeholder": "{\"color\": \"red\"}", "readonly": !has_right(R_SUPER)})
          .on("change input", function() { validate_json_elm.call(this, "lightgreen", "red"); })
        )
      )
@@ -3806,7 +3806,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
        .append( $(LABEL).text("Права доступа:") )
      )
      .append( $(TD)
-       .append( $(DIV).id("v4range_rights") 
+       .append( $(DIV).myid("v4range_rights") 
        )
        .append( $(DIV)
          .append( !has_right(R_SUPER)?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
@@ -4879,13 +4879,13 @@ function ipv4() {
      )
      .append( $(TR)
        .append( $(TD)
-         .append( $(INPUT).id("v4goto_net").prop({"placeholder": "x.x.x.x/mm", "type": "search"})
+         .append( $(INPUT).myid("v4goto_net").prop({"placeholder": "x.x.x.x/mm", "type": "search"})
            .title("Введите адрес сети в CIDR нотации. Если сеть не существует, интерфейс перейдет в режим навигации ближайшей в сторону увеличения сети, либо к просмотру/редактированию существующей сети")
            .enterKey(function() { $("#v4goto_net_btn").trigger("click"); })
          )
        )
        .append( $(TD)
-         .append( $(BUTTON).button({"icon": "ui-icon-sitemap"}).id("v4goto_net_btn")
+         .append( $(BUTTON).button({"icon": "ui-icon-sitemap"}).myid("v4goto_net_btn")
            .title("Перейти к навигации по указаной подсети")
            .css({"padding-left": "0.5em", "padding-right": "0.5em", "margin-left": "1em"})
            .click(function() {
@@ -5070,7 +5070,7 @@ function edit_column(ic_id, donefunc) {
     title="Изменение поля IP";
   };
 
-  let dialog=$(DIV).id("column_edit")
+  let dialog=$(DIV).myid("column_edit")
    .data("id", ic_id)
    .data("donefunc", donefunc)
    .addClass("dialog_start")
@@ -5385,7 +5385,7 @@ function edit_template(tp_id, donefunc) {
     title="Изменение шаблона";
   };
 
-  let dialog=$(DIV).id("template_edit")
+  let dialog=$(DIV).myid("template_edit")
    .data("id", tp_id)
    .data("donefunc", donefunc)
    .addClass("dialog_start")
@@ -5551,7 +5551,7 @@ function templates_list(opt) {
     title = "Просмотр шаблонов";
   };
 
-  let dialog=$(DIV).id("templates_list")
+  let dialog=$(DIV).myid("templates_list")
    .addClass("dialog_start")
    .prop("title", title)
    .css({"white-space": "pre", "font-size": "larger"})
@@ -5590,10 +5590,10 @@ function templates_list(opt) {
    .append( $(DIV).css({"position": "absolute", "top": "1em", "left": "1em", "right": "1em"})
      .append( $(DIV).css({"display": "inline-block", "float": "right", "white-space": "pre"})
        .append( $(LABEL).prop("for", "templates_autosave").text("Автосохранение: ")
-         .id("templates_autosave_label")
+         .myid("templates_autosave_label")
          .title("Автосохранение данных")
        )
-       .append( $(INPUT).id("templates_autosave").prop({"type": "checkbox", "checked": TEMPLATES_AUTOSAVE})
+       .append( $(INPUT).myid("templates_autosave").prop({"type": "checkbox", "checked": TEMPLATES_AUTOSAVE})
          .on("change", function() {
            TEMPLATES_AUTOSAVE=$(this).is(":checked");
            if(TEMPLATES_AUTOSAVE) {
@@ -5792,7 +5792,7 @@ function sites_list(presel, opt, donefunc) {
     };
   };
 
-  let dialog=$(DIV).id("sites_list")
+  let dialog=$(DIV).myid("sites_list")
    .data("opt", opt)
    .data("donefunc", donefunc)
    .data("presel", presel)
@@ -5823,6 +5823,7 @@ function sites_list(presel, opt, donefunc) {
         _dialog.dialog("option", "maxHeight", $(window).height());
         _dialog.dialog("option", "minHeight", $(window).height() - 10);
       });
+      $(this).dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "gray"});
     }
   };
 
@@ -5844,32 +5845,58 @@ function sites_list(presel, opt, donefunc) {
   let head;
   dialog
    .append( head=$(DIV)
-     .css({})
+     .css({"padding-bottom": "0.5em"})
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .css({"color": color_table_buttons, "margin-right": "0.5em", "padding": "0.1em"})
+       .title( "Добавить корневой сайт" )
        .click(function() {
-         console.log($("#tree").jstree().create_node("#", {"text": "node"}, "last"));
+         let ref = $("#tree").jstree(true);
+         let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
+         ref.deselect_all(true);
+         ref.select_node( new_id );
+         ref.edit( new_id );
+       })
+     )
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("add_subsite_btn")
+       .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
+       .title( "Добавить вложенный сайт" )
+       .click(function() {
+         let ref = $("#tree").jstree(true);
+         let selected_ids=ref.get_selected();
+         if(selected_ids.length == 0) { return; };
+         let new_id = ref.create_node(selected_ids[0], {"text": "Переименовать"}, "last");
+         ref.deselect_all(true);
+         ref.select_node( new_id );
+         ref.edit( new_id );
        })
      )
    )
   ;
 
-  let tree;
+  dialog.dialog(d);
 
   dialog
-   .append( tree=$(DIV).id("tree")
+   .append( tree=$(DIV).myid("tree")
      .css({})
-     .append( $(UL) )
+     .jstree({
+       "core": {
+         "check_callback": true,
+         "multiple": false
+       },
+       "plugins" : [ "wholerow", "contextmenu", "dnd" ]
+     })
+     .on("select_node.jstree", function(e) {
+       $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": color_table_buttons});
+       $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', false).css({"color": "black"});
+     })
+     .on("deselect_node.jstree", function(e) {
+       $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": "lightgray"});
+       $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "gray"});
+     })
    )
   ;
 
-  tree.jstree({
-    "core": {
-      "check_callback": true,
-    },
-    //"plugins" : [ "wholerow" ]
-  });
 
-  dialog.dialog(d);
 
 };
 
@@ -5930,7 +5957,7 @@ $( document ).ready(function() {
   });
 
   $("BODY")
-   .append( $(DIV).id("debug")
+   .append( $(DIV).myid("debug")
      .css({
        "position": "absolute", "right": "1em", "top": "1em", "width": "600px", "height": "600px",
        "border": "1px solid black",
@@ -5938,7 +5965,7 @@ $( document ).ready(function() {
        "white-space": "pre"
      })
    )
-   .append( $(DIV).id("led")
+   .append( $(DIV).myid("led")
      .css({
        "position": "absolute", "right": "0em", "top": "0em", "width": "1em", "height": "1em",
        "border": "1px solid black",
@@ -5948,7 +5975,7 @@ $( document ).ready(function() {
        $("#debug").toggle();
      })
    )
-   .append( $(DIV).id("page_title")
+   .append( $(DIV).myid("page_title")
      .css({
        "position": "absolute", "right": "0em", "top": "0em", "left": "0em",
        "text-align": "center", "font-size": "3em"
@@ -5968,14 +5995,14 @@ $( document ).ready(function() {
          })
        )
      )
-     .append( $(DIV).id("watch_debug")
+     .append( $(DIV).myid("watch_debug")
        .css({"padding": "0.2em"})
        .css({"border": "1px solid black", "background-color": "white"})
        .css({"white-space": "pre"})
        //.hide()
      )
    )
-   .append( $(DIV).id("calc")
+   .append( $(DIV).myid("calc")
      .css({
        "position": "fixed", "bottom": "2em", "right": "2em", "width": "auto", "height": "auto",
        "z-index": 1000000
@@ -5990,7 +6017,7 @@ $( document ).ready(function() {
          })
        )
      )
-     .append( $(DIV).id("calc_text")
+     .append( $(DIV).myid("calc_text")
        .css({"padding": "0.2em"})
        .css({"border": "1px solid black"})
        .css({"white-space": "pre"})
@@ -6009,7 +6036,7 @@ $( document ).ready(function() {
       showLoginWindow(data['ok']['providers'], "Необходимо пройти авторизацию.");
     } else {
 
-      let menu_bar = $(DIV).id("top_menu")
+      let menu_bar = $(DIV).myid("top_menu")
        .css({"border": "1px solid lightgray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
        //.hide()
        .click(function(e) {
@@ -6031,7 +6058,7 @@ $( document ).ready(function() {
          )
        )
        .append( menu_bar )
-       .append( $(DIV).id("user_info")
+       .append( $(DIV).myid("user_info")
          .css({"border": "1px solid lightgray", "display": "inline-block", "margin-left": "5px", "padding": "5px", "background-color": "white"})
          .hide()
        )
@@ -6108,7 +6135,7 @@ $( document ).ready(function() {
           };
         };
         // continue building of document structure
-        $(DIV).id("contents")
+        $(DIV).myid("contents")
          .css({"margin-top": "3em"})
          .appendTo("BODY")
         ;
@@ -6165,7 +6192,7 @@ $( document ).ready(function() {
            .css({"padding": "0px 0.3em", "margin-left": "10px"})
            .click(function() {
              //vlans_list(undefined, {});
-             sites_list(undefined, {});
+             sites_list(undefined, {}, function() {});
            })
          )
         ;
