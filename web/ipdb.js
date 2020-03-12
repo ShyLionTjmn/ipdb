@@ -5842,36 +5842,40 @@ function sites_list(presel, opt, donefunc) {
 
   d['buttons'].push({ "text": (donefunc != undefined)?"Отмена":"Закрыть", "click": function() {$(this).dialog( "close" ); } });
 
-  let head;
-  dialog
-   .append( head=$(DIV)
-     .css({"padding-bottom": "0.5em"})
-     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
-       .css({"color": color_table_buttons, "margin-right": "0.5em", "padding": "0.1em"})
-       .title( "Добавить корневой сайт" )
-       .click(function() {
-         let ref = $("#tree").jstree(true);
-         let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
-         ref.deselect_all(true);
-         ref.select_node( new_id );
-         ref.edit( new_id );
-       })
+  if(has_right(R_SUPER)) {
+    dialog
+     .append( $(DIV)
+       .css({"padding-bottom": "0.5em"})
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+         .css({"color": color_table_buttons, "margin-right": "0.5em", "padding": "0.1em"})
+         .title( "Добавить корневой сайт" )
+         .click(function() {
+           let ref = $("#tree").jstree(true);
+           if(ref === false) { error_at(); return; };
+
+           let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
+           ref.deselect_all(true);
+           ref.select_node( new_id );
+           ref.edit( new_id );
+         })
+       )
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("add_subsite_btn")
+         .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
+         .title( "Добавить вложенный сайт" )
+         .click(function() {
+           let ref = $("#tree").jstree(true);
+           if(ref === false) { error_at(); return; };
+           let selected_ids=ref.get_selected();
+           if(selected_ids.length == 0) { return; };
+           let new_id = ref.create_node(selected_ids[0], {"text": "Переименовать"}, "last");
+           ref.deselect_all(true);
+           ref.select_node( new_id );
+           ref.edit( new_id );
+         })
+       )
      )
-     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("add_subsite_btn")
-       .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
-       .title( "Добавить вложенный сайт" )
-       .click(function() {
-         let ref = $("#tree").jstree(true);
-         let selected_ids=ref.get_selected();
-         if(selected_ids.length == 0) { return; };
-         let new_id = ref.create_node(selected_ids[0], {"text": "Переименовать"}, "last");
-         ref.deselect_all(true);
-         ref.select_node( new_id );
-         ref.edit( new_id );
-       })
-     )
-   )
-  ;
+    ;
+  };
 
   dialog.dialog(d);
 
