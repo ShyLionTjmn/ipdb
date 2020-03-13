@@ -206,10 +206,10 @@ function watcherFunc() {
   } else {
     let w={};
     for(let subject in watches) {
-      if(g_checks[subject] == undefined) { error_at(); throw("Error"); };
+      if(g_checks[subject] == undefined) { throw("Error"); };
       if(w[subject] == undefined) w[subject] = {};
       for(let id in watches[subject]) {
-        if(g_checks[subject][id] == undefined) { error_at(); throw("Error"); };
+        if(g_checks[subject][id] == undefined) { throw("Error"); };
         w[subject][id] = g_checks[subject][id];
       };
     };
@@ -257,15 +257,14 @@ function watcherFunc() {
 };
 
 function watch(subject, id) {
-  if(g_checks[subject] == undefined) { error_at("Unwatchable subject: "+subject+" id: "+id); throw("Unwatchable subject: "+subject+" id: "+id); };
-  if(g_checks[subject][id] == undefined) { error_at("Unwatchable subject: "+subject+" id: "+id); throw("Unwatchable subject: "+subject+" id: "+id); };
+  if(g_checks[subject] == undefined) { throw("Unwatchable subject: "+subject+" id: "+id); };
+  if(g_checks[subject][id] == undefined) { throw("Unwatchable subject: "+subject+" id: "+id); };
   if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
   if(watches[subject] == undefined) { watches[subject] = {}; };
   if(watches[subject][id] == undefined) { watches[subject][id] = 0; };
   watches[subject][id]++;
 
   if(watches[subject][id] > 3) {
-    error_at();
     throw("Error");
   };
 
@@ -285,18 +284,16 @@ function unwatch(subject, id) {
 
   if(watches[subject] == undefined) {
     if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
-    error_at();
     throw("Error");
   };
   if(watches[subject][id] == undefined) {
     if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
-    error_at();
     throw("Error");
   };
   watches[subject][id] --;
   if(watches[subject][id] < 0) {
     if(watchTimer != undefined) { clearTimeout(watchTimer); watchTimer = undefined; };
-    error_at(); throw("Error");
+    throw("Error");
   };
   if(watches[subject][id] == 0) {
     delete watches[subject][id];
@@ -614,14 +611,14 @@ function user_state_elm(user) {
 
 function take_vlan() {
   let vlan_number=$(this).data("vlan");
-  if(vlan_number == undefined) { error_at(); throw("error"); };
+  if(vlan_number == undefined) { throw("error"); };
 
   let this_row=$(this).closest("TR");
   let input=this_row.find("INPUT.any_vlan");
 
   if(vlan_number == "from_input") {
     vlan_number = input.val();
-    if(vlan_number == undefined) { error_at(); throw("error"); };
+    if(vlan_number == undefined) { throw("error"); };
     if(!String(vlan_number).match(/^\d+$/)) {
       input.animateHighlight("red", 300);
       return;
@@ -630,7 +627,7 @@ function take_vlan() {
 
   vlan_number=Number(vlan_number);
 
-  if(!String(vlan_number).match(/^\d+$/)) { error_at(); throw("error"); };
+  if(!String(vlan_number).match(/^\d+$/)) { throw("error"); };
 
   let tbody=$(this).closest("TBODY.vlans_list");
   let vd_id=tbody.data("vd_id");
@@ -639,7 +636,7 @@ function take_vlan() {
 
   if(check_row.length > 0) {
     if(input.length == 0) {
-      error_at(); throw("error");
+      throw("error");
     };
     input.focus().add( check_row ).animateHighlight("red", 300);
     return;
@@ -683,10 +680,10 @@ function take_vlan() {
       let prev_row=vlan_row.prev();
       let split_start;
       let split_stop;
-      if(prev_row.length != 1) { error_at(); throw("error"); };
+      if(prev_row.length != 1) { throw("error"); };
       if(prev_row.hasClass("vlan_row")) {
         let prev_vlan=Number(prev_row.data("data")['vlan_number']);
-        if(prev_vlan >= vlan_number) { error_at(); throw("error"); };
+        if(prev_vlan >= vlan_number) { throw("error"); };
         split_start=prev_vlan+1;
         if(split_start < vlan_number) {
           split_stop=vlan_number-1;
@@ -698,7 +695,7 @@ function take_vlan() {
         let prev_ranges_td=prev_row.find(".vlan_ranges_td");
         if(prev_ranges_td.hasClass("with_ranges")) {
           split_start=Number(prev_row.data("vlan_stop")) + 1;
-          if(split_start > vlan_number) { error_at(); throw("Error"); };
+          if(split_start > vlan_number) { throw("Error"); };
           if(split_start < vlan_number) {
             split_stop=vlan_number - 1;
             let take_row=vlans_take_row(split_start, split_stop, rmask, opts);
@@ -707,14 +704,14 @@ function take_vlan() {
           };
         } else {
           split_start=Number(prev_row.data("vlan_start"));
-          if(split_start >= vlan_number) { error_at(); throw("Error"); };
+          if(split_start >= vlan_number) { throw("Error"); };
           split_stop=vlan_number - 1;
           let take_row=vlans_take_row(split_start, split_stop, rmask, opts);
           take_row.append( prev_ranges_td.clone(true) );
           prev_row.replaceWith( take_row );
         };
       } else {
-        error_at(); throw("error");
+        throw("error");
       };
     } else {
       let split_start=Number(split_row.data("vlan_start"));
@@ -760,7 +757,7 @@ function take_vlan() {
 };
 
 function vlans_take_row(vlan_start, vlan_stop, rmask, opts) {
-  if(opts == undefined) { error_at(); throw("Error"); };
+  if(opts == undefined) { throw("Error"); };
   let ret=$(TR).addClass("bg_colored")
    .addClass("vlan_take_row")
    .data("vlan_start", Number(vlan_start))
@@ -990,7 +987,7 @@ function vlans_vlan_row(vlan, rmask, opts) {
    .data("rmask", rmask)
   ;
 
-  if(opts == undefined) { error_at(); throw("Error"); };
+  if(opts == undefined) { throw("Error"); };
 
   let can_change_sel=opts['opt'] != undefined && opts['opt']['return'] != undefined && opts['donefunc'] != undefined;
   let presel = false;
@@ -1279,7 +1276,7 @@ function vlan_range_dialog(vr_id, donefunc) {
         if(_sel.length == 0) return;
         let vd_id=_sel.val();
         if(vd_id == "") { return };
-        if(vd_id == undefined) { error_at(); throw("error"); };
+        if(vd_id == undefined) { throw("error"); };
         let _this=this;
         let groups=Array();
         let highlight=undefined;
@@ -1294,7 +1291,7 @@ function vlan_range_dialog(vr_id, donefunc) {
               highlight.add( $(this).find(".group") );
             };
           } else {
-            if(in_array(groups, gr_id)) { error_at(); throw("Error"); };
+            if(in_array(groups, gr_id)) { throw("Error"); };
             groups.push(gr_id);
 
             let rmask=0;
@@ -1681,7 +1678,7 @@ function vlans_ranges_td(vrs, current_ranges, vlans_display) {
       added=true;
     };
     if(vlans_display != undefined && vlans_display['range_start_stop'][r] != undefined) {
-      if(added) { error_at(); throw("error"); };
+      if(added) { throw("error"); };
       label.html("&#x25C0;");
       added=true;
     };
@@ -1787,7 +1784,7 @@ function populate_vlans_table(tbody, data) {
     let vlan=vlans[vlan_key];
     let vlan_number=Number(vlan_key);
 
-    if(vlan_number < 1) { error_at(); throw("Error"); };
+    if(vlan_number < 1) { throw("Error"); };
 
     if((last_vlan + 1) < vlan_number) {
       //we have to add TAKE row before adding this one
@@ -1805,7 +1802,7 @@ function populate_vlans_table(tbody, data) {
     };
 
     for(let r in vlans_display[vlan_key]["range_start"]) {
-      if(current_ranges[r] != undefined) { error_at(); throw("error"); };
+      if(current_ranges[r] != undefined) { throw("error"); };
       current_ranges[r]=true;
     };
 
@@ -1830,12 +1827,12 @@ function populate_vlans_table(tbody, data) {
     last_vlan=vlan_number;
 
     for(let r in vlans_display[vlan_key]["range_stop"]) {
-      if(current_ranges[r] == undefined) { error_at(); throw("error"); };
+      if(current_ranges[r] == undefined) { throw("error"); };
       delete current_ranges[r];
     };
   };
 
-  if(keys(current_ranges).length != 0 ) { error_at(); throw("error "+jstr(current_ranges)); };
+  if(keys(current_ranges).length != 0 ) { throw("error "+jstr(current_ranges)); };
 
   if(last_vlan  < max_vlan) {
     //we have to add TAKE row at the end
@@ -2901,7 +2898,7 @@ function group_edit(group_id, opt, donefunc) {
 
       $(this).find(".users_list").find(".user_list_row").each(function() {
         let user=$(this).data("data");
-        if(user == undefined || user['user_id'] == undefined) { error_at(); throw("Error"); };
+        if(user == undefined || user['user_id'] == undefined) { throw("Error"); };
         group_users.push(user['user_id']);
       });
 
@@ -3657,7 +3654,7 @@ function v4_global_range_dialog(v4r_id, donefunc) {
               highlight.add( $(this).find(".group") );
             };
           } else {
-            if(in_array(groups, gr_id)) { error_at(); throw("Error"); };
+            if(in_array(groups, gr_id)) { throw("Error"); };
             groups.push(gr_id);
 
             let rmask=0;
@@ -5118,7 +5115,7 @@ function edit_column(ic_id, donefunc) {
         query['ic_default']=ic_default;
 
         let ic_style_input=$(this).find(".ic_style");
-        if(ic_style_input.length != 1) { error_at(); throw("error"); };
+        if(ic_style_input.length != 1) { throw("error"); };
         let ic_style=ic_style_input.val();
         try {
           JSON.parse(ic_style);
@@ -5129,7 +5126,7 @@ function edit_column(ic_id, donefunc) {
         };
 
         let ic_icon_style_input=$(this).find(".ic_icon_style");
-        if(ic_icon_style_input.length != 1) { error_at(); throw("error"); };
+        if(ic_icon_style_input.length != 1) { throw("error"); };
         let ic_icon_style=ic_icon_style_input.val();
         try {
           JSON.parse(ic_icon_style);
@@ -5140,7 +5137,7 @@ function edit_column(ic_id, donefunc) {
         };
 
         let ic_regexp_input=$(this).find(".ic_regexp");
-        if(ic_regexp_input.length != 1) { error_at(); throw("error"); };
+        if(ic_regexp_input.length != 1) { throw("error"); };
         let ic_regexp=ic_regexp_input.val();
         try {
           new RegExp(ic_regexp);
@@ -5151,7 +5148,7 @@ function edit_column(ic_id, donefunc) {
         };
 
         let ic_icon_input=$(this).find(".ic_icon");
-        if(ic_icon_input.length != 1) { error_at(); throw("error"); };
+        if(ic_icon_input.length != 1) { throw("error"); };
         let ic_icon=ic_icon_input.val();
         query['ic_icon']=ic_icon;
 
@@ -5684,7 +5681,7 @@ function templates_list(opt) {
          let _list=$(this).closest(".root_pane").find(".columns_list");
          edit_column(undefined, function(ret_data) {
            let _templates_list=_list.closest(".root_pane").find(".templates_list");
-           if(_templates_list.length != 1) { error_at(); throw("Error"); };
+           if(_templates_list.length != 1) { throw("Error"); };
            if(_templates_list.data("id") != undefined) {
              ret_data['checked'] = 0;
            };
@@ -5709,7 +5706,7 @@ function templates_list(opt) {
        let tp_id=undefined;
 
        let selected=$(this).find(".template.selected");
-       if(selected.length > 1) { error_at(); throw("Error"); };
+       if(selected.length > 1) { throw("Error"); };
        if(selected.length == 1) {
          tp_id=selected.data("id");
        };
@@ -5785,7 +5782,14 @@ function add_site_node( ref, site ) {
   } else {
     parent_id = "site_"+site['site_fk_site_id'];
   };
-  let new_id = ref.create_node(parent_id, {"id": node_id, "text": site['site_name'] });
+  let new_id = ref.create_node(
+    parent_id,
+    {"id": node_id, "text": site['site_name'] },
+    undefined, //pos
+    undefined,
+    undefined,
+    true //no_trigger_no_check
+  );
   if(new_id != node_id ) { error_at(); return; };
 
   ref.deselect_all(true);
@@ -5924,21 +5928,55 @@ function sites_list(presel, opt, donefunc) {
      .jstree({
        "core": {
          "check_callback": function(operation, node, node_parent, node_position, more) {
-           if(operation === 'rename_node') {
-             debugger;
-           } else {
-             return true;
-           };
+           if(operation === 'rename_node' || operation === 'create_node') {
+             if(node_parent.text == node_position) { return false; };
+             for(let i=0; i < node_parent['children'].length; i++) {
+               let child_id=node_parent['children'][i];
+               let child_node=this.get_node(child_id);
+               if(child_node.text == node_position) { return false; };
+             };
+           }
+           return true;
          },
          "multiple": false
        },
-       "types": {
-         "default": {
-           "valid_children" : ["default"]
+       "contextmenu": {
+         "items": {
+           "add" : {
+             "label": "Добавить сайт",
+             "icon": "ui-icon ui-icon-plus color_table_button",
+             "action": function(data) {
+               let ref = $.jstree.reference(data.reference);
+               let this_node=ref.get_node(data.reference);
+               let m=String(this_node.id).match(/^site_(\d+)$/);
+               if(m === null) { error_at(); return; };
+               run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": m[1]}, function(data) {
+                 add_site_node( ref, data['ok'] );
+               });
+             }
+           },
+           "del" : {
+             "label": "Удалить сайт",
+             "icon": "ui-icon ui-icon-trash color_coral",
+             "action": function(data) {
+               let ref = $.jstree.reference(data.reference);
+               let this_node=ref.get_node(data.reference);
+               debugger;
+             }
+           },
+           "rename" : {
+             "label": "Переименовать",
+             "icon": "ui-icon ui-icon-rename color_table_button",
+             "action": function(data) {
+               let ref = $.jstree.reference(data.reference);
+               let this_node=ref.get_node(data.reference);
+               ref.edit(this_node);
+             }
+           }
          }
        },
        //"plugins" : [ "wholerow", "contextmenu", "dnd" ]
-       "plugins" : [ "contextmenu", "dnd", "types" ]
+       "plugins" : [ "contextmenu", "dnd" ]
      })
      .on("changed.jstree", function(e, data) {
        if(data.selected.length > 0) {
@@ -5953,7 +5991,7 @@ function sites_list(presel, opt, donefunc) {
   ;
 
   run_query({"action": "get_sites"}, function(data) {
-    watch(TICK_site, 0);
+    //watch(TICK_site, 0);
     let ref=tree.jstree(true);
     if(data['ok'].length > 0) {
       while(true) {
@@ -5971,11 +6009,19 @@ function sites_list(presel, opt, donefunc) {
 
             let parent_node=ref.get_node(parent_id);
             if(parent_node !== false) {
-              let new_node_id=ref.create_node(parent_node, { "id": node_id, "text": data['ok'][i]['site_name'], "selected": data['ok'][i]['site_id'] == presel });
+              let new_node_id=ref.create_node(
+                parent_node,
+                { "id": node_id, "text": data['ok'][i]['site_name'] },
+                undefined, //pos
+                undefined, //callback
+                undefined, //is_loaded
+                //true //no_trigger_no_check
+              );
               if(new_node_id != node_id) {
                 error_at();
                 return;
               };
+              data['ok'][i]['_added'] = true;
               added=true;
             } else {
               has_not_added=true;
@@ -5990,6 +6036,18 @@ function sites_list(presel, opt, donefunc) {
           break;
         };
       };
+      if(presel != undefined) {
+        let node=ref.get_node("site_"+presel);
+        if(node !== false) {
+          let j_node=ref.get_node("site_"+presel, true);
+          ref.select_node(node);
+          while(node['parents'].length > 0) {
+            node=ref.get_node(node['parents'][0]);
+            if(node === false) { error_at(); return; };
+            ref.open_node(node, undefined, false);
+          };
+        };
+      };
     };
   });
 
@@ -5997,6 +6055,16 @@ function sites_list(presel, opt, donefunc) {
    .on("create_node.jstree", function(e, data) {
    })
    .on("rename_node.jstree", function(e, data) {
+     let m=String(data.node.id).match(/^site_(\d+)$/);
+     if(m === null) { error_at(); return false; };
+
+     let ref=$(this).jstree(true);
+     let node_id=data.node.id;
+     let old_name=data.old;
+     run_query({"action": "rename_site", "site_id": m[1], "site_name": data.text}, function() {}, undefined, function(e) {
+       ref.rename_node(node_id, old_name, true);
+       error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:(e['error'] != undefined?e['error']:"")));
+     });
    })
   ;
 };
@@ -6299,7 +6367,7 @@ $( document ).ready(function() {
         ;
 
 //        process_R();
-sites_list(undefined, {}, function() {
+sites_list(19, {}, function() {
   debugger;
 });
       };

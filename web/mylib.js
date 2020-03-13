@@ -385,18 +385,22 @@ function run_query(query, successfunc, completefunc, errorfunc) {
         if(query['action'] != 'watch') WATCH_SKIP=false;
         return;
       };
-      let message;
-      if(data["error"] != undefined) {
-        if(typeof(data["error"]) === "string") {
-          message=data["error"];
-        } else {
-          message=JSON.stringify(data["error"], null, 2);
-        };
+      if(errorfunc != undefined) {
+        errorfunc(data);
       } else {
-        message=JSON.stringify(data, null, 2);
+        let message;
+        if(data["error"] != undefined) {
+          if(typeof(data["error"]) === "string") {
+            message=data["error"];
+          } else {
+            message=JSON.stringify(data["error"], null, 2);
+          };
+        } else {
+          message=JSON.stringify(data, null, 2);
+        };
+        error_dialog(message);
+        $("#led").css("background-color", "lightcoral");
       };
-      error_dialog(message);
-      $("#led").css("background-color", "lightcoral");
     },
     error: errorfunc != undefined?errorfunc:function(e) {
       error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:""));

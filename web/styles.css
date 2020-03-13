@@ -22,3 +22,9 @@ TR.bg_colored:nth-child(odd)
 #jstree-marker {
      z-index:999 !important; 
 }
+.color_table_button {
+  color: rgb(79, 129, 189);
+}
+.color_coral {
+  color: coral;
+}
