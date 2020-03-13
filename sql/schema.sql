@@ -216,11 +216,12 @@ CREATE TABLE sites (
   site_descr	VARCHAR(1024) NOT NULL DEFAULT '',
   site_lat	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
   site_lon	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
+  site_parent_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'used for unique keys checks, must be the same as site_fk_site_id, 0 if null',
   site_fk_site_id BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (site_id),
-  UNIQUE KEY uk_site_name(site_name),
+  UNIQUE KEY uk_site_name(site_name,site_parent_id),
   FOREIGN KEY (site_fk_site_id) REFERENCES sites(site_id),
   tc		TINYINT COMMENT 'Sites, could be tree organized, like Country->City->District->Building, etc.'
 );

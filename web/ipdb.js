@@ -50,6 +50,7 @@ const TICK_tp           = "tp";
 const TICK_ic           = "ic";
 const TICK_n4c          = "n4c";
 const TICK_n6c          = "n6c";
+const TICK_site         = "site";
 
 
 
@@ -5775,6 +5776,23 @@ function templates_list(opt) {
   });
 };
 
+function add_site_node( ref, site ) {
+  let node_id="site_"+site['site_id'];
+  let parent_id;
+
+  if(site['site_fk_site_id'] == null) {
+    parent_id = "#";
+  } else {
+    parent_id = "site_"+site['site_fk_site_id'];
+  };
+  let new_id = ref.create_node(parent_id, {"id": node_id, "text": site['site_name'] });
+  if(new_id != node_id ) { error_at(); return; };
+
+  ref.deselect_all(true);
+  ref.select_node( new_id );
+  ref.edit( new_id );
+};
+
 function sites_list(presel, opt, donefunc) {
   if(opt == undefined) { error_at(); return; };
   if($("#sites_list").length != 0) return;
@@ -5809,7 +5827,7 @@ function sites_list(presel, opt, donefunc) {
     minWidth:1000,
     buttons: [],
     close: function() {
-      //unwatch(TICK_site, 0);
+      unwatch(TICK_site, 0);
       let did=$(this).prop("id");
       $(this).dialog("destroy");
       $(this).remove();
@@ -5858,11 +5876,10 @@ function sites_list(presel, opt, donefunc) {
          let ref = $("#tree").jstree(true);
          if(ref === false) { error_at(); return; };
 
+         run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": ""}, function(data) {
+           add_site_node( ref, data['ok'] );
+         });
 
-         let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
-         ref.deselect_all(true);
-         ref.select_node( new_id );
-         ref.edit( new_id );
        })
      )
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button").addClass("site_selected_btn")
@@ -5873,10 +5890,14 @@ function sites_list(presel, opt, donefunc) {
          if(ref === false) { error_at(); return; };
          let selected_ids=ref.get_selected();
          if(selected_ids.length == 0) { return; };
-         let new_id = ref.create_node(selected_ids[0], {"text": "Переименовать"}, "last");
-         ref.deselect_all(true);
-         ref.select_node( new_id );
-         ref.edit( new_id );
+
+         let m=String(selected_ids[0]).match(/^site_(\d+)$/);
+         if(m === null) { error_at(); return; };
+         run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": m[1]}, function(data) {
+           add_site_node( ref, data['ok'] );
+         });
+
+
        })
      )
     ;
@@ -5902,7 +5923,13 @@ function sites_list(presel, opt, donefunc) {
      .css({})
      .jstree({
        "core": {
-         "check_callback": true,
+         "check_callback": function(operation, node, node_parent, node_position, more) {
+           if(operation === 'rename_node') {
+             debugger;
+           } else {
+             return true;
+           };
+         },
          "multiple": false
        },
        "types": {
@@ -5923,6 +5950,54 @@ function sites_list(presel, opt, donefunc) {
        };
      })
    )
+  ;
+
+  run_query({"action": "get_sites"}, function(data) {
+    watch(TICK_site, 0);
+    let ref=tree.jstree(true);
+    if(data['ok'].length > 0) {
+      while(true) {
+        let added=false;
+        let has_not_added=false;
+        for(let i=0; i < data['ok'].length; i++) {
+          if(data['ok'][i]['_added'] == undefined) {
+            let node_id="site_"+data['ok'][i]['site_id'];
+            let parent_id;
+            if(data['ok'][i]['site_fk_site_id'] == null) {
+              parent_id = "#";
+            } else {
+              parent_id = "site_"+data['ok'][i]['site_fk_site_id'];
+            };
+
+            let parent_node=ref.get_node(parent_id);
+            if(parent_node !== false) {
+              let new_node_id=ref.create_node(parent_node, { "id": node_id, "text": data['ok'][i]['site_name'], "selected": data['ok'][i]['site_id'] == presel });
+              if(new_node_id != node_id) {
+                error_at();
+                return;
+              };
+              added=true;
+            } else {
+              has_not_added=true;
+            };
+          };
+        };
+        if(!added && has_not_added) {
+          error_at();
+          return;
+        };
+        if(!has_not_added) {
+          break;
+        };
+      };
+    };
+  });
+
+  tree
+   .on("create_node.jstree", function(e, data) {
+   })
+   .on("rename_node.jstree", function(e, data) {
+   })
   ;
 };
 
@@ -6223,7 +6298,10 @@ $( document ).ready(function() {
          )
         ;
 
-        process_R();
+//        process_R();
+sites_list(undefined, {}, function() {
+  debugger;
+});
       };
     };
   });

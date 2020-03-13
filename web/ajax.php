@@ -55,6 +55,7 @@ const TICK_tp		= "tp";
 const TICK_ic		= "ic";
 const TICK_n4c		= "n4c";
 const TICK_n6c		= "n6c";
+const TICK_site		= "site";
 
 const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
 
@@ -329,6 +330,15 @@ function has_nright($rmask, $right) {
     return TRUE;
   };
   return FALSE;
+};
+
+function cp($column, $param=NULL) {
+  global $q;
+  if($param === NULL) {
+    $param = $column;
+  };
+  require_p($param);
+  return ",$column=".mq($q[$param]);
 };
 
 function audit_log($subject, $subject_id, $tables, $operation, $prev_row, $new_row) {
@@ -1996,6 +2006,40 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit("done");
 
+} else if($q['action'] == 'add_site') {
+  require_right(R_SUPER);
+  require_p('site_name');
+  require_p('parent_id', '/^\d*$/');
+
+  $prev_row=[];
+
+  $query="INSERT INTO sites SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= cp('site_name');
+  if($q['parent_id'] != "") {
+    $query .= cp('site_fk_site_id', 'parent_id');
+    $query .= cp('site_parent_id', 'parent_id');
+  };
+
+  run_query($query);
+
+  $q['site_id'] = mysqli_insert_id($db);
+
+  $new_row=return_one("SELECT * FROM sites WHERE site_id=".mq($q['site_id']), TRUE);
+
+  check_tick(TICK_site, $q['site_id']);
+
+  audit_log("site", $q['site_id'], "sites", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
+} else if($q['action'] == 'get_sites') {
+  $query="SELECT * FROM sites ORDER BY site_name,site_id";
+  $ret=return_query($query);
+
+  check_push(TICK_site, 0);
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
