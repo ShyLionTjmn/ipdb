@@ -19,3 +19,6 @@ TR.bg_colored:nth-child(odd)
 .vakata-context { 
      z-index:999 !important; 
 }
+#jstree-marker {
+     z-index:999 !important; 
+}

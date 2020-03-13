@@ -5858,7 +5858,6 @@ function sites_list(presel, opt, donefunc) {
          let ref = $("#tree").jstree(true);
          if(ref === false) { error_at(); return; };
 
-         //run_query({"action": "add_site", "parent_id": "", "name": "Новый"
 
          let new_id = ref.create_node("#", {"text": "Переименовать"}, "last");
          ref.deselect_all(true);
@@ -5886,7 +5885,7 @@ function sites_list(presel, opt, donefunc) {
   head
    .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button").addClass("site_selected_btn")
      .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
-     .title( "Добавить вложенный сайт" )
+     .title( "Свойства сайта" )
      .click(function() {
        let ref = $("#tree").jstree(true);
        if(ref === false) { error_at(); return; };
@@ -5906,22 +5905,25 @@ function sites_list(presel, opt, donefunc) {
          "check_callback": true,
          "multiple": false
        },
-       "plugins" : [ "wholerow", "contextmenu", "dnd" ]
+       "types": {
+         "default": {
+           "valid_children" : ["default"]
+         }
+       },
+       //"plugins" : [ "wholerow", "contextmenu", "dnd" ]
+       "plugins" : [ "contextmenu", "dnd", "types" ]
      })
      .on("changed.jstree", function(e, data) {
        if(data.selected.length > 0) {
-         $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": color_table_buttons});
+         $(this).closest(".dialog_start").find(".site_selected_btn").css({"color": color_table_buttons});
          $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', false).css({"color": "black"});
        } else {
-         $(this).closest(".dialog_start").find(".add_subsite_btn").css({"color": "lightgray"});
+         $(this).closest(".dialog_start").find(".site_selected_btn").css({"color": "lightgray"});
          $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "lightgray"});
        };
      })
    )
   ;
-
-
-
 };
 
 function process_R() {
