@@ -5938,7 +5938,8 @@ function sites_list(presel, opt, donefunc) {
            }
            return true;
          },
-         "multiple": false
+         "readonly": opt['readonly'] == true,
+         "multiple": true
        },
        "contextmenu": {
          "items": {
@@ -5975,8 +5976,8 @@ function sites_list(presel, opt, donefunc) {
            }
          }
        },
-       //"plugins" : [ "wholerow", "contextmenu", "dnd" ]
-       "plugins" : [ "contextmenu", "dnd" ]
+       "plugins" : [ "wholerow", "contextmenu", "dnd" ]
+       //"plugins" : [ "contextmenu", "dnd" ]
      })
      .on("changed.jstree", function(e, data) {
        if(data.selected.length > 0) {
@@ -5991,7 +5992,7 @@ function sites_list(presel, opt, donefunc) {
   ;
 
   run_query({"action": "get_sites"}, function(data) {
-    //watch(TICK_site, 0);
+    watch(TICK_site, 0);
     let ref=tree.jstree(true);
     if(data['ok'].length > 0) {
       while(true) {
@@ -6037,14 +6038,19 @@ function sites_list(presel, opt, donefunc) {
         };
       };
       if(presel != undefined) {
-        let node=ref.get_node("site_"+presel);
-        if(node !== false) {
-          let j_node=ref.get_node("site_"+presel, true);
-          ref.select_node(node);
-          while(node['parents'].length > 0) {
-            node=ref.get_node(node['parents'][0]);
-            if(node === false) { error_at(); return; };
-            ref.open_node(node, undefined, false);
+        if(typeof(presel) === "") { presel=[presel]; };
+        for(let p=0; p < presel.length; p++) {
+          let presel_id=presel[p];
+          let node=ref.get_node("site_"+presel_id);
+          if(node !== false) {
+            ref.select_node(node);
+            while(node['parents'].length > 0) {
+              node=ref.get_node(node['parents'][0]);
+              if(node === false) { error_at(); return; };
+              ref.open_node(node, undefined, false);
+            };
+            let j_node=ref.get_node("site_"+presel_id, true);
+            j_node.get(0).scrollIntoView();
           };
         };
       };
@@ -6071,7 +6077,7 @@ function sites_list(presel, opt, donefunc) {
 
 function process_R() {
   unwatch();
-  if($R['action'] == "ipv4") {
+  if(!$R || $R['action'] == "ipv4") {
     ipv4();
   } else if($R['action'] == "v4get_net") {
     v4get_net();
@@ -6367,7 +6373,7 @@ $( document ).ready(function() {
         ;
 
 //        process_R();
-sites_list(19, {}, function() {
+sites_list([1,2], { "readonly": true}, function() {
   debugger;
 });
       };
