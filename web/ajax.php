@@ -2062,6 +2062,34 @@ if($q['action'] == 'v4get_net') {
   check_push(TICK_site, 0);
 
   ok_exit($ret);
+} else if($q['action'] == 'move_site') {
+  require_right(R_SUPER);
+  require_p('site_id', '/^\d+$/');
+  require_p('parent_id', '/^\d*$/');
+
+  $prev_row=return_one("SELECT * FROM sites WHERE site_id=".mq($q['site_id']), TRUE);
+
+  $query="UPDATE sites SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  if($q['parent_id'] == "") {
+    $query .= ",site_fk_site_id=NULL";
+    $query .= ",site_parent_id=0";
+  } else {
+    $query .= ",site_fk_site_id=".mq($q['parent_id']);
+    $query .= ",site_parent_id=".mq($q['parent_id']);
+  };
+  $query .= " WHERE site_id=".mq($q['site_id']);
+
+  run_query($query);
+
+  $new_row=return_one("SELECT * FROM sites WHERE site_id=".mq($q['site_id']), TRUE);
+
+  check_tick(TICK_site, $q['site_id']);
+
+  audit_log("site", $q['site_id'], "sites", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

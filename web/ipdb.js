@@ -5901,20 +5901,20 @@ function sites_list(presel, opt, donefunc) {
        })
      )
     ;
-  };
+    head
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button").addClass("site_selected_btn")
+       .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
+       .title( "Свойства сайта" )
+       .click(function() {
+         let ref = $("#tree").jstree(true);
+         if(ref === false) { error_at(); return; };
+         let selected_ids=ref.get_selected();
+         if(selected_ids.length == 0) { return; };
+       })
+     )
+    ;
 
-  head
-   .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-bullets").addClass("ui-button").addClass("site_selected_btn")
-     .css({"color": "lightgray", "margin-right": "0.5em", "padding": "0.1em"})
-     .title( "Свойства сайта" )
-     .click(function() {
-       let ref = $("#tree").jstree(true);
-       if(ref === false) { error_at(); return; };
-       let selected_ids=ref.get_selected();
-       if(selected_ids.length == 0) { return; };
-     })
-   )
-  ;
+  };
 
   dialog.dialog(d);
 
@@ -5924,45 +5924,55 @@ function sites_list(presel, opt, donefunc) {
       "readonly": opt['readonly'] == true,
       "multiple": true
     },
-    "plugins" : [ "wholerow" ]
+    "plugins" : [ "wholerow", "contextmenu" ]
+  };
+
+  t["contextmenu"] = {
+    "items": {
+      "info" : {
+        "label": "Подробная информация",
+        "icon": "ui-icon ui-icon-bullets color_table_button",
+        "action": function(data) {
+          let ref = $.jstree.reference(data.reference);
+          let this_node=ref.get_node(data.reference);
+          let m=String(this_node.id).match(/^site_(\d+)$/);
+          if(m === null) { error_at(); return; };
+        }
+      },
+    },
   };
 
   if(!opt['readonly']) {
-    t["plugins"].push("contextmenu");
     t["plugins"].push("dnd");
-    t["contextmenu"] = {
-      "items": {
-        "add" : {
-          "label": "Добавить сайт",
-          "icon": "ui-icon ui-icon-plus color_table_button",
-          "action": function(data) {
-            let ref = $.jstree.reference(data.reference);
-            let this_node=ref.get_node(data.reference);
-            let m=String(this_node.id).match(/^site_(\d+)$/);
-            if(m === null) { error_at(); return; };
-            run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": m[1]}, function(data) {
-              add_site_node( ref, data['ok'] );
-            });
-          }
-        },
-        "del" : {
-          "label": "Удалить сайт",
-          "icon": "ui-icon ui-icon-trash color_coral",
-          "action": function(data) {
-            let ref = $.jstree.reference(data.reference);
-            let this_node=ref.get_node(data.reference);
-            debugger;
-          }
-        },
-        "rename" : {
-          "label": "Переименовать",
-          "icon": "ui-icon ui-icon-rename color_table_button",
-          "action": function(data) {
-            let ref = $.jstree.reference(data.reference);
-            let this_node=ref.get_node(data.reference);
-            ref.edit(this_node);
-          }
-        }
+    t["contextmenu"]["items"]["add"] = {
+      "label": "Добавить сайт",
+      "icon": "ui-icon ui-icon-plus color_table_button",
+      "action": function(data) {
+        let ref = $.jstree.reference(data.reference);
+        let this_node=ref.get_node(data.reference);
+        let m=String(this_node.id).match(/^site_(\d+)$/);
+        if(m === null) { error_at(); return; };
+        run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": m[1]}, function(data) {
+          add_site_node( ref, data['ok'] );
+        });
+      }
+    };
+    t["contextmenu"]["items"]["del"] = {
+      "label": "Удалить сайт",
+      "icon": "ui-icon ui-icon-trash color_coral",
+      "action": function(data) {
+        let ref = $.jstree.reference(data.reference);
+        let this_node=ref.get_node(data.reference);
+        debugger;
+      }
+    };
+    t["contextmenu"]["items"]["rename"] = {
+      "label": "Переименовать",
+      "icon": "ui-icon ui-icon-rename color_table_button",
+      "action": function(data) {
+        let ref = $.jstree.reference(data.reference);
+        let this_node=ref.get_node(data.reference);
+        ref.edit(this_node);
       }
     };
   };
@@ -6044,7 +6054,30 @@ function sites_list(presel, opt, donefunc) {
     };
 
     tree
-     .on("create_node.jstree", function(e, data) {
+     .on("move_node.jstree", function(e, data) {
+       let m=String(data.node.id).match(/^site_(\d+)$/);
+       if(m === null) { error_at(); return false; };
+       let site_id=m[1];
+
+       let parent_id;
+       if(data.parent == "#") {
+         parent_id="";
+       } else {
+         m=String(data.parent).match(/^site_(\d+)$/);
+         if(m === null) { error_at("Wrong parent id: "+data.parent); return false; };
+         parent_id=m[1];
+       };
+
+       let node_id=data.node.id;
+       let prev_parent=data.old_parent;
+       let prev_pos=data.old_position;
+       let ref=$(this).jstree(true);
+
+       run_query({"action": "move_site", "site_id": site_id, "parent_id": parent_id}, undefined, undefined, function(e) {
+         ref.move_node(node_id, prev_parent, prev_pos, undefined, undefined, undefined, undefined, true);
+         error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:(e['error'] != undefined?e['error']:"")));
+       });
+
      })
      .on("rename_node.jstree", function(e, data) {
        let m=String(data.node.id).match(/^site_(\d+)$/);
@@ -6063,14 +6096,22 @@ function sites_list(presel, opt, donefunc) {
     tree
      .jstree(true)
      .settings.core.check_callback = opt['readonly'] ? false : function(operation, node, node_parent, node_position, more) {
-       if(operation === 'rename_node' || operation === 'create_node') {
+       if(operation === 'rename_node') {
          if(node_parent.text == node_position) { return false; };
          for(let i=0; i < node_parent['children'].length; i++) {
            let child_id=node_parent['children'][i];
            let child_node=this.get_node(child_id);
            if(child_node.text == node_position) { return false; };
          };
-       } 
+       } else if(operation === 'move_node') {
+         if(node_parent.text == node.text) { return false; };
+         for(let i=0; i < node_parent['children'].length; i++) {
+           let child_id=node_parent['children'][i];
+           let child_node=this.get_node(child_id);
+           if(child_node.text == node.text) { return false; };
+         };
+
+       }; 
        return true;
      }
     ;
