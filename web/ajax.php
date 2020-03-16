@@ -2097,10 +2097,13 @@ if($q['action'] == 'v4get_net') {
 
   $prev_row=return_one("SELECT * FROM sites WHERE site_id=".mq($q['site_id']), TRUE);
 
-  $prev_row['v4nets'] = return_array("SELECT v4net_id FROM v4nets WHERE v4net_fk_site_id=".mq($q['site_id']));
-  $prev_row['v6nets'] = return_array("SELECT v6net_id FROM v6nets WHERE v6net_fk_site_id=".mq($q['site_id']));
+  $prev_row['v4nets'] = return_array("SELECT v4nsite_fk_v4net_id FROM v4nsites WHERE v4nsite_fk_site_id=".mq($q['site_id']));
+  $prev_row['v4ips'] = return_array("SELECT v4ipsite_fk_v4ip_id FROM v4ipsites WHERE v4ipsite_fk_site_id=".mq($q['site_id']));
 
-  if($q['safe'] == 1 && ( count($prev_row['v4nets']) > 0 || count($prev_row['v6nets']) > 0)) {
+  $prev_row['v6nets'] = return_array("SELECT v6nsite_fk_v6net_id FROM v6nsites WHERE v6nsite_fk_site_id=".mq($q['site_id']));
+  $prev_row['v6ips'] = return_array("SELECT v6ipsite_fk_v6ip_id FROM v6ipsites WHERE v6ipsite_fk_site_id=".mq($q['site_id']));
+
+  if($q['safe'] == 1 && ( count($prev_row['v4nets']) > 0 || count($prev_row['v6nets']) > 0) || count($prev_row['v4ips']) > 0 || count($prev_row['v6ips']) > 0) {
     ok_exit("not safe");
   };
 

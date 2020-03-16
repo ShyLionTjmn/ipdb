@@ -5944,10 +5944,10 @@ function sites_list(presel, opt, donefunc) {
   let t={
     "core": {
       "check_callback": true,
-      "readonly": opt['readonly'] == true,
       "multiple": opt['return'] == "many" || opt['return'] == "any"
     },
-    "plugins" : [ "wholerow", "contextmenu" ]
+    "conditionalselect": opt['readonly'] == true ? function() { return false; } : function() { return true; },
+    "plugins" : [ "wholerow", "contextmenu", "conditionalselect" ]
   };
 
   t["contextmenu"] = {
@@ -6467,7 +6467,7 @@ $( document ).ready(function() {
         ;
 
 //        process_R();
-sites_list(undefined, { "return": "any"}, function(list) {
+sites_list(undefined, { "readonly": false}, function(list) {
   alert(list);
 });
       };

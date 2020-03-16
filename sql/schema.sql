@@ -272,7 +272,6 @@ CREATE TABLE v4nets (
   v4net_addr	INTEGER UNSIGNED NOT NULL,
   v4net_last	INTEGER UNSIGNED NOT NULL COMMENT 'last address in this net, including broadcast, for search speedup',
   v4net_mask	TINYINT UNSIGNED NOT NULL,
-  v4net_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
   v4net_fk_vlan_id	BIGINT UNSIGNED DEFAULT NULL,
   v4net_name	VARCHAR(256) NOT NULL DEFAULT '',
   v4net_descr	VARCHAR(1024) NOT NULL DEFAULT '',
@@ -282,7 +281,6 @@ CREATE TABLE v4nets (
   PRIMARY KEY (v4net_id),
   UNIQUE KEY (v4net_addr),
   FOREIGN KEY (v4net_fk_tp_id) REFERENCES tps(tp_id) ON DELETE SET NULL,
-  FOREIGN KEY (v4net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
   FOREIGN KEY (v4net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
 
@@ -298,12 +296,27 @@ CREATE TABLE v4ips(
   FOREIGN KEY (v4ip_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
+CREATE TABLE v4nsites (
+  v4nsite_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
+  v4nsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v4nsite_fk_v4net_id, v4nsite_fk_site_id),
+  FOREIGN KEY (v4nsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v4nsite_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE v4ipsites (
+  v4ipsite_fk_v4ip_id	BIGINT UNSIGNED NOT NULL,
+  v4ipsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v4ipsite_fk_v4ip_id, v4ipsite_fk_site_id),
+  FOREIGN KEY (v4ipsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v4ipsite_fk_v4ip_id) REFERENCES v4ips(v4ip_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
 CREATE TABLE v6nets (
   v6net_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
   v6net_addr    VARBINARY(16) NOT NULL,
   v6net_last	VARBINARY(16) NOT NULL COMMENT 'last address in this net, including broadcast, for search speedup',
   v6net_mask    TINYINT UNSIGNED NOT NULL,
-  v6net_fk_site_id      BIGINT UNSIGNED DEFAULT NULL,
   v6net_fk_vlan_id      BIGINT UNSIGNED DEFAULT NULL,
   v6net_name    VARCHAR(256) NOT NULL DEFAULT '',
   v6net_descr   VARCHAR(1024) NOT NULL DEFAULT '',
@@ -313,7 +326,6 @@ CREATE TABLE v6nets (
   PRIMARY KEY (v6net_id),
   UNIQUE KEY (v6net_addr),
   FOREIGN KEY (v6net_fk_tp_id) REFERENCES tps(tp_id) ON DELETE SET NULL,
-  FOREIGN KEY (v6net_fk_site_id) REFERENCES sites(site_id) ON DELETE SET NULL,
   FOREIGN KEY (v6net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
 
@@ -327,6 +339,22 @@ CREATE TABLE v6ips(
   UNIQUE KEY (v6ip_addr),
   KEY k_net(v6ip_fk_v6net_id),
   FOREIGN KEY (v6ip_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE v6nsites (
+  v6nsite_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
+  v6nsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v6nsite_fk_v6net_id, v6nsite_fk_site_id),
+  FOREIGN KEY (v6nsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v6nsite_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE v6ipsites (
+  v6ipsite_fk_v6ip_id	BIGINT UNSIGNED NOT NULL,
+  v6ipsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v6ipsite_fk_v6ip_id, v6ipsite_fk_site_id),
+  FOREIGN KEY (v6ipsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v6ipsite_fk_v6ip_id) REFERENCES v6ips(v6ip_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 
