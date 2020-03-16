@@ -5784,11 +5784,7 @@ function add_site_node( ref, site ) {
   };
   let new_id = ref.create_node(
     parent_id,
-    {"id": node_id, "text": site['site_name'] },
-    undefined, //pos
-    undefined,
-    undefined,
-    true //no_trigger_no_check
+    {"id": node_id, "text": site['site_name'] }
   );
   if(new_id != node_id ) { error_at(); return; };
 
@@ -5803,7 +5799,7 @@ function sites_list(presel, opt, donefunc) {
 
   let title;
 
-  if(has_right(R_SUPER)) {
+  if(!opt['readonly']) {
     title = "Управление сайтами";
   } else {
     if(donefunc != undefined) {
@@ -5871,7 +5867,7 @@ function sites_list(presel, opt, donefunc) {
    )
   ;
 
-  if(has_right(R_SUPER)) {
+  if(!opt['readonly']) {
     head
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
        .css({"color": color_table_buttons, "margin-right": "0.5em", "padding": "0.1em"})
@@ -5922,63 +5918,59 @@ function sites_list(presel, opt, donefunc) {
 
   dialog.dialog(d);
 
+  let t={
+    "core": {
+      "check_callback": true,
+      "readonly": opt['readonly'] == true,
+      "multiple": true
+    },
+    "plugins" : [ "wholerow" ]
+  };
+
+  if(!opt['readonly']) {
+    t["plugins"].push("contextmenu");
+    t["plugins"].push("dnd");
+    t["contextmenu"] = {
+      "items": {
+        "add" : {
+          "label": "Добавить сайт",
+          "icon": "ui-icon ui-icon-plus color_table_button",
+          "action": function(data) {
+            let ref = $.jstree.reference(data.reference);
+            let this_node=ref.get_node(data.reference);
+            let m=String(this_node.id).match(/^site_(\d+)$/);
+            if(m === null) { error_at(); return; };
+            run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": m[1]}, function(data) {
+              add_site_node( ref, data['ok'] );
+            });
+          }
+        },
+        "del" : {
+          "label": "Удалить сайт",
+          "icon": "ui-icon ui-icon-trash color_coral",
+          "action": function(data) {
+            let ref = $.jstree.reference(data.reference);
+            let this_node=ref.get_node(data.reference);
+            debugger;
+          }
+        },
+        "rename" : {
+          "label": "Переименовать",
+          "icon": "ui-icon ui-icon-rename color_table_button",
+          "action": function(data) {
+            let ref = $.jstree.reference(data.reference);
+            let this_node=ref.get_node(data.reference);
+            ref.edit(this_node);
+          }
+        }
+      }
+    };
+  };
+
   dialog
    .append( tree=$(DIV).myid("tree")
      .css({})
-     .jstree({
-       "core": {
-         "check_callback": function(operation, node, node_parent, node_position, more) {
-           if(operation === 'rename_node' || operation === 'create_node') {
-             if(node_parent.text == node_position) { return false; };
-             for(let i=0; i < node_parent['children'].length; i++) {
-               let child_id=node_parent['children'][i];
-               let child_node=this.get_node(child_id);
-               if(child_node.text == node_position) { return false; };
-             };
-           }
-           return true;
-         },
-         "readonly": opt['readonly'] == true,
-         "multiple": true
-       },
-       "contextmenu": {
-         "items": {
-           "add" : {
-             "label": "Добавить сайт",
-             "icon": "ui-icon ui-icon-plus color_table_button",
-             "action": function(data) {
-               let ref = $.jstree.reference(data.reference);
-               let this_node=ref.get_node(data.reference);
-               let m=String(this_node.id).match(/^site_(\d+)$/);
-               if(m === null) { error_at(); return; };
-               run_query({"action": "add_site", "site_name": "Переименовать", "parent_id": m[1]}, function(data) {
-                 add_site_node( ref, data['ok'] );
-               });
-             }
-           },
-           "del" : {
-             "label": "Удалить сайт",
-             "icon": "ui-icon ui-icon-trash color_coral",
-             "action": function(data) {
-               let ref = $.jstree.reference(data.reference);
-               let this_node=ref.get_node(data.reference);
-               debugger;
-             }
-           },
-           "rename" : {
-             "label": "Переименовать",
-             "icon": "ui-icon ui-icon-rename color_table_button",
-             "action": function(data) {
-               let ref = $.jstree.reference(data.reference);
-               let this_node=ref.get_node(data.reference);
-               ref.edit(this_node);
-             }
-           }
-         }
-       },
-       "plugins" : [ "wholerow", "contextmenu", "dnd" ]
-       //"plugins" : [ "contextmenu", "dnd" ]
-     })
+     .jstree(t)
      .on("changed.jstree", function(e, data) {
        if(data.selected.length > 0) {
          $(this).closest(".dialog_start").find(".site_selected_btn").css({"color": color_table_buttons});
@@ -6012,12 +6004,7 @@ function sites_list(presel, opt, donefunc) {
             if(parent_node !== false) {
               let new_node_id=ref.create_node(
                 parent_node,
-                { "id": node_id, "text": data['ok'][i]['site_name'] },
-                undefined, //pos
-                undefined, //callback
-                undefined, //is_loaded
-                //true //no_trigger_no_check
-              );
+                { "id": node_id, "text": data['ok'][i]['site_name'] } );
               if(new_node_id != node_id) {
                 error_at();
                 return;
@@ -6055,24 +6042,40 @@ function sites_list(presel, opt, donefunc) {
         };
       };
     };
+
+    tree
+     .on("create_node.jstree", function(e, data) {
+     })
+     .on("rename_node.jstree", function(e, data) {
+       let m=String(data.node.id).match(/^site_(\d+)$/);
+       if(m === null) { error_at(); return false; };
+
+       let ref=$(this).jstree(true);
+       let node_id=data.node.id;
+       let old_name=data.old;
+       run_query({"action": "rename_site", "site_id": m[1], "site_name": data.text}, function() {}, undefined, function(e) {
+         ref.rename_node(node_id, old_name, true);
+         error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:(e['error'] != undefined?e['error']:"")));
+       });
+     })
+    ;
+
+    tree
+     .jstree(true)
+     .settings.core.check_callback = opt['readonly'] ? false : function(operation, node, node_parent, node_position, more) {
+       if(operation === 'rename_node' || operation === 'create_node') {
+         if(node_parent.text == node_position) { return false; };
+         for(let i=0; i < node_parent['children'].length; i++) {
+           let child_id=node_parent['children'][i];
+           let child_node=this.get_node(child_id);
+           if(child_node.text == node_position) { return false; };
+         };
+       } 
+       return true;
+     }
+    ;
   });
 
-  tree
-   .on("create_node.jstree", function(e, data) {
-   })
-   .on("rename_node.jstree", function(e, data) {
-     let m=String(data.node.id).match(/^site_(\d+)$/);
-     if(m === null) { error_at(); return false; };
-
-     let ref=$(this).jstree(true);
-     let node_id=data.node.id;
-     let old_name=data.old;
-     run_query({"action": "rename_site", "site_id": m[1], "site_name": data.text}, function() {}, undefined, function(e) {
-       ref.rename_node(node_id, old_name, true);
-       error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:(e['error'] != undefined?e['error']:"")));
-     });
-   })
-  ;
 };
 
 function process_R() {
