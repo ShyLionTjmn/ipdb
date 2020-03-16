@@ -5840,19 +5840,36 @@ function sites_list(presel, opt, donefunc) {
         _dialog.dialog("option", "maxHeight", $(window).height());
         _dialog.dialog("option", "minHeight", $(window).height() - 10);
       });
-      $(this).dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "gray"});
+      let _opt=$(this).data("opt");
+      if(_opt["return"] == "many") {
+        $(this).dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "gray"});
+      };
     }
   };
 
-  if(donefunc != undefined) {
+  if(donefunc != undefined && opt['return'] != undefined) {
     d['buttons'].push({
       "text": "Выбрать",
       "class": "confirm_btn",
       "click": function() {
         let _dialog=$(this);
         let _donefunc=$(this).data("donefunc");
+        let _opt=$(this).data("opt");
+
+        let selected = _dialog.find(".tree").jstree(true).get_selected();
+        if(selected.length == 0 && _opt['return'] == "many") return;
+        if(selected.length > 1 && _opt['return'] == "one") { error_at(); return; };
+
+        let ids=[];
+        for(let i=0; i < selected.length; i++) {
+          let m=String(selected[i]).match(/^site_(\d+)$/);
+          if(m === null) { error_at(); return false; };
+          ids.push(m[1]);
+        };
 
         _dialog.dialog("close");
+
+        _donefunc(ids);
       }
     });
   };
@@ -5890,6 +5907,7 @@ function sites_list(presel, opt, donefunc) {
          if(ref === false) { error_at(); return; };
          let selected_ids=ref.get_selected();
          if(selected_ids.length == 0) { return; };
+         if(selected_ids.length > 1) { return; };
 
          let m=String(selected_ids[0]).match(/^site_(\d+)$/);
          if(m === null) { error_at(); return; };
@@ -5910,10 +5928,15 @@ function sites_list(presel, opt, donefunc) {
          if(ref === false) { error_at(); return; };
          let selected_ids=ref.get_selected();
          if(selected_ids.length == 0) { return; };
+         if(selected_ids.length > 1) { return; };
        })
      )
     ;
 
+
+    if(donefunc != undefined && (opt['return'] == "any" || opt['return'] == "many")) {
+      head.append( $(SPAN).text("Используйте Ctrl+click для множественного выделения или снятия выделения").css({"font-size": "smaller"}) );
+    };
   };
 
   dialog.dialog(d);
@@ -5922,7 +5945,7 @@ function sites_list(presel, opt, donefunc) {
     "core": {
       "check_callback": true,
       "readonly": opt['readonly'] == true,
-      "multiple": true
+      "multiple": opt['return'] == "many" || opt['return'] == "any"
     },
     "plugins" : [ "wholerow", "contextmenu" ]
   };
@@ -5963,7 +5986,23 @@ function sites_list(presel, opt, donefunc) {
       "action": function(data) {
         let ref = $.jstree.reference(data.reference);
         let this_node=ref.get_node(data.reference);
-        debugger;
+        let m=String(this_node.id).match(/^site_(\d+)$/);
+        if(m === null) { error_at(); return; };
+
+        if(this_node.children.length != 0) return;
+        show_confirm("Подтвердите удаление сайта.", function() {
+          run_query({"action": "delete_site", "safe": 1, "site_id": m[1]}, function(ret_data) {
+            if(ret_data['ok'] == "done") {
+              ref.delete_node(this_node);
+            } else {
+              show_confirm_checkbox("Внимание! Сайт задан в свойствах нескольких объектов.\nПодтвердите удаление.", function() {
+                run_query({"action": "delete_site", "safe": 0, "site_id": m[1]}, function() {
+                  ref.delete_node(this_node);
+                });
+              });
+            };
+          });
+        });
       }
     };
     t["contextmenu"]["items"]["rename"] = {
@@ -5982,12 +6021,16 @@ function sites_list(presel, opt, donefunc) {
      .css({})
      .jstree(t)
      .on("changed.jstree", function(e, data) {
+       let _dialog=$(this).closest(".dialog_start");
+       let _opt = _dialog.data("opt");
        if(data.selected.length > 0) {
          $(this).closest(".dialog_start").find(".site_selected_btn").css({"color": color_table_buttons});
          $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', false).css({"color": "black"});
        } else {
          $(this).closest(".dialog_start").find(".site_selected_btn").css({"color": "lightgray"});
-         $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "lightgray"});
+         if( _opt['return'] == "many" ) {
+           $(this).closest(".dialog_start").dialog("widget").find(".confirm_btn").prop('disabled', true).css({"color": "lightgray"});
+         };
        };
      })
    )
@@ -6073,10 +6116,17 @@ function sites_list(presel, opt, donefunc) {
        let prev_pos=data.old_position;
        let ref=$(this).jstree(true);
 
-       run_query({"action": "move_site", "site_id": site_id, "parent_id": parent_id}, undefined, undefined, function(e) {
-         ref.move_node(node_id, prev_parent, prev_pos, undefined, undefined, undefined, undefined, true);
-         error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:(e['error'] != undefined?e['error']:"")));
-       });
+       run_query({"action": "move_site", "site_id": site_id, "parent_id": parent_id},
+         function() {
+           ref.open_node(data.parent, undefined, false);
+           ref.deselect_node(node_id);
+         },
+         undefined,
+         function(e) {
+           ref.move_node(node_id, prev_parent, prev_pos, undefined, undefined, undefined, undefined, true);
+           error_dialog("AJAX request error\n"+(e.responseText !== undefined? e.responseText:(e['error'] != undefined?e['error']:"")));
+         }
+       );
 
      })
      .on("rename_node.jstree", function(e, data) {
@@ -6417,8 +6467,8 @@ $( document ).ready(function() {
         ;
 
 //        process_R();
-sites_list([1,2], { "readonly": true}, function() {
-  debugger;
+sites_list(undefined, { "return": "any"}, function(list) {
+  alert(list);
 });
       };
     };

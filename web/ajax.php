@@ -2090,6 +2090,29 @@ if($q['action'] == 'v4get_net') {
   audit_log("site", $q['site_id'], "sites", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'delete_site') {
+  require_right(R_SUPER);
+  require_p('site_id', '/^\d+$/');
+  require_p('safe', '/^[01]$/');
+
+  $prev_row=return_one("SELECT * FROM sites WHERE site_id=".mq($q['site_id']), TRUE);
+
+  $prev_row['v4nets'] = return_array("SELECT v4net_id FROM v4nets WHERE v4net_fk_site_id=".mq($q['site_id']));
+  $prev_row['v6nets'] = return_array("SELECT v6net_id FROM v6nets WHERE v6net_fk_site_id=".mq($q['site_id']));
+
+  if($q['safe'] == 1 && ( count($prev_row['v4nets']) > 0 || count($prev_row['v6nets']) > 0)) {
+    ok_exit("not safe");
+  };
+
+  run_query("DELETE FROM sites WHERE site_id=".mq($q['site_id']));
+
+  $new_row=[];
+
+  check_tick(TICK_site, $q['site_id']);
+
+  audit_log("site", $q['site_id'], "sites", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
