@@ -6193,40 +6193,79 @@ function get_att_row(data) {
   ret
    .append( $(TD)
      .append( $(LABEL).text(data['att_key'])
+       .addClass("att_key")
      )
    )
+  ;
+
+  if((data['att_flags'] & 1) == 0) {
+    ret.find(".att_key")
+     .css({"border": "1px solid gray", "padding": "3px"})
+     .att_click_edit('att_key', {}, function(value, prop) {
+       return String(value).match(/^[0-9a-zA-Z_]{1,64}$/);
+     })
+    ;  
+  };
+
+  ret
    .append( $(TD)
      .append( $(LABEL).text(data['att_name'])
+       .css({"border": "1px solid gray", "padding": "3px"})
+       .addClass("att_name")
+       .att_click_edit('att_name', {}, function(value, prop) {
+         return String(value).match(/\S/);
+       })
      )
    )
    .append( $(TD)
      .append( $(LABEL).text('...').addClass("ui-button")
+       .addClass("att_comment")
        .css({"padding": "0.2em"})
        .title( data['att_comment'] )
+       .data("value", data['att_comment'] )
+       .ml_edit()
      )
    )
    .append( $(TD)
      .append( $(LABEL).text(data['att_regex'])
+       .css({"border": "1px solid gray", "padding": "3px"})
+       .addClass("att_regex")
+       .att_click_edit('att_regex', {}, function(value, prop) {
+         try {
+           new RegEx(value);
+           return true;
+         } catch(e) {
+           return false;
+         };
+       })
      )
    )
    .append( $(TD)
      .append( $(LABEL).text(data['att_default'])
+       .css({"border": "1px solid gray", "padding": "3px"})
+       .addClass("att_default")
+       .att_click_edit('att_default', {}, function(value, prop) { return true; })
      )
    )
    .append( $(TD)
      .append( $(INPUT).prop({"type": "checkbox", "checked": data['att_multiple'] > 0})
+       .addClass("att_multiple")
        .on("change", function() {
        })
      )
    )
    .append( $(TD)
      .append( $(LABEL).text('...').addClass("ui-button")
+       .addClass("att_style")
        .css({"padding": "0.2em"})
        .title( data['att_style'] )
+       .data("value", data['att_style'] )
      )
    )
    .append( $(TD)
      .append( $(LABEL).text(data['att_type'])
+       .css({"border": "1px solid gray", "padding": "3px"})
+       .addClass("att_type")
      )
    )
    .append( $(TD)
@@ -6237,6 +6276,167 @@ function get_att_row(data) {
    )
   ;
   return ret;
+};
+
+$.fn.ml_edit = function(validate_func, donefunc) {
+  $(this).data("validate_func", validate_func);
+  $(this).data("donefunc", donefunc);
+  $(this).click(function() {
+
+    let elm=$(this);
+    let orig_value=$(this).data("value");
+    if(orig_value === undefined) { error_at(); return; };
+
+    if( $("#ml_edit").length != 0 ) return;
+
+    let dialog=$(DIV).myid("ml_edit")
+     .addClass("dialog_start")
+     .prop("title", $(this).data("donefunc") == undefined?"Просмотр значения":"Редактирование значения")
+     .css({"white-space": "pre", "font-size": "larger"})
+     .appendTo("BODY")
+     .data("validate_func", $(this).data("validate_func"))
+     .data("donefunc", $(this).data("donefunc"))
+    ;
+
+    let d={
+      modal:true,
+      //position: { my: "center top", at: "center top", of: window },
+      minHeight: 800,
+      //maxHeight: $(window).height(),
+      //minHeight: $(window).height()-10,
+      minWidth: 600,
+      buttons: [],
+      close: function() {
+        let did=$(this).prop("id");
+        $(this).dialog("destroy");
+        $(this).remove();
+        //$(window).off("resize."+did);
+      },
+      open: function() {
+        let _dialog=$(this);
+        let did=$(this).prop("id");
+        //$(window).on("resize."+did, function() {
+          //_dialog.dialog("option", "maxHeight", $(window).height());
+          //_dialog.dialog("option", "minHeight", $(window).height() - 10);
+        //});
+      }
+    };
+
+    if($(this).data("donefunc") != undefined) {
+      d['buttons'].push({ "text": "Сохранить", "click": function() {
+        let _val=$(this).find("TEXTAREA").val();
+        let _validate_func=$(this).data("validate_func");
+
+        if(_validate_func != undefined && !_validate_func(_val)) {
+          $(this).find("TEXTAREA").animateHighlight();
+          return;
+        };
+
+        let _donefunc=$(this).data("donefunc");
+        $(this).dialog( "close" );
+
+        _donefunc(_val);
+      } });
+    };
+    d['buttons'].push({ "text": $(this).data("donefunc") != undefined ? "Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
+
+    dialog
+     .append( $(TEXTAREA).val(orig_value)
+     )
+    ;
+
+    dialog.dialog(d);
+
+  });
+  return this;
+};
+
+$.fn.att_click_edit = function(prop_name, style, validate_func) {
+  this.data("prop_name", prop_name);
+  this.data("style", style);
+  this.data("validate_func", validate_func);
+  this.title("Нажмите сюда для изменения")
+  this.addClass("att_click_label")
+  this.click(function(e) {
+    let prev_val=$(this).text();
+    let _prop_name=$(this).data("prop_name");
+    let _style=$(this).data("style");
+    let input=$(INPUT)
+     .data("prop_name", _prop_name)
+     .data("style", _style)
+     .data("prev_val", prev_val)
+     .data("validate_func", $(this).data("validate_func"))
+     .addClass("att_click_edit")
+     .addClass(_prop_name)
+    ;
+    if(_style != undefined) {
+      input.css(_style);
+    };
+    input.val(prev_val);
+
+    input
+     .inputStop(INPUT_STOP_TIMER, function(e) {
+       //tab keydown function
+       let this_td=$(this).parent();
+       let next_td;
+       if(e.shiftKey) {
+         next_td=this_td.prev();
+       } else {
+         next_td=this_td.next();
+       };
+       if(next_td.find(".att_click_label").length == 1) {
+         next_td.find(".att_click_label").trigger("click");
+       } else if(next_td.find(".att_click_edit").length == 1) {
+         next_td.find(".att_click_edit").focus();
+       };
+       return false;
+     })
+     .on("input_stop", function() {
+       if(!ATT_AUTOSAVE) {
+         return;
+       };
+       $(this).trigger("save");
+     })
+     .on("save", function() {
+       let _this=$(this);
+       _this.addClass("saving");
+       let _validate_func=$(this).data("validate_func");
+       let _value=$(this).val();
+       let _prop_name=$(this).data("prop_name");
+       if(_validate_func != undefined) {
+         if(!_validate_func(_value, _prop_name)) {
+           $(this).css({"background-color": "pink"}).animateHighlight();
+           return;
+         };
+       };
+       $(this).css({"background-color": "yellow"});
+
+       let att_id=$(this).closest(".att_row").data("data")['att_id'];
+
+       let query={"action": "set_att_prop", "prop_name": _prop_name, "value": _value, "att_id": att_id};
+       run_query(query, function() {
+         _this.css({"background-color": "palegreen"});
+         _this.closest(".att_row").find(".undo_btn").show();
+         _this.closest(".att_row").find(".undo_btn_placeholder").hide();
+         _this.removeClass("unsaved");
+         _this.removeClass("saving")
+         _this.addClass("saved");
+       });
+
+     })
+    ;
+
+    $(this).closest(".att_row").find(".save_btn_paceholder").hide();
+    $(this).closest(".att_row").find(".save_btn").show();
+
+    $(this).replaceWith( input );
+
+    if(! e.ctrlKey ) {
+      input.focus();
+    };
+
+  });
+  return this;
 };
 
 function att_list() {
@@ -6279,7 +6479,7 @@ function att_list() {
     }
   };
 
-  d['buttons'].push({ "text": "Закрыть" });
+  d['buttons'].push({ "text": "Закрыть", "click": function() {$(this).dialog( "close" ); } });
 
   let object_sel=$(SELECT)
    .addClass("sel_att_object")
