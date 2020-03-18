@@ -6223,7 +6223,38 @@ function get_att_row(data) {
        .css({"padding": "0.2em"})
        .title( data['att_comment'] )
        .data("value", data['att_comment'] )
-       .ml_edit()
+       .data("prev_val", data['att_comment'] )
+       .data("prop", 'att_comment' )
+       .ml_edit(
+         undefined,
+         function(value) {
+           //donefunc
+           let _this=$(this);
+
+           if( _this.data("value") != value) {
+             _this.data("value", value);
+             _this.title(value);
+             if(!ATT_AUTOSAVE) {
+               _this.addClass("unsaved");
+             } else {
+               _this.trigger("save");
+             };
+           };
+         }
+       )
+       .on("save",
+         function() {
+           let _prop=$(this).data("prop");
+           let _id=$(this).closest(".att_row").data("id");
+           let _this=$(this);
+           _this.addClass("saving");
+
+           run_query({"action": "set_att_prop", "prop_name": _prop, "value": _this.data("value"), "att_id": _id}, function() {
+             _this.removeClass("unsaved");
+             _this.removeClass("saving");
+           });
+         }
+       )
      )
    )
    .append( $(TD).addClass("tab")
@@ -6261,10 +6292,10 @@ function get_att_row(data) {
        .title( data['att_style'] )
        .data("prop", 'att_style' )
        .data("value", data['att_style'] )
+       .data("prev_val", data['att_style'] )
        .ml_edit(
          function(value) {
            //validate_func
-             return true;
            try {
              JSON.parse(value);
              return true;
