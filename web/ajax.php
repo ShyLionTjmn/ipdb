@@ -296,6 +296,17 @@ function optional_p($param_name, $param_check=null) {
           if(!preg_match('/^\d+$/', $val)) { error_exit("Required param '$param_name' has bad key value '$val'"); };
         };
         break;
+      case "regexp":
+        if(@preg_match("/".$q[$param_name]."/", null) === false) {
+          error_exit("Bad regular expression: ".$q[$param_name]);
+        };
+        break;
+      case "json":
+        @json_decode($q[$param_name]);
+        if(json_last_error() !== JSON_ERROR_NONE) {
+          error_exit("Bad JSON value");
+        };
+        break;
       default:
         error_exit("Prog error at ".__LINE__);
       };
@@ -2126,6 +2137,49 @@ if($q['action'] == 'v4get_net') {
   check_push(TICK_att, 0);
 
   ok_exit($ret);
+} else if($q['action'] == 'set_att_prop') {
+  require_right(R_SUPER);
+  require_p('att_id', "/^\d+$/");
+  require_p('prop_name', "/^(?:att_key|att_comment|att_regex|att_name|att_default|att_multiple|att_style|att_sort|att_type)$/");
+
+  if($q['prop_name'] == "att_key") {
+    require_p('value', "/^[0-9a-zA-Z_]{1,64}$/");
+  } else if($q['prop_name'] == "att_regex") {
+    require_p('value', Array("type" => "regexp"));
+  } else if($q['prop_name'] == "att_multiple") {
+    require_p('value', "/^[01]$/");
+  } else if($q['prop_name'] == "att_style") {
+    require_p('value', Array("type" => "json"));
+  } else if($q['prop_name'] == "att_sort") {
+    require_p('value', "/^\d+$/");
+  } else if($q['prop_name'] == "att_type") {
+    require_p('value', "/^(?:text)$/");
+  } else {
+    require_p('value');
+  };
+
+  $prev_row=return_one("SELECT * FROM atts WHERE att_id=".mq($q['att_id']), TRUE);
+
+  if($q['prop_name'] == "att_default" && $q['value'] != "" && @preg_match("/".$prev_row['att_regex']."/", null) !== false) {
+    if(!preg_match("/".$prev_row['att_regex']."/", $q['value'])) {
+      error_exit("Значение по умолчанию не соответствует регулярному выражению");
+    };
+  };
+
+  $query = "UPDATE atts SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= ",".$q['prop_name']."=".mq($q['value']);
+  $query .= " WHERE att_id=".mq($q['att_id']);
+  run_query($query);
+
+  $new_row=return_one("SELECT * FROM atts WHERE att_id=".mq($q['att_id']), TRUE);
+
+  check_tick(TICK_att, $q['att_id']);
+
+  audit_log("att", $q['att_id'], "atts", $q['action'], $prev_row, $new_row);
+  
+  ok_exit("done");
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

@@ -6208,7 +6208,7 @@ function get_att_row(data) {
   };
 
   ret
-   .append( $(TD)
+   .append( $(TD).addClass("tab")
      .append( $(LABEL).text(data['att_name'])
        .css({"border": "1px solid gray", "padding": "3px"})
        .addClass("att_name")
@@ -6226,13 +6226,13 @@ function get_att_row(data) {
        .ml_edit()
      )
    )
-   .append( $(TD)
+   .append( $(TD).addClass("tab")
      .append( $(LABEL).text(data['att_regex'])
        .css({"border": "1px solid gray", "padding": "3px"})
        .addClass("att_regex")
        .att_click_edit('att_regex', {}, function(value, prop) {
          try {
-           new RegEx(value);
+           new RegExp(value);
            return true;
          } catch(e) {
            return false;
@@ -6240,7 +6240,7 @@ function get_att_row(data) {
        })
      )
    )
-   .append( $(TD)
+   .append( $(TD).addClass("tab")
      .append( $(LABEL).text(data['att_default'])
        .css({"border": "1px solid gray", "padding": "3px"})
        .addClass("att_default")
@@ -6259,7 +6259,47 @@ function get_att_row(data) {
        .addClass("att_style")
        .css({"padding": "0.2em"})
        .title( data['att_style'] )
+       .data("prop", 'att_style' )
        .data("value", data['att_style'] )
+       .ml_edit(
+         function(value) {
+           //validate_func
+             return true;
+           try {
+             JSON.parse(value);
+             return true;
+           } catch(e) {
+             return false;
+           };
+         },
+         function(value) {
+           //donefunc
+           let _this=$(this);
+
+           if( _this.data("value") != value) {
+             _this.data("value", value);
+             _this.title(value);
+             if(!ATT_AUTOSAVE) {
+               _this.addClass("unsaved");
+             } else {
+               _this.trigger("save");
+             };
+           };
+         }
+       )
+       .on("save",
+         function() {
+           let _prop=$(this).data("prop");
+           let _id=$(this).closest(".att_row").data("id");
+           let _this=$(this);
+           _this.addClass("saving");
+
+           run_query({"action": "set_att_prop", "prop_name": _prop, "value": _this.data("value"), "att_id": _id}, function() {
+             _this.removeClass("unsaved");
+             _this.removeClass("saving");
+           });
+         }
+       )
      )
    )
    .append( $(TD)
@@ -6296,6 +6336,7 @@ $.fn.ml_edit = function(validate_func, donefunc) {
      .appendTo("BODY")
      .data("validate_func", $(this).data("validate_func"))
      .data("donefunc", $(this).data("donefunc"))
+     .data("this", elm)
     ;
 
     let d={
@@ -6304,7 +6345,7 @@ $.fn.ml_edit = function(validate_func, donefunc) {
       minHeight: 800,
       //maxHeight: $(window).height(),
       //minHeight: $(window).height()-10,
-      minWidth: 600,
+      minWidth: 800,
       buttons: [],
       close: function() {
         let did=$(this).prop("id");
@@ -6326,22 +6367,25 @@ $.fn.ml_edit = function(validate_func, donefunc) {
       d['buttons'].push({ "text": "Сохранить", "click": function() {
         let _val=$(this).find("TEXTAREA").val();
         let _validate_func=$(this).data("validate_func");
+        let _donefunc=$(this).data("donefunc");
+        let _this=$(this).data("this");
 
-        if(_validate_func != undefined && !_validate_func(_val)) {
+        if(_validate_func != undefined && !_validate_func.call(_this, _val)) {
           $(this).find("TEXTAREA").animateHighlight();
           return;
         };
 
-        let _donefunc=$(this).data("donefunc");
         $(this).dialog( "close" );
 
-        _donefunc(_val);
+        _donefunc.call(_this, _val);
       } });
     };
     d['buttons'].push({ "text": $(this).data("donefunc") != undefined ? "Отменить":"Закрыть", "click": function() { $(this).dialog( "close" ); } });
 
     dialog
      .append( $(TEXTAREA).val(orig_value)
+       .css({"position": "absolute", "left": "1em", "width": "96%", "top": "1em", "bottom": "1em", "white-space": "pre"})
+       .prop({"readonly": $(this).data("donefunc") == undefined})
      )
     ;
 
@@ -6379,11 +6423,14 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
        //tab keydown function
        let this_td=$(this).parent();
        let next_td;
+       let next_tds;
        if(e.shiftKey) {
-         next_td=this_td.prev();
+         next_tds = this_td.prevAll(".tab");
        } else {
-         next_td=this_td.next();
+         next_tds = this_td.nextAll(".tab");
        };
+       if(next_tds.length == 0) return;
+       next_td=next_tds.first();
        if(next_td.find(".att_click_label").length == 1) {
          next_td.find(".att_click_label").trigger("click");
        } else if(next_td.find(".att_click_edit").length == 1) {

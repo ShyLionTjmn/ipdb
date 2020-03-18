@@ -28,3 +28,6 @@ TR.bg_colored:nth-child(odd)
 .color_coral {
   color: coral;
 }
+LABEL.saving {
+  border: 2px solid yellow;
+}
