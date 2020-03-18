@@ -187,6 +187,10 @@ const v4len2mask=[
 var watchTimer;
 var watches={};
 
+function getFuncName() {
+   return getFuncName.caller.name
+};
+
 $.fn.moveToTop = function() {
   let z_index=1000;
   $(".ui-dialog").each(function() {
@@ -6169,6 +6173,49 @@ function sites_list(presel, opt, donefunc) {
 
 };
 
+function att_list() {
+  let this_w_id="w_"+getFuncName();
+  if($("#"+this_w_id).length != 0) return;
+
+  let title = "Аттрибуты объектов";
+
+  let dialog=$(DIV).myid(this_w_id)
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    position: { my: "center top", at: "center top", of: window },
+    maxHeight: $(window).height(),
+    minHeight: $(window).height()-10,
+    minWidth:1000,
+    buttons: [],
+    close: function() {
+      unwatch(TICK_att, 0);
+      let did=$(this).prop("id");
+      $(this).dialog("destroy");
+      $(this).remove();
+      $(window).off("resize."+did);
+    },
+    open: function() {
+      let _dialog=$(this);
+      let did=$(this).prop("id");
+      $(window).on("resize."+did, function() {
+        _dialog.dialog("option", "maxHeight", $(window).height());
+        _dialog.dialog("option", "minHeight", $(window).height() - 10);
+      });
+    }
+  };
+
+  d['buttons'].push({ "text": "Закрыть" });
+
+  dialog.dialog(d);
+};
+
+
 function process_R() {
   unwatch();
   if(!$R || $R['action'] == "ipv4") {
@@ -6466,10 +6513,19 @@ $( document ).ready(function() {
          )
         ;
 
+        if(has_right(R_SUPER)) {
+          menu_bar
+           .append( $(SPAN).addClass("ui-button").text("Аттрибуты")
+             .css({"padding": "0px 0.3em", "margin-left": "10px"})
+             .click(function() {
+               att_list();
+             })
+           )
+          ;
+        };
+
 //        process_R();
-sites_list(undefined, { "readonly": false}, function(list) {
-  alert(list);
-});
+        att_list();
       };
     };
   });

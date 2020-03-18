@@ -121,7 +121,7 @@ CREATE TABLE atts (
   `att_input_size`	varchar(16) NOT NULL DEFAULT '4em',
   `att_sort`	int(11) NOT NULL DEFAULT 0,
   `att_type`	varchar(64) NOT NULL DEFAULT 'text',
-  `att_flags`	int(11) NOT NULL DEFAULT '0',
+  `att_flags`	int(11) NOT NULL DEFAULT '0' COMMENT '1 - protect',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (`att_id`),
