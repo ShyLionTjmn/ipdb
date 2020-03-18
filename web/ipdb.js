@@ -9,6 +9,7 @@ var _debug_opts=true;
 
 var VLANS_AUTOSAVE=true;
 var TEMPLATES_AUTOSAVE=true;
+var ATT_AUTOSAVE=true;
 
 const INPUT_STOP_TIMER	= 500;
 
@@ -51,8 +52,17 @@ const TICK_ic           = "ic";
 const TICK_n4c          = "n4c";
 const TICK_n6c          = "n6c";
 const TICK_site         = "site";
+const TICK_att         	= "att";
 
-
+var att_objects=Array(
+  { "text": "Система", "object": "system" },
+  { "text": "Сеть, общ.", "object": "net" },
+  { "text": "Сеть, IPv4", "object": "v4net" },
+  { "text": "Сеть, IPv6", "object": "v6net" },
+  { "text": "IP, общ.", "object": "ip" },
+  { "text": "IP, IPv4", "object": "v4ip" },
+  { "text": "IP, IPv6", "object": "v6ip" },
+);
 
 const group_rights=Array(
   { "right": R_SUPER,
@@ -6173,6 +6183,62 @@ function sites_list(presel, opt, donefunc) {
 
 };
 
+function get_att_row(data) {
+  let ret=$(TR).addClass("att_row")
+   .data("object", data['att_object'])
+   .data("id", data['att_id'])
+   .data("data", data)
+  ;
+
+  ret
+   .append( $(TD)
+     .append( $(LABEL).text(data['att_key'])
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).text(data['att_name'])
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).text('...').addClass("ui-button")
+       .css({"padding": "0.2em"})
+       .title( data['att_comment'] )
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).text(data['att_regex'])
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).text(data['att_default'])
+     )
+   )
+   .append( $(TD)
+     .append( $(INPUT).prop({"type": "checkbox", "checked": data['att_multiple'] > 0})
+       .on("change", function() {
+       })
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).text('...').addClass("ui-button")
+       .css({"padding": "0.2em"})
+       .title( data['att_style'] )
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).text(data['att_type'])
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-edit").addClass("ui-button")
+       .click(function() {
+       })
+     )
+   )
+  ;
+  return ret;
+};
+
 function att_list() {
   let this_w_id="w_"+getFuncName();
   if($("#"+this_w_id).length != 0) return;
@@ -6194,7 +6260,10 @@ function att_list() {
     minWidth:1000,
     buttons: [],
     close: function() {
-      unwatch(TICK_att, 0);
+      let object=$(this).find(".sel_att_object").val();
+      if(object != "") {
+        unwatch(TICK_att, 0);
+      };
       let did=$(this).prop("id");
       $(this).dialog("destroy");
       $(this).remove();
@@ -6212,7 +6281,57 @@ function att_list() {
 
   d['buttons'].push({ "text": "Закрыть" });
 
+  let object_sel=$(SELECT)
+   .addClass("sel_att_object")
+   .append( $(OPTION).text("Выберете объект ...").val("") )
+   .on("select change", function() {
+     let prev_val=$(this).data("prev_val");
+     if(prev_val != "" && prev_val != undefined) {
+       unwatch(TICK_att, 0);
+     };
+     $(this).data("prev_val", $(this).val());
+     let _dialog=$(this).closest(".dialog_start");
+     let tbody=_dialog.find(".att_list");
+     tbody.empty();
+     let object=$(this).val();
+     if(object == "") {
+       tbody.append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете объект") ) );
+       return;
+     };
+     run_query({"action": "get_atts", "att_object": object}, function(data) {
+       for(let i=0; i < data['ok'].length; i++) {
+         tbody.append( get_att_row(data['ok'][i]) );
+       };
+       watch(TICK_att, 0);
+     });
+   })
+  ;
+
+  for(let i=0; i < att_objects.length; i++) {
+    object_sel
+     .append( $(OPTION).text( att_objects[i]['text'] ).val( att_objects[i]['object'] ) )
+    ;
+  };
+
+  let head=$(DIV)
+   .appendTo(dialog)
+   .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": "2em"})
+   .append( $(LABEL).text("Объект: ") )
+   .append( object_sel )
+   .append( $(SPAN).css({"white-space": "pre", "float": "right"})
+     .append( $(LABEL).prop("for", "att_autosave").text("Автосохранение: ")
+       .title("Автосохранение данных")
+     )
+     .append( $(INPUT).myid("att_autosave").prop({"type": "checkbox", "checked": ATT_AUTOSAVE})
+       .on("change", function() {
+         ATT_AUTOSAVE=$(this).is(":checked");
+       })
+     )
+   )
+  ;
+
   let table=$(TABLE).appendTo(dialog)
+   .css({"position": "absolute", "top": "2em", "left": "0px", "right": "0px", "bottom": "1em"})
    .append( $(THEAD)
      .append( $(TR)
        .append( $(TH)
@@ -6249,6 +6368,7 @@ function att_list() {
        )
      )
    )
+   .append( $(TBODY).addClass("att_list") )
   ;
 
   dialog.dialog(d);

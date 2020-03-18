@@ -56,6 +56,7 @@ const TICK_ic		= "ic";
 const TICK_n4c		= "n4c";
 const TICK_n6c		= "n6c";
 const TICK_site		= "site";
+const TICK_att		= "att";
 
 const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
 
@@ -2116,6 +2117,15 @@ if($q['action'] == 'v4get_net') {
   audit_log("site", $q['site_id'], "sites", $q['action'], $prev_row, $new_row);
 
   ok_exit("done");
+} else if($q['action'] == 'get_atts') {
+  require_right(R_SUPER);
+  require_p('att_object');
+
+  $ret=return_query("SELECT * FROM atts WHERE att_object=".mq($q['att_object']));
+
+  check_push(TICK_att, 0);
+
+  ok_exit($ret);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
