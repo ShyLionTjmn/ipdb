@@ -118,7 +118,7 @@ CREATE TABLE atts (
   `att_comment`	varchar(1024) NOT NULL,
   `att_default`	varchar(1024) DEFAULT NULL,
   `att_multiple`	int(11) NOT NULL DEFAULT '0',
-  `att_input_size`	varchar(16) NOT NULL DEFAULT '4em',
+  `att_style`	varchar(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as INPUT/LABEL .css()',
   `att_sort`	int(11) NOT NULL DEFAULT 0,
   `att_type`	varchar(64) NOT NULL DEFAULT 'text',
   `att_flags`	int(11) NOT NULL DEFAULT '0' COMMENT '1 - protect',

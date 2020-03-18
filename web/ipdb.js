@@ -6212,6 +6212,45 @@ function att_list() {
 
   d['buttons'].push({ "text": "Закрыть" });
 
+  let table=$(TABLE).appendTo(dialog)
+   .append( $(THEAD)
+     .append( $(TR)
+       .append( $(TH)
+         .text("Ключ")
+       )
+       .append( $(TH)
+         .text("Название")
+       )
+       .append( $(TH)
+         .text("Описание")
+       )
+       .append( $(TH)
+         .text("regex")
+       )
+       .append( $(TH)
+         .text("Знач.умолч.")
+       )
+       .append( $(TH)
+         .text("Множ.")
+       )
+       .append( $(TH)
+         .text("Стиль")
+         .title("INPUT/LABEL css() JSON")
+       )
+       .append( $(TH)
+         .text("Тип")
+       )
+       .append( $(TH)
+         .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+           .css({"color": color_table_buttons})
+           .click(function() {
+           })
+         )
+       )
+     )
+   )
+  ;
+
   dialog.dialog(d);
 };
 
