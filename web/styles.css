@@ -28,9 +28,15 @@ TR.bg_colored:nth-child(odd)
 .color_coral {
   color: coral;
 }
-LABEL.saving {
+.unsaved {
   background-color: yellow;
 }
-LABEL.saving:hover {
+.unsaved:hover {
   background-color: yellow;
+}
+INPUT[type=checkbox].unsaved {
+  outline: 5px solid yellow;
+}
+INPUT[type=checkbox].unsaved:hover {
+  outline: 5px solid yellow;
 }

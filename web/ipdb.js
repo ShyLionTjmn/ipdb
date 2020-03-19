@@ -953,7 +953,6 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
      })
      .on("save", function() {
        let _this=$(this);
-       _this.addClass("saving");
        let _validate_func=$(this).data("validate_func");
        let _value=$(this).val();
        let _prop_name=$(this).data("prop_name");
@@ -973,8 +972,6 @@ $.fn.vlan_click_edit = function(prop_name, style, validate_func) {
          _this.closest(".vlan_row").find(".undo_btn").show();
          _this.closest(".vlan_row").find(".undo_btn_placeholder").hide();
          _this.removeClass("unsaved");
-         _this.removeClass("saving")
-         _this.addClass("saved");
        });
 
      })
@@ -4990,9 +4987,8 @@ function get_columns_list_row(ic) {
          return !$(this).data("readonly");
        })
        .on("change", function() {
+         $(this).addClass("unsaved");
          if(!TEMPLATES_AUTOSAVE) {
-           $(this).addClass("unsaved");
-           $("#templates_autosave_label").css({"background-color": "yellow"});
            return;
          };
          let _templates_list=$(this).closest(".root_pane").find(".templates_list");
@@ -6234,9 +6230,8 @@ function get_att_row(data) {
            if( _this.data("value") != value) {
              _this.data("value", value);
              _this.title(value);
-             if(!ATT_AUTOSAVE) {
-               _this.addClass("unsaved");
-             } else {
+             _this.addClass("unsaved");
+             if(ATT_AUTOSAVE) {
                _this.trigger("save");
              };
            };
@@ -6247,11 +6242,9 @@ function get_att_row(data) {
            let _prop=$(this).data("prop");
            let _id=$(this).closest(".att_row").data("id");
            let _this=$(this);
-           _this.addClass("saving");
 
            run_query({"action": "set_att_prop", "prop_name": _prop, "value": _this.data("value"), "att_id": _id}, function() {
              _this.removeClass("unsaved");
-             _this.removeClass("saving");
            });
          }
        )
@@ -6281,7 +6274,21 @@ function get_att_row(data) {
    .append( $(TD)
      .append( $(INPUT).prop({"type": "checkbox", "checked": data['att_multiple'] > 0})
        .addClass("att_multiple")
+       .data("prop", 'att_multiple')
        .on("change", function() {
+         $(this).addClass("unsaved");
+         if(ATT_AUTOSAVE) {
+           $(this).trigger("save");
+         };
+       })
+       .on("save", function() {
+         let _prop=$(this).data("prop");
+         let _id=$(this).closest(".att_row").data("id");
+         let _this=$(this);
+
+         run_query({"action": "set_att_prop", "prop_name": _prop, "value": _this.is(":checked")?1:0, "att_id": _id}, function() {
+           _this.removeClass("unsaved");
+         });
        })
      )
    )
@@ -6310,9 +6317,8 @@ function get_att_row(data) {
            if( _this.data("value") != value) {
              _this.data("value", value);
              _this.title(value);
-             if(!ATT_AUTOSAVE) {
-               _this.addClass("unsaved");
-             } else {
+             _this.addClass("unsaved");
+             if(ATT_AUTOSAVE) {
                _this.trigger("save");
              };
            };
@@ -6323,11 +6329,9 @@ function get_att_row(data) {
            let _prop=$(this).data("prop");
            let _id=$(this).closest(".att_row").data("id");
            let _this=$(this);
-           _this.addClass("saving");
 
            run_query({"action": "set_att_prop", "prop_name": _prop, "value": _this.data("value"), "att_id": _id}, function() {
              _this.removeClass("unsaved");
-             _this.removeClass("saving");
            });
          }
        )
@@ -6477,7 +6481,6 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
      })
      .on("save", function() {
        let _this=$(this);
-       _this.addClass("saving");
        let _validate_func=$(this).data("validate_func");
        let _value=$(this).val();
        let _prop_name=$(this).data("prop_name");
@@ -6497,8 +6500,6 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
          _this.closest(".att_row").find(".undo_btn").show();
          _this.closest(".att_row").find(".undo_btn_placeholder").hide();
          _this.removeClass("unsaved");
-         _this.removeClass("saving")
-         _this.addClass("saved");
        });
 
      })
