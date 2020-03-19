@@ -6552,13 +6552,9 @@ function att_list() {
     position: { my: "center top", at: "center top", of: window },
     maxHeight: $(window).height(),
     minHeight: $(window).height()-10,
-    minWidth:1200,
+    minWidth: 1500,
     maxWidth:1900,
     buttons: [],
-    resize: function(e) {
-      e.stopPropagation(e);
-      return true;
-    },
     close: function() {
       let object=$(this).find(".sel_att_object").val();
       if(object != "") {
@@ -6567,15 +6563,15 @@ function att_list() {
       let did=$(this).prop("id");
       $(this).dialog("destroy");
       $(this).remove();
-      $(window).off("resize."+did);
+      //$(window).off("resize."+did);
     },
     open: function() {
       let _dialog=$(this);
       let did=$(this).prop("id");
-      $(window).on("resize."+did, function() {
-        _dialog.dialog("option", "maxHeight", $(window).height());
-        _dialog.dialog("option", "minHeight", $(window).height() - 10);
-      });
+      //$(window).on("resize."+did, function() {
+      //  _dialog.dialog("option", "maxHeight", $(window).height());
+      //  _dialog.dialog("option", "minHeight", $(window).height() - 10);
+      //});
     }
   };
 
