@@ -6604,6 +6604,10 @@ function att_list() {
      .append( $(INPUT).myid("att_autosave").prop({"type": "checkbox", "checked": ATT_AUTOSAVE})
        .on("change", function() {
          ATT_AUTOSAVE=$(this).is(":checked");
+         if(ATT_AUTOSAVE) {
+           $(this).closest(".dialog_start").find(".unsaved").trigger("save");
+           $(this).closest(".dialog_start").find(".att_list").trigger("sortstop");
+         };
        })
      )
    )
