@@ -1931,7 +1931,6 @@ if($q['action'] == 'v4get_net') {
     $query .= ",ic_sort=".mq($ic_sort);
     $query .= " WHERE ic_id=".mq($ic_id); 
     run_query($query);
-    check_tick(TICK_ic, $ic_id, FALSE, FALSE);
   };
   check_tick(TICK_ic, 0);
 
@@ -2166,6 +2165,10 @@ if($q['action'] == 'v4get_net') {
     };
   };
 
+  if($q['prop_name'] == "att_key" && ($prev_row['att_flags'] & 1) > 0) {
+    error_exit("Запрещено изменять ключ у данного атрибута");
+  };
+
   $query = "UPDATE atts SET";
   $query .= " ts=$time";
   $query .= ",$set_fk_user_id";
@@ -2180,6 +2183,74 @@ if($q['action'] == 'v4get_net') {
   audit_log("att", $q['att_id'], "atts", $q['action'], $prev_row, $new_row);
   
   ok_exit("done");
+} else if($q['action'] == 'reorder_atts') {
+  require_right(R_SUPER);
+  require_p('positions', Array("type" => "num2num"));
+
+  $query="SELECT GROUP_CONCAT( CONCAT(att_id, ':', att_sort) ) FROM atts";
+  $prev_row=return_one($query, TRUE);
+
+  foreach($q['positions'] as $att_id => $att_sort) {
+    $query = "UPDATE atts SET";
+    $query .= " ts=$time";
+    $query .= ",$set_fk_user_id";
+    $query .= ",att_sort=".mq($att_sort);
+    $query .= " WHERE att_id=".mq($att_id); 
+    run_query($query);
+  };
+  check_tick(TICK_att, 0);
+
+  $query="SELECT GROUP_CONCAT( CONCAT(att_id, ':', att_sort) ) FROM atts";
+  $new_row=return_one($query, TRUE);
+
+  audit_log("att", 0, "atts", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
+} else if($q['action'] == 'delete_att') {
+  require_right(R_SUPER);
+  require_p('att_id', "/^\d+$/");
+
+  $prev_row=return_one("SELECT * FROM atts WHERE att_id=".mq($q['att_id']), TRUE);
+
+  if(($prev_row['att_flags'] & 1) > 0) {
+    error_exit("Атрибут защищен от удаления");
+  };
+
+  run_query("DELETE FROM atts WHERE att_id=".mq($q['att_id']));
+
+  $new_row=[];
+
+  check_tick(TICK_att, $q['att_id']);
+
+  audit_log("att", $q['att_id'], "atts", $q['action'], $prev_row, $new_row);
+
+  ok_exit("done");
+} else if($q['action'] == 'add_att') {
+  require_right(R_SUPER);
+  require_p('att_object', "/^(?:system|net|v4net|v6net|ip|v4ip|v6ip)$/");
+
+  $prev_row=[];
+
+  $counter=0;
+
+  do {
+    if($counter > 100) { error_exit("Превышено количество попыток добавить атрибут с именем new_keyXX"); };
+    $query="INSERT INTO atts SET";
+    $query .= " ts=$time";
+    $query .= ",$set_fk_user_id";
+    $query .= cp('att_object');
+    $query .= ",att_key=".mq("new_key$counter");
+    $counter++;
+  } while(run_query($query, FALSE) === FALSE);
+
+  $q['att_id'] = mysqli_insert_id($db);
+
+  $new_row=return_one("SELECT * FROM atts WHERE att_id=".mq($q['att_id']), TRUE);
+  check_tick(TICK_att, $q['att_id']);
+
+  audit_log("att", $q['att_id'], "atts", $q['action'], $prev_row, $new_row);
+
+  ok_exit($new_row);
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };

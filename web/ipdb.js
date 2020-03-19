@@ -6188,6 +6188,11 @@ function get_att_row(data) {
 
   ret
    .append( $(TD)
+     .append( has_right(R_SUPER) ? $(LABEL).addClass("ui-icon").addClass("ui-icon-bars")
+       .addClass("handle") : $(LABEL)
+     )
+   )
+   .append( $(TD)
      .append( $(LABEL).text(data['att_key'])
        .addClass("att_key")
      )
@@ -6344,8 +6349,16 @@ function get_att_row(data) {
      )
    )
    .append( $(TD)
-     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-edit").addClass("ui-button")
+     .append( (data['att_flags'] & 1) > 0 ? $(LABEL) : $(LABEL).addClass("ui-icon").addClass("ui-icon-trash").addClass("ui-button")
+       .css({"color": "coral"})
        .click(function() {
+         let att_id=$(this).closest(".att_row").data("id");
+         let row=(this).closest(".att_row");
+         show_confirm("Подтвердите удаление атрибута", function() {
+           run_query({"action": "delete_att", "att_id": att_id}, function() {
+             row.remove();
+           });
+         });
        })
      )
    )
@@ -6437,6 +6450,7 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
   this.title("Нажмите сюда для изменения")
   this.addClass("att_click_label")
   this.click(function(e) {
+    e.stopPropagation();
     let prev_val=$(this).text();
     let _prop_name=$(this).data("prop_name");
     let _style=$(this).data("style");
@@ -6452,6 +6466,8 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
       input.css(_style);
     };
     input.val(prev_val);
+
+    if(e.shiftKey) input.focus().select();
 
     input
      .inputStop(INPUT_STOP_TIMER, function(e) {
@@ -6522,7 +6538,7 @@ function att_list() {
   let this_w_id="w_"+getFuncName();
   if($("#"+this_w_id).length != 0) return;
 
-  let title = "Аттрибуты объектов";
+  let title = "Атрибуты объектов";
 
   let dialog=$(DIV).myid(this_w_id)
    .addClass("dialog_start")
@@ -6536,8 +6552,13 @@ function att_list() {
     position: { my: "center top", at: "center top", of: window },
     maxHeight: $(window).height(),
     minHeight: $(window).height()-10,
-    minWidth:1000,
+    minWidth:1200,
+    maxWidth:1900,
     buttons: [],
+    resize: function(e) {
+      e.stopPropagation(e);
+      return true;
+    },
     close: function() {
       let object=$(this).find(".sel_att_object").val();
       if(object != "") {
@@ -6618,6 +6639,9 @@ function att_list() {
    .append( $(THEAD)
      .append( $(TR)
        .append( $(TH)
+         //handle
+       )
+       .append( $(TH)
          .text("Ключ")
        )
        .append( $(TH)
@@ -6646,13 +6670,49 @@ function att_list() {
          .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
            .css({"color": color_table_buttons})
            .click(function() {
+             let object=$(this).closest(".dialog_start").find(".sel_att_object").val();
+             if(object == undefined) { error_at(); return; };
+             if(object == "") return;
+             let tbody=$(this).closest(".dialog_start").find(".att_list");
+             run_query({"action": "add_att", "att_object": object}, function(data) {
+               let row=get_att_row(data['ok']);
+               let shift_click=jQuery.Event("click");
+               shift_click.shiftKey = true;
+               tbody.append( row );
+               row.find(".att_key").trigger(shift_click);
+               tbody.trigger("sortstop");
+             });
            })
          )
        )
      )
    )
-   .append( $(TBODY).addClass("att_list") )
+   .append( $(TBODY).addClass("att_list")
+   )
   ;
+
+  if(has_right(R_SUPER)) {
+    dialog.find(".att_list")
+     .sortable({ "handle": ".handle", "containment": "parent", "axis": "y" })
+     .on("sortstop", function() {
+       let _dialog=$(this).closest(".dialog_start");
+       let object=_dialog.find(".sel_att_object").val();
+       if(object == undefined) { error_at(); return; };
+       if(object == "") return;
+
+       let sort=10;
+       let positions={};
+       $(this).find("TR.att_row").each(function() {
+         let _id=$(this).data("id");
+         if(_id == undefined) { throw("Error"); return; };
+         positions[_id] = sort;
+         sort += 10;
+       });
+
+       run_query({"action": "reorder_atts", "positions": positions});
+     })
+    ;
+  };
 
   dialog.dialog(d);
 };
@@ -6957,7 +7017,7 @@ $( document ).ready(function() {
 
         if(has_right(R_SUPER)) {
           menu_bar
-           .append( $(SPAN).addClass("ui-button").text("Аттрибуты")
+           .append( $(SPAN).addClass("ui-button").text("Атрибуты")
              .css({"padding": "0px 0.3em", "margin-left": "10px"})
              .click(function() {
                att_list();
