@@ -60,6 +60,8 @@ var att_objects=Array(
   { "text": "Сеть, IPv6", "object": "v6net" },
   { "text": "IP, IPv4", "object": "v4ip" },
   { "text": "IP, IPv6", "object": "v6ip" },
+  { "text": "Незанятая сеть, IPv4", "object": "v4oob" },
+  { "text": "Незанятая сеть, IPv6", "object": "v6oob" },
 );
 
 const group_rights=Array(
@@ -6532,6 +6534,104 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
   return this;
 };
 
+function attv4() {
+  let this_w_id="w_"+getFuncName();
+  if($("#"+this_w_id).length != 0) return;
+
+  let title = "Атрибуты v4";
+
+  let dialog=$(DIV).myid(this_w_id)
+   .addClass("dialog_start")
+   .prop("title", title)
+   .css({"white-space": "pre", "font-size": "larger"})
+   .appendTo("BODY")
+  ;
+
+  let d={
+    modal:true,
+    position: { my: "center top", at: "center top", of: window },
+    maxHeight: $(window).height(),
+    minHeight: $(window).height()-10,
+    minWidth: 1500,
+    maxWidth:1900,
+    buttons: [],
+    close: function() {
+      unwatch(TICK_att, 0);
+      let did=$(this).prop("id");
+      $(this).dialog("destroy");
+      $(this).remove();
+      //$(window).off("resize."+did);
+    },
+    open: function() {
+      let _dialog=$(this);
+      let did=$(this).prop("id");
+      //$(window).on("resize."+did, function() {
+      //  _dialog.dialog("option", "maxHeight", $(window).height());
+      //  _dialog.dialog("option", "minHeight", $(window).height() - 10);
+      //});
+    }
+  };
+
+  d['buttons'].push({ "text": "Закрыть", "click": function() {$(this).dialog( "close" ); } });
+
+  let key_sel=$(SELECT)
+   .addClass("sel_att_key")
+   .append( $(OPTION).text("Выберете ключ ...").val("") )
+   .on("select change", function() {
+     let _dialog=$(this).closest(".dialog_start");
+     let tbody=_dialog.find(".list");
+     tbody.empty();
+     let key=$(this).val();
+     if(key == "") {
+       tbody.append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете ключ") ) );
+       return;
+     };
+     run_query({"action": "get_attv4vals", "att_key": key}, function(data) {
+       for(let i=0; i < data['ok'].length; i++) {
+         tbody.append( get_attv4_row(data['ok'][i]) );
+       };
+     });
+   })
+  ;
+
+  let head=$(DIV)
+   .appendTo(dialog)
+   .css({"position": "absolute", "top": "0px", "left": "0px", "right": "0px", "height": "2em"})
+   .append( $(LABEL).text("Ключ: ") )
+   .append( key_sel )
+  ;
+
+  let table=$(TABLE).appendTo(dialog)
+   .css({"position": "absolute", "top": "2em", "left": "0px", "right": "0px", "bottom": "1em"})
+   .append( $(THEAD)
+     .append( $(TR)
+       .append( $(TH)
+         .text("Сеть")
+       )
+       .append( $(TH)
+         .text("Описание")
+       )
+       .append( $(TH)
+         .text("Значения")
+       )
+     )
+   )
+   .append( $(TBODY).addClass("list")
+   )
+  ;
+
+  run_query({"action": "get_v4atts"}, function(data) {
+    for(let i=0; i < data['ok'].length; i++) {
+      key_sel
+       .append( $(OPTION).text( data['ok'][i]['att_name'] ).val( data['ok'][i]['att_key'] ) )
+      ;
+    };
+    watch(TICK_att, 0);
+  });
+
+  dialog.dialog(d);
+};
+
 function att_list() {
   let this_w_id="w_"+getFuncName();
   if($("#"+this_w_id).length != 0) return;
@@ -7020,8 +7120,19 @@ $( document ).ready(function() {
           ;
         };
 
+        if(has_right(R_SUPER)) {
+          menu_bar
+           .append( $(SPAN).addClass("ui-button").text("Атрибуты v4")
+             .css({"padding": "0px 0.3em", "margin-left": "10px"})
+             .click(function() {
+               attv4();
+             })
+           )
+          ;
+        };
+
 //        process_R();
-        att_list();
+        attv4();
       };
     };
   });

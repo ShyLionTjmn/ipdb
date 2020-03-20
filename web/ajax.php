@@ -2227,7 +2227,7 @@ if($q['action'] == 'v4get_net') {
   ok_exit("done");
 } else if($q['action'] == 'add_att') {
   require_right(R_SUPER);
-  require_p('att_object', "/^(?:system|v4net|v6net|v4ip|v6ip)$/");
+  require_p('att_object', "/^(?:system|v4net|v6net|v4ip|v6ip|v4oob|v6oob)$/");
 
   $prev_row=[];
 
@@ -2251,6 +2251,36 @@ if($q['action'] == 'v4get_net') {
   audit_log("att", $q['att_id'], "atts", $q['action'], $prev_row, $new_row);
 
   ok_exit($new_row);
+} else if($q['action'] == 'get_v4atts') {
+
+  $query="SELECT MAX(att_name) as att_name, att_key FROM atts WHERE att_object IN ('v4net','v4ip','v4oob') GROUP BY att_key";
+
+  $ret=return_query($query);
+
+  check_push(TICK_att, 0);
+
+  ok_exit($ret);
+} else if($q['action'] == 'get_attv4vals') {
+  require_p('att_key');
+
+  $ret=[];
+
+  $query="SELECT v4net_id as id, v4net_addr as addr, v4net_mask as mask, atv_id, atv_value, att_object";
+  $query .=" FROM (v4nets INNER JOIN atvs ON v4net_id=atv_object_id";
+  $query .=") INNER JOIN atts ON att_id=atv_fk_att_id";
+  $query .=" WHERE att_object='v4net' AND att_key=".mq($q['att_key']);
+  $query .=" ORDER BY v4net_id, atv_index";
+
+  $res=return_query($query);
+
+  for($res as $row) {
+    $id=$row['att_object']."_".$row['v4net_id'];
+    if(!isset($ret[ $id ])) {
+      $ret[ $id ] = [ "v4net_id" => $row['v4net_id'], "addr" => $row['addr'], "mask" => $row['mask'], "att_object" => $row['att_object'], "values" => [] ];
+    };
+    array_push($ret[ $id ]['values'], [$row['atv_id'], $row['atv_value']]);
+  };
+
 } else {
   error_exit("Unknown action '".$q['action']."'");
 };
