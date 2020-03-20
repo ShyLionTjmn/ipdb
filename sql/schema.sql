@@ -275,12 +275,10 @@ CREATE TABLE v4nets (
   v4net_fk_vlan_id	BIGINT UNSIGNED DEFAULT NULL,
   v4net_name	VARCHAR(256) NOT NULL DEFAULT '',
   v4net_descr	VARCHAR(1024) NOT NULL DEFAULT '',
-  v4net_fk_tp_id	BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4net_id),
   UNIQUE KEY (v4net_addr),
-  FOREIGN KEY (v4net_fk_tp_id) REFERENCES tps(tp_id) ON DELETE SET NULL,
   FOREIGN KEY (v4net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
 
@@ -320,12 +318,10 @@ CREATE TABLE v6nets (
   v6net_fk_vlan_id      BIGINT UNSIGNED DEFAULT NULL,
   v6net_name    VARCHAR(256) NOT NULL DEFAULT '',
   v6net_descr   VARCHAR(1024) NOT NULL DEFAULT '',
-  v6net_fk_tp_id	BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_user_id    BIGINT UNSIGNED,
   PRIMARY KEY (v6net_id),
   UNIQUE KEY (v6net_addr),
-  FOREIGN KEY (v6net_fk_tp_id) REFERENCES tps(tp_id) ON DELETE SET NULL,
   FOREIGN KEY (v6net_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL
 );
 
@@ -571,3 +567,28 @@ CREATE TABLE checks(
   check_subject_id BIGINT UNSIGNED NOT NULL COMMENT 'id of subject, 0 for global',
   UNIQUE KEY uk_checks(check_subject,check_subject_id)
 );
+
+CREATE TABLE v4oobs (
+  v4oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
+  v4oob_addr	INTEGER UNSIGNED NOT NULL,
+  v4oob_mask	TINYINT UNSIGNED NOT NULL,
+  v4oob_descr	VARCHAR(256) NOT NULL DEFAULT '',
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_user_id	BIGINT UNSIGNED,
+  PRIMARY KEY (v4oob_id),
+  UNIQUE KEY (v4oob_addr, v4oob_mask),
+  tc            TINYINT COMMENT 'v4 out of band nets for router_groups, etc...'
+);
+
+CREATE TABLE v6oobs (
+  v6oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
+  v6oob_addr	INTEGER UNSIGNED NOT NULL,
+  v6oob_mask	TINYINT UNSIGNED NOT NULL,
+  v6oob_descr	VARCHAR(256) NOT NULL DEFAULT '',
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_user_id	BIGINT UNSIGNED,
+  PRIMARY KEY (v6oob_id),
+  UNIQUE KEY (v6oob_addr, v6oob_mask),
+  tc            TINYINT COMMENT 'v6 out of band nets for router_groups, etc...'
+);
+

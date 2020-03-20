@@ -56,10 +56,8 @@ const TICK_att         	= "att";
 
 var att_objects=Array(
   { "text": "Система", "object": "system" },
-  { "text": "Сеть, общ.", "object": "net" },
   { "text": "Сеть, IPv4", "object": "v4net" },
   { "text": "Сеть, IPv6", "object": "v6net" },
-  { "text": "IP, общ.", "object": "ip" },
   { "text": "IP, IPv4", "object": "v4ip" },
   { "text": "IP, IPv6", "object": "v6ip" },
 );

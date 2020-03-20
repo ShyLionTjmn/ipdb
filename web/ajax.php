@@ -2227,7 +2227,7 @@ if($q['action'] == 'v4get_net') {
   ok_exit("done");
 } else if($q['action'] == 'add_att') {
   require_right(R_SUPER);
-  require_p('att_object', "/^(?:system|net|v4net|v6net|ip|v4ip|v6ip)$/");
+  require_p('att_object', "/^(?:system|v4net|v6net|v4ip|v6ip)$/");
 
   $prev_row=[];
 
