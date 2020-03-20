@@ -38,21 +38,22 @@ const NR_EDIT_NET       = 1 << 8;
 const RR_TAKE_NET       = 1 << 9;
 const RR_DENY_TAKE_IP   = 1 << 10; //also deny editing
 
-const TICK_v4r          = "v4r";
-const TICK_v6r          = "v6r";
-const TICK_v4net        = "v4net";
-const TICK_v6net        = "v6net";
-const TICK_vd           = "vd";
-const TICK_vlan         = "vlan";
-const TICK_vr           = "vr";
-const TICK_user         = "user";
-const TICK_group        = "group";
-const TICK_tp           = "tp";
-const TICK_ic           = "ic";
-const TICK_n4c          = "n4c";
-const TICK_n6c          = "n6c";
-const TICK_site         = "site";
-const TICK_att         	= "att";
+const CHECK_v4r          = "v4r";
+const CHECK_v6r          = "v6r";
+const CHECK_v4net        = "v4net";
+const CHECK_v6net        = "v6net";
+const CHECK_vd           = "vd";
+const CHECK_vlan         = "vlan";
+const CHECK_vr           = "vr";
+const CHECK_user         = "user";
+const CHECK_group        = "group";
+const CHECK_tp           = "tp";
+const CHECK_ic           = "ic";
+const CHECK_n4c          = "n4c";
+const CHECK_n6c          = "n6c";
+const CHECK_site         = "site";
+const CHECK_att          = "att";
+const CHECK_atv          = "atv";
 
 var att_objects=Array(
   { "text": "Система", "object": "system" },
@@ -1271,8 +1272,8 @@ function vlan_range_dialog(vr_id, donefunc) {
     buttons: [],
     close: function() {
       let _id=$(this).data("id");
-      if(_id != undefined) unwatch(TICK_vr, _id);
-      unwatch(TICK_group, 0);
+      if(_id != undefined) unwatch(CHECK_vr, _id);
+      unwatch(CHECK_group, 0);
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
@@ -1507,12 +1508,12 @@ function vlan_range_dialog(vr_id, donefunc) {
         $("DIV#vlan_range_rights").append( group_net_right_div(group_vlan_rights, data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | NR_TAKE_VLAN | NR_EDIT_VLAN | NR_FREE_VLAN) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
       };
 
-      watch(TICK_vr, vr_id);
-      watch(TICK_group, 0);
+      watch(CHECK_vr, vr_id);
+      watch(CHECK_group, 0);
     });
   } else {
     run_query({"action": "get_groups"}, function() {
-      watch(TICK_group, 0);
+      watch(CHECK_group, 0);
     });
   };
 
@@ -1897,7 +1898,7 @@ function vdomain_edit(vd_id, opt, donefunc) {
     buttons: [],
     close: function() {
       let _id=$(this).data("id");
-      if(_id != undefined) { unwatch(TICK_vd, _id); };
+      if(_id != undefined) { unwatch(CHECK_vd, _id); };
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -1979,7 +1980,7 @@ function vdomain_edit(vd_id, opt, donefunc) {
       dialog.find(".vd_max_num").val(ret_data['ok']['vd_max_num']);
       dialog.find(".vd_descr").val(ret_data['ok']['vd_descr']);
       dialog.data("data", ret_data['ok']);
-      watch(TICK_vd, vd_id);
+      watch(CHECK_vd, vd_id);
     });
   };
 
@@ -2024,10 +2025,10 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
     open: function() {
     },
     close: function() {
-      unwatch(TICK_vd, 0);
+      unwatch(CHECK_vd, 0);
       let _sel_id=$(this).find("SELECT.domain_sel").val();
       if(_sel_id != "") {
-        unwatch(TICK_vd, _sel_id);
+        unwatch(CHECK_vd, _sel_id);
       };
       $(this).dialog("destroy");
       $(this).remove();
@@ -2077,7 +2078,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
      let _prev_id=$(this).data("prev_id");
 
      if(_prev_id != undefined) {
-       if(_prev_id != "") unwatch(TICK_vd, _prev_id);
+       if(_prev_id != "") unwatch(CHECK_vd, _prev_id);
      };
      $(this).data("prev_id", _sel_id);
 
@@ -2108,7 +2109,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
          };
          table_div.scrollTop(scroll);
          _tbody.trigger("sel_change");
-         watch(TICK_vd, _sel_id);
+         watch(CHECK_vd, _sel_id);
        });
      } else { 
        _tbody.append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете домен") ) );
@@ -2275,7 +2276,7 @@ function vlans_list(presel_vlan_id, opt, donefunc) {
   };
 
   run_query(query, function(ret_data) {
-    watch(TICK_vd, 0);
+    watch(CHECK_vd, 0);
     ret_data['ok']['vds'].sort(function(a, b) {
       return String(a['vd_name']).localeCompare(String(b['vd_name']));
     });
@@ -2322,8 +2323,8 @@ function user_edit(user_id, opt, donefunc) {
     close: function() {
       let _id=$(this).data("id");
       if(_id != undefined) {
-        unwatch(TICK_user, _id);
-        unwatch(TICK_group, 0);
+        unwatch(CHECK_user, _id);
+        unwatch(CHECK_group, 0);
       };
       $(this).dialog("destroy");
       $(this).remove();
@@ -2646,8 +2647,8 @@ function user_edit(user_id, opt, donefunc) {
     
     groups_table.data("redo_data", data['ok']['user_groups']);
 
-    watch(TICK_user, user_id);
-    watch(TICK_group, 0);
+    watch(CHECK_user, user_id);
+    watch(CHECK_group, 0);
   });
 
   dialog.dialog(d);
@@ -2778,7 +2779,7 @@ function users_list(exclude_list, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
-      unwatch(TICK_user, 0);
+      unwatch(CHECK_user, 0);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -2849,7 +2850,7 @@ function users_list(exclude_list, opt, donefunc) {
       row.appendTo( table );
     };
 
-    watch(TICK_user, 0);
+    watch(CHECK_user, 0);
   });
 };
 
@@ -2888,9 +2889,9 @@ function group_edit(group_id, opt, donefunc) {
     close: function() {
       let _id=$(this).data("id");
       if(_id != undefined) {
-        unwatch(TICK_group, _id);
+        unwatch(CHECK_group, _id);
       };
-      unwatch(TICK_user, 0);
+      unwatch(CHECK_user, 0);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -3131,12 +3132,12 @@ function group_edit(group_id, opt, donefunc) {
        .data("redo_data", data['ok']['group_users'])
        .trigger("list_change")
       ;
-      watch(TICK_group, group_id);
-      watch(TICK_user, 0);
+      watch(CHECK_group, group_id);
+      watch(CHECK_user, 0);
     });
   } else {
     run_query({"action": "get_users"}, function() {
-      watch(TICK_user, 0);
+      watch(CHECK_user, 0);
     });
   };
 
@@ -3328,7 +3329,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
     //width: "auto",
     buttons: [],
     close: function() {
-      unwatch(TICK_group, 0);
+      unwatch(CHECK_group, 0);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -3449,7 +3450,7 @@ function groups_list(select_gr_ids, exclude_list, opt, donefunc) {
       let row=groups_list_row(group, donefunc);
       row.appendTo( tbody );
     };
-    watch(TICK_group, 0);
+    watch(CHECK_group, 0);
   });
 };
 
@@ -3639,8 +3640,8 @@ function v4_global_range_dialog(v4r_id, donefunc) {
     buttons: [],
     close: function() {
       let _id=$(this).data("id");
-      if(_id != undefined) unwatch(TICK_v4r, _id);
-      unwatch(TICK_group, 0);
+      if(_id != undefined) unwatch(CHECK_v4r, _id);
+      unwatch(CHECK_group, 0);
       $(".range_btn").hide();
       $(this).dialog("destroy");
       $(this).remove();
@@ -3867,12 +3868,12 @@ function v4_global_range_dialog(v4r_id, donefunc) {
         $("DIV#v4range_rights").append( group_net_right_div(group_net_rights, data['ok']['range_group_rights'][i], (NR_VIEWNAME | NR_VIEWOTHER | RR_TAKE_NET) >>> 0, { "allow_edit": has_right(R_SUPER), "allow_delete": has_right(R_SUPER)}) );
       };
 
-      watch(TICK_v4r, v4r_id);
-      watch(TICK_group, 0);
+      watch(CHECK_v4r, v4r_id);
+      watch(CHECK_group, 0);
     });
   } else {
     run_query({"action": "get_groups"}, function() {
-      watch(TICK_group, 0);
+      watch(CHECK_group, 0);
     });
   };
 
@@ -4827,13 +4828,13 @@ function v4get_net() {
 
   run_query({"action": "v4get_net", "net": $R['net'], "mask": $R['masklen']}, function(data) {
     if(data['ok']['type'] == "nav") {
-      watch(TICK_v4net, 0);
-      watch(TICK_v4r, 0);
+      watch(CHECK_v4net, 0);
+      watch(CHECK_v4r, 0);
       v4nav(data['ok']);
     } else {
-      watch(TICK_v4net, data['ok']['net']['v4net_id']);
-      //watch(TICK_v4net, 0);
-      //watch(TICK_v4r, 0);
+      watch(CHECK_v4net, data['ok']['net']['v4net_id']);
+      //watch(CHECK_v4net, 0);
+      //watch(CHECK_v4r, 0);
       v4view(data['ok']);
     };
   });
@@ -5094,7 +5095,7 @@ function edit_column(ic_id, donefunc) {
     buttons: [],
     close: function() {
       let _id=$(this).data("id");
-      if( _id != undefined ) unwatch(TICK_ic, _id);
+      if( _id != undefined ) unwatch(CHECK_ic, _id);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -5372,7 +5373,7 @@ function edit_column(ic_id, donefunc) {
       dialog.find(".ic_style").trigger("input");
       dialog.find(".ic_regexp").trigger("input");
 
-      watch(TICK_ic, ic_id);
+      watch(CHECK_ic, ic_id);
     });
   };
 
@@ -5409,7 +5410,7 @@ function edit_template(tp_id, donefunc) {
     buttons: [],
     close: function() {
       let _id=$(this).data("id");
-      if( _id != undefined ) unwatch(TICK_tp, _id);
+      if( _id != undefined ) unwatch(CHECK_tp, _id);
       $(this).dialog("destroy");
       $(this).remove();
     },
@@ -5484,7 +5485,7 @@ function edit_template(tp_id, donefunc) {
     run_query({"action": "get_template", "tp_id": tp_id}, function(data) {
       dialog.find(".tp_name").val(data['ok']['tp_name']);
       dialog.find(".tp_descr").val(data['ok']['tp_descr']);
-      watch(TICK_tp, tp_id);
+      watch(CHECK_tp, tp_id);
     });
   };
 
@@ -5573,10 +5574,10 @@ function templates_list(opt) {
     minWidth:1000,
     buttons: [],
     close: function() {
-      unwatch(TICK_tp, 0);
-      unwatch(TICK_ic, 0);
-      unwatch(TICK_n4c, 0);
-      unwatch(TICK_n6c, 0);
+      unwatch(CHECK_tp, 0);
+      unwatch(CHECK_ic, 0);
+      unwatch(CHECK_n4c, 0);
+      unwatch(CHECK_n6c, 0);
       let did=$(this).prop("id");
       $(".vlan_range_btn").hide();
       $(this).dialog("destroy");
@@ -5770,10 +5771,10 @@ function templates_list(opt) {
   dialog.dialog(d);
 
   run_query({"action": "get_templates"}, function(data) {
-    watch(TICK_tp, 0);
-    watch(TICK_ic, 0);
-    watch(TICK_n4c, 0);
-    watch(TICK_n6c, 0);
+    watch(CHECK_tp, 0);
+    watch(CHECK_ic, 0);
+    watch(CHECK_n4c, 0);
+    watch(CHECK_n6c, 0);
 
     for(let i=0; i < data['ok'].length; i++) {
       let row=get_template_list_row(data['ok'][i]);
@@ -5837,7 +5838,7 @@ function sites_list(presel, opt, donefunc) {
     minWidth:1000,
     buttons: [],
     close: function() {
-      unwatch(TICK_site, 0);
+      unwatch(CHECK_site, 0);
       let did=$(this).prop("id");
       $(this).dialog("destroy");
       $(this).remove();
@@ -6047,7 +6048,7 @@ function sites_list(presel, opt, donefunc) {
   ;
 
   run_query({"action": "get_sites"}, function(data) {
-    watch(TICK_site, 0);
+    watch(CHECK_site, 0);
     let ref=tree.jstree(true);
     if(data['ok'].length > 0) {
       while(true) {
@@ -6534,6 +6535,40 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
   return this;
 };
 
+function get_add_v4att_val_row(attop, default_value, multiple) {
+  let ret=$(TR).addClass("new_row").data("attop", attop)
+   .append( $(TD)
+     .append( $(INPUT).addClass("net")
+       .prop({"placeholder": "x.x.x.x/m"})
+     )
+   )
+   .append( $(TD)
+     .append( $(INPUT).addClass("name")
+     )
+   )
+   .append( $(TD)
+     .append( !multiple?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
+       .click(function() {
+       })
+     )
+     .append( $(DIV).addClass("values_list")
+       .append( $(DIV).addClass("value_row")
+         .append( $(INPUT).addClass("value").val(default_value)
+         )
+       )
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
+       .click(function() {
+       })
+     )
+   )
+  ;
+
+  return ret;
+};
+
 function attv4() {
   let this_w_id="w_"+getFuncName();
   if($("#"+this_w_id).length != 0) return;
@@ -6556,7 +6591,7 @@ function attv4() {
     maxWidth:1900,
     buttons: [],
     close: function() {
-      unwatch(TICK_att, 0);
+      unwatch(CHECK_att, 0);
       let did=$(this).prop("id");
       $(this).dialog("destroy");
       $(this).remove();
@@ -6586,10 +6621,13 @@ function attv4() {
        tbody.append( $(TR).append( $(TD).prop("colaspan", 99).text("Выберете ключ") ) );
        return;
      };
+
      run_query({"action": "get_attv4vals", "att_key": key}, function(data) {
+       tbody.append( get_add_v4att_val_row(true) );
        for(let i=0; i < data['ok'].length; i++) {
          tbody.append( get_attv4_row(data['ok'][i]) );
        };
+       tbody.append( get_add_v4att_val_row(false) );
      });
    })
   ;
@@ -6614,6 +6652,8 @@ function attv4() {
        .append( $(TH)
          .text("Значения")
        )
+       .append( $(TH)
+       )
      )
    )
    .append( $(TBODY).addClass("list")
@@ -6623,10 +6663,10 @@ function attv4() {
   run_query({"action": "get_v4atts"}, function(data) {
     for(let i=0; i < data['ok'].length; i++) {
       key_sel
-       .append( $(OPTION).text( data['ok'][i]['att_name'] ).val( data['ok'][i]['att_key'] ) )
+       .append( $(OPTION).text( data['ok'][i]['att_name'] ).val( data['ok'][i]['att_key'] ).data("data", data['ok'][i]) )
       ;
     };
-    watch(TICK_att, 0);
+    watch(CHECK_att, 0);
   });
 
   dialog.dialog(d);
@@ -6656,7 +6696,7 @@ function att_list() {
     close: function() {
       let object=$(this).find(".sel_att_object").val();
       if(object != "") {
-        unwatch(TICK_att, 0);
+        unwatch(CHECK_att, 0);
       };
       let did=$(this).prop("id");
       $(this).dialog("destroy");
@@ -6681,7 +6721,7 @@ function att_list() {
    .on("select change", function() {
      let prev_val=$(this).data("prev_val");
      if(prev_val != "" && prev_val != undefined) {
-       unwatch(TICK_att, 0);
+       unwatch(CHECK_att, 0);
      };
      $(this).data("prev_val", $(this).val());
      let _dialog=$(this).closest(".dialog_start");
@@ -6696,7 +6736,7 @@ function att_list() {
        for(let i=0; i < data['ok'].length; i++) {
          tbody.append( get_att_row(data['ok'][i]) );
        };
-       watch(TICK_att, 0);
+       watch(CHECK_att, 0);
      });
    })
   ;
