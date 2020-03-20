@@ -198,6 +198,18 @@ const v4len2mask=[
 var watchTimer;
 var watches={};
 
+function cidr_valid(cidr) {
+  let m=String(cidr).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+  if(m === null) return false;
+  if(m[1] > 255 || m[2] > 255 || m[3] > 255 || m[4] > 255 || m[5] > 32) return false;
+
+  let ip=v4oct2long(m[1], m[2], m[3], m[4]);
+  let net = (ip & v4len2mask[ Number(m[5]) ]) >>> 0;
+  if(ip != net) return false;
+
+  return true;
+};
+
 function getFuncName() {
    return getFuncName.caller.name
 };
@@ -6536,23 +6548,47 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
 };
 
 function get_add_v4att_val_row(attop, default_value, multiple) {
-  let ret=$(TR).addClass("new_row").data("attop", attop)
+  let ret=$(TR).addClass("new_row")
+   .data("attop", attop)
+   .append( $(TD)
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-globe")
+       .title("Незанятая сеть IPv4")
+     )
+   )
    .append( $(TD)
      .append( $(INPUT).addClass("net")
        .prop({"placeholder": "x.x.x.x/m"})
+       .css({"width": "10em"})
      )
    )
    .append( $(TD)
      .append( $(INPUT).addClass("name")
+       .css({"width": "25em"})
      )
    )
    .append( $(TD)
-     .append( !multiple?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
-       .click(function() {
-       })
-     )
      .append( $(DIV).addClass("values_list")
        .append( $(DIV).addClass("value_row")
+         .css({"white-space": "pre"})
+         .append( !multiple?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
+           .css({"margin-right": "0.5em"})
+           .click(function() {
+             let row=$(this).closest(".new_row");
+             row.find(".values_list")
+              .append( $(DIV).addClass("value_row")
+                .css({"white-space": "pre"})
+                .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-minus").addClass("ui-button")
+                  .css({"margin-right": "0.5em"})
+                  .click(function() {
+                    $(this).closest(".value_row").remove();
+                  })
+                )
+                .append( $(INPUT).addClass("value").focus()
+                )
+              )
+             ;
+           })
+         )
          .append( $(INPUT).addClass("value").val(default_value)
          )
        )
@@ -6561,6 +6597,49 @@ function get_add_v4att_val_row(attop, default_value, multiple) {
    .append( $(TD)
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-plusthick").addClass("ui-button")
        .click(function() {
+         let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
+         if(key_data == undefined) { error_at(); return; };
+         let row=$(this).closest(".new_row");
+         let net_input=row.find(".net");
+         if(net_input.length != 1) { error_at(); return; };
+
+         let net=net_input.val();
+         if(String(net).match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+           net += "/32";
+         };
+
+         if(!cidr_valid(net)) {
+           net_input.animateHighlight();
+           return;
+         };
+
+         let name_input=row.find(".name");
+         if(name_input.length != 1) { error_at(); return; };
+
+         let values=Array();
+
+         let r;
+         try {
+           r = new RegExp(key_data['att_regex']);
+         } catch(e) {
+           error_at(e);
+           return;
+         };
+
+         let valid=true;
+
+         row.find(".values_list").find(".value").each(function() {
+           let _val=$(this).val();
+           if( !r.test( _val ) ) {
+             $(this).animateHighlight();
+             valid=false;
+             return false;
+           };
+           values.push(_val);
+         });
+
+         if(values.length == 0) { error_at(); return; };
+         if(!valid) return;
        })
      )
    )
@@ -6592,6 +6671,10 @@ function attv4() {
     buttons: [],
     close: function() {
       unwatch(CHECK_att, 0);
+      let sel_val=$(this).find(".sel_att_key").val();
+      if(sel_val != undefined && sel_val != "") {
+        unwatch(CHECK_atv, 0);
+      };
       let did=$(this).prop("id");
       $(this).dialog("destroy");
       $(this).remove();
@@ -6613,6 +6696,14 @@ function attv4() {
    .addClass("sel_att_key")
    .append( $(OPTION).text("Выберете ключ ...").val("") )
    .on("select change", function() {
+     let prev_val=$(this).data("prev_val");
+     if(prev_val != "" && prev_val != undefined) {
+       unwatch(CHECK_atv, 0);
+     };
+     $(this).data("prev_val", $(this).val());
+     let _sel=$(this);
+     let _o = _sel.find("OPTION:selected");
+     let _d = _o.data("data");
      let _dialog=$(this).closest(".dialog_start");
      let tbody=_dialog.find(".list");
      tbody.empty();
@@ -6623,11 +6714,13 @@ function attv4() {
      };
 
      run_query({"action": "get_attv4vals", "att_key": key}, function(data) {
-       tbody.append( get_add_v4att_val_row(true) );
+       tbody.append( get_add_v4att_val_row(true, _d['att_default'], _d['att_multiple']) );
        for(let i=0; i < data['ok'].length; i++) {
          tbody.append( get_attv4_row(data['ok'][i]) );
        };
-       tbody.append( get_add_v4att_val_row(false) );
+       tbody.append( get_add_v4att_val_row(false, _d['att_default'], _d['att_multiple']) );
+
+       watch(CHECK_atv, 0);
      });
    })
   ;
@@ -6644,7 +6737,10 @@ function attv4() {
    .append( $(THEAD)
      .append( $(TR)
        .append( $(TH)
-         .text("Сеть")
+         .text("Тип")
+       )
+       .append( $(TH)
+         .text("Сеть / IP")
        )
        .append( $(TH)
          .text("Описание")
@@ -6667,6 +6763,9 @@ function attv4() {
       ;
     };
     watch(CHECK_att, 0);
+    if(data['ok'].length > 0) {
+      key_sel.val(data['ok'][0]['att_key']).trigger("select");
+    };
   });
 
   dialog.dialog(d);
