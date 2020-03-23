@@ -6547,7 +6547,7 @@ $.fn.att_click_edit = function(prop_name, style, validate_func) {
   return this;
 };
 
-function get_add_v4att_val_row(attop, default_value, multiple) {
+function get_add_v4att_val_row(attop, key_data) {
   let ret=$(TR).addClass("new_row")
    .data("attop", attop)
    .append( $(TD)
@@ -6570,9 +6570,11 @@ function get_add_v4att_val_row(attop, default_value, multiple) {
      .append( $(DIV).addClass("values_list")
        .append( $(DIV).addClass("value_row")
          .css({"white-space": "pre"})
-         .append( !multiple?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
+         .append( key_data['att_multiple'] == 0?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
            .css({"margin-right": "0.5em"})
            .click(function() {
+             let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
+             if(key_data == undefined) { error_at(); return; };
              let row=$(this).closest(".new_row");
              row.find(".values_list")
               .append( $(DIV).addClass("value_row")
@@ -6584,12 +6586,14 @@ function get_add_v4att_val_row(attop, default_value, multiple) {
                   })
                 )
                 .append( $(INPUT).addClass("value").focus()
+                  .title(key_data['att_regex'])
                 )
               )
              ;
            })
          )
-         .append( $(INPUT).addClass("value").val(default_value)
+         .append( $(INPUT).addClass("value").val(key_data['att_default'])
+           .title( key_data['att_regex'] )
          )
        )
      )
@@ -6630,7 +6634,7 @@ function get_add_v4att_val_row(attop, default_value, multiple) {
 
          row.find(".values_list").find(".value").each(function() {
            let _val=$(this).val();
-           if( !r.test( _val ) ) {
+           if( !r.test( _val ) || in_array(values, _val) ) {
              $(this).animateHighlight();
              valid=false;
              return false;
@@ -6714,11 +6718,11 @@ function attv4() {
      };
 
      run_query({"action": "get_attv4vals", "att_key": key}, function(data) {
-       tbody.append( get_add_v4att_val_row(true, _d['att_default'], _d['att_multiple']) );
+       tbody.append( get_add_v4att_val_row(true, _d) );
        for(let i=0; i < data['ok'].length; i++) {
          tbody.append( get_attv4_row(data['ok'][i]) );
        };
-       tbody.append( get_add_v4att_val_row(false, _d['att_default'], _d['att_multiple']) );
+       tbody.append( get_add_v4att_val_row(false, _d) );
 
        watch(CHECK_atv, 0);
      });
