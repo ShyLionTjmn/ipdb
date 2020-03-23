@@ -6638,8 +6638,8 @@ function get_add_v4att_val_row(attop, default_value, multiple) {
            values.push(_val);
          });
 
-         if(values.length == 0) { error_at(); return; };
          if(!valid) return;
+         if(values.length == 0) { error_at(); return; };
        })
      )
    )
