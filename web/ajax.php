@@ -2326,12 +2326,15 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit($ret);
 
-} else if($q['action'] == 'add_v4oob_val') {
+} else if($q['action'] == 'add_v4oob') {
   require_right(R_SUPER);
   require_p('att_key');
-  if(!preg_match('v4net', '/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/', $m) || $m[1] > 255 || $m[2] > 255 || $m[3] > 255 || $m[4] > 255 || $m[5] > 32) {
+  require_p('v4oob_descr');
+  if(!preg_match('/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/', $q['v4net'], $m) || $m[1] > 255 || $m[2] > 255 || $m[3] > 255 || $m[4] > 255 || $m[5] > 32) {
     error_exit("Bad v4net");
   };
+
+  $prev_row=[];
 
   $long_net=ip2long($m[1].".".$m[2].".".$m[3].".".$m[4]);
   if($long_net === FALSE) { error_exit("Bad net"); };
@@ -2341,6 +2344,19 @@ if($q['action'] == 'v4get_net') {
   if($net_info['net'] != $long_net) {
     error_exit("Bad net/mask");
   };
+
+  $key_row=return_one("SELECT * FROM atts WHERE att_object='v4oob' AND att_key=".mq($q['att_key']), TRUE);
+
+  $query="INSERT INTO v4oobs SET";
+  $query .= " ts=$time";
+  $query .= ",$set_fk_user_id";
+  $query .= cp('v4oob_descr');
+  $query .= ",v4oob_addr=".mq($long_net);
+  $query .= ",v4oob_mask=".mq($masklen);
+
+  run_query($query);
+
+  $q['v4oob_id']=mysqli_insert_id($db);
 
 } else {
   error_exit("Unknown action '".$q['action']."'");

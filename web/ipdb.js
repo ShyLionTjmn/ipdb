@@ -6647,9 +6647,14 @@ function get_add_v4att_val_row(attop, key_data) {
          if(!valid) return;
          if(values.length == 0) { error_at(); return; };
 
-         let query={ "action": "add_v4oob_val", "att_key": att_key,
-           "v4net": net, "values": values
+         let query={ "action": "add_v4oob", "att_key": att_key,
+           "v4net": net, "values": values, "v4oob_descr": name_input.val()
          };
+
+         run_query(query, function(data) {
+           let new_row=get_attv4_row(data['ok']);
+           let _attop=row.data("attop");
+         });
        })
      )
    )
