@@ -2321,7 +2321,26 @@ if($q['action'] == 'v4get_net') {
     array_push($ret[ $id ]['values'], [$row['atv_id'], $row['atv_value']]);
   };
 
+  check_push(CHECK_att, 0);
+  check_push(CHECK_atv, 0);
+
   ok_exit($ret);
+
+} else if($q['action'] == 'add_v4oob_val') {
+  require_right(R_SUPER);
+  require_p('att_key');
+  if(!preg_match('v4net', '/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/', $m) || $m[1] > 255 || $m[2] > 255 || $m[3] > 255 || $m[4] > 255 || $m[5] > 32) {
+    error_exit("Bad v4net");
+  };
+
+  $long_net=ip2long($m[1].".".$m[2].".".$m[3].".".$m[4]);
+  if($long_net === FALSE) { error_exit("Bad net"); };
+  $masklen= $m[5] + 0;
+  $net_info=get_closest_v4netinfo($long_net, $masklen);
+
+  if($net_info['net'] != $long_net) {
+    error_exit("Bad net/mask");
+  };
 
 } else {
   error_exit("Unknown action '".$q['action']."'");

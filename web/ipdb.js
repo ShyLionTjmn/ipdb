@@ -6607,6 +6607,8 @@ function get_add_v4att_val_row(attop, key_data) {
          let net_input=row.find(".net");
          if(net_input.length != 1) { error_at(); return; };
 
+         let att_key=$(this).closest(".dialog_start").find(".sel_att_key").val();
+
          let net=net_input.val();
          if(String(net).match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
            net += "/32";
@@ -6644,6 +6646,10 @@ function get_add_v4att_val_row(attop, key_data) {
 
          if(!valid) return;
          if(values.length == 0) { error_at(); return; };
+
+         let query={ "action": "add_v4oob_val", "att_key": att_key,
+           "v4net": net, "values": values
+         };
        })
      )
    )
