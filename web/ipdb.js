@@ -6619,6 +6619,10 @@ function get_add_v4att_val_row(attop, key_data) {
            return;
          };
 
+         let m=String(net).match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/(\d+)$/);
+         let net_addr=v4ip2long(m[1]);
+         let masklen=Number(m[2]);
+
          let name_input=row.find(".name");
          if(name_input.length != 1) { error_at(); return; };
 
