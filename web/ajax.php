@@ -2326,15 +2326,28 @@ if($q['action'] == 'v4get_net') {
 
   ok_exit($ret);
 
-} else if($q['action'] == 'add_v4oob') {
+} else if($q['action'] == 'set_v4oob') {
   require_right(R_SUPER);
   require_p('att_key');
   require_p('v4oob_descr');
   if(!preg_match('/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/', $q['v4net'], $m) || $m[1] > 255 || $m[2] > 255 || $m[3] > 255 || $m[4] > 255 || $m[5] > 32) {
     error_exit("Bad v4net");
   };
+  require_p('values');
+  if(!is_array($q['values'])) {
+    error_exit("values is not array");
+  };
 
-  $prev_row=[];
+  foreach($q['values'] as $value) {
+    if(!is_scalar($value)) {
+      error_exit("Non scalar value");
+    };
+  };
+
+  if(count($q['values']) == 0) {
+    error_exit("Empty values");
+  };
+
 
   $long_net=ip2long($m[1].".".$m[2].".".$m[3].".".$m[4]);
   if($long_net === FALSE) { error_exit("Bad net"); };
@@ -2347,16 +2360,53 @@ if($q['action'] == 'v4get_net') {
 
   $key_row=return_one("SELECT * FROM atts WHERE att_object='v4oob' AND att_key=".mq($q['att_key']), TRUE);
 
-  $query="INSERT INTO v4oobs SET";
-  $query .= " ts=$time";
-  $query .= ",$set_fk_user_id";
-  $query .= cp('v4oob_descr');
-  $query .= ",v4oob_addr=".mq($long_net);
-  $query .= ",v4oob_mask=".mq($masklen);
+  if($key_row['att_multiple'] == 0 && count($q['values']) > 1) {
+    error_exit("Multiple values for non-multiple key");
+  };
 
-  run_query($query);
+  $prev_row=return_one("SELECT * FROM v4oobs WHERE v4oob_addr=".mq($long_net)." AND v4oob_mask=".mq($masklen));
+  if($prev_row !== NULL) {
+    $q['v4oob_id'] = $prev_row['v4oob_id'];
 
-  $q['v4oob_id']=mysqli_insert_id($db);
+    $prev_row['values']=return_array("SELECT atv_value FROM atvs WHERE atv_fk_att_id=".mq($key_row['att_id'])." AND atv_object_id=".mq($q['v4oob_id'])." ORDER BY atv_index");
+    run_query("DELETE FROM atvs WHERE atv_fk_att_id=".mq($key_row['att_id'])." AND atv_object_id=".mq($q['v4oob_id']));
+
+  } else {
+    $prev_row=[];
+
+    $query="INSERT INTO v4oobs SET";
+    $query .= " ts=$time";
+    $query .= ",$set_fk_user_id";
+    $query .= cp('v4oob_descr');
+    $query .= ",v4oob_addr=".mq($long_net);
+    $query .= ",v4oob_mask=".mq($masklen);
+
+    run_query($query);
+
+    $q['v4oob_id']=mysqli_insert_id($db);
+  };
+
+  $index=0;
+
+  foreach($q['values'] as $value) {
+    $query = "INSERT INTO atvs SET";
+    $query .= " ts=$time";
+    $query .= ",$set_fk_user_id";
+    $query .= ",atv_index=$index";
+    $query .= ",atv_value=".mq($value);
+    $query .= ",atv_fk_att_id=".mq($key_row['att_id']);
+    $query .= ",atv_object_id=".mq($q['v4oob_id']);
+    run_query($query);
+    $index ++;
+  };
+
+  $new_row=return_one("SELECT * FROM v4oobs WHERE v4oob_id=".mq($q['v4oob_id']), TRUE);
+  $new_row['values'] = return_array("SELECT atv_value FROM atvs WHERE atv_fk_att_id=".mq($key_row['att_id'])." AND atv_object_id=".mq($q['v4oob_id'])." ORDER BY atv_index"); 
+
+  check_tick(CHECK_v4oob, $q['v4oob_id']);
+  check_tick(CHECK_atv, 0);
+
+  audit_log("v4oob", $q['v4oob_id'], "v4oobs,atvs[att_key=".$key_row['att_key']."]", $q['action'], $prev_row, $new_row);
 
 } else {
   error_exit("Unknown action '".$q['action']."'");
