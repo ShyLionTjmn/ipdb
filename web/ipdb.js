@@ -6741,7 +6741,7 @@ function get_attv4_row(data, key_data) {
            .click(function() {
              let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
              if(key_data == undefined) { error_at(); return; };
-             let row=$(this).closest(".new_row");
+             let row=$(this).closest(".row");
              row.find(".values_list")
               .append( $(DIV).addClass("value_row")
                 .css({"white-space": "pre"})
@@ -6758,7 +6758,7 @@ function get_attv4_row(data, key_data) {
              ;
            })
          )
-         .append( $(INPUT).addClass("value").val(key_data['att_default'])
+         .append( $(INPUT).addClass("value").val(data['value'][0])
            .title( key_data['att_regex'] )
          )
        )
@@ -6769,7 +6769,7 @@ function get_attv4_row(data, key_data) {
        .click(function() {
          let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
          if(key_data == undefined) { error_at(); return; };
-         let row=$(this).closest(".new_row");
+         let row=$(this).closest(".row");
          let net_input=row.find(".net");
          if(net_input.length != 1) { error_at(); return; };
 
