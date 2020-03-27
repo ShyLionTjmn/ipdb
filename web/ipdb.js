@@ -54,6 +54,8 @@ const CHECK_n6c          = "n6c";
 const CHECK_site         = "site";
 const CHECK_att          = "att";
 const CHECK_atv          = "atv";
+const CHECK_v4oob        = "v4oob";
+const CHECK_v6oob        = "v6oob";
 
 var att_objects=Array(
   { "text": "Система", "object": "system" },
@@ -6651,11 +6653,176 @@ function get_add_v4att_val_row(attop, key_data) {
          if(!valid) return;
          if(values.length == 0) { error_at(); return; };
 
-         let query={ "action": "add_v4oob", "att_key": att_key,
+         let query={ "action": "set_v4oob", "att_key": att_key,
            "v4net": net, "values": values, "v4oob_descr": name_input.val()
          };
 
          run_query(query, function(data) {
+           throw("todo");
+           let new_row=get_attv4_row(data['ok']);
+           let _attop=row.data("attop");
+         });
+       })
+     )
+   )
+  ;
+
+  return ret;
+};
+
+function get_attv4_row(data, key_data) {
+  let ret=$(TR).addClass("row")
+   .data("data", data)
+  ;
+
+  if(data['att_object'] == 'v4oob') {
+    ret
+     .append( $(TD)
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-globe")
+         .title("Незанятая сеть IPv4")
+       )
+     )
+    ;
+  } else if(data['att_object'] == 'v4net') {
+    ret
+     .append( $(TD)
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-sitemap")
+         .title("Сеть IPv4")
+       )
+     )
+    ;
+  } else if(data['att_object'] == 'v4ip') {
+    ret
+     .append( $(TD)
+       .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-sitemap")
+         .title("Адрес IPv4")
+       )
+     )
+    ;
+  } else {
+    throw("Error");
+    return;
+  };
+
+  ret
+   .append( $(TD)
+     .append( $(LABEL).text(v4long2ip(data['addr'])+"/"+data['mask'])
+     )
+   )
+  ;
+
+  if(data['att_object'] == 'v4oob') {
+    ret
+     .append( $(TD)
+       .append( $(INPUT).addClass("name")
+         .css({"width": "25em"})
+         .val(data['name'])
+       )
+     )
+    ;
+  } else {
+    ret
+     .append( $(TD)
+       .append( $(LABEL)
+         .css({"width": "25em"})
+         .text(data['name'])
+       )
+     )
+    ;
+  };
+
+  ret
+   .append( $(TD)
+     .append( $(DIV).addClass("values_list")
+       .append( $(DIV).addClass("value_row")
+         .css({"white-space": "pre"})
+         .append( key_data['att_multiple'] == 0?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
+           .css({"margin-right": "0.5em"})
+           .click(function() {
+             let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
+             if(key_data == undefined) { error_at(); return; };
+             let row=$(this).closest(".new_row");
+             row.find(".values_list")
+              .append( $(DIV).addClass("value_row")
+                .css({"white-space": "pre"})
+                .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-minus").addClass("ui-button")
+                  .css({"margin-right": "0.5em"})
+                  .click(function() {
+                    $(this).closest(".value_row").remove();
+                  })
+                )
+                .append( $(INPUT).addClass("value").focus()
+                  .title(key_data['att_regex'])
+                )
+              )
+             ;
+           })
+         )
+         .append( $(INPUT).addClass("value").val(key_data['att_default'])
+           .title( key_data['att_regex'] )
+         )
+       )
+     )
+   )
+   .append( $(TD)
+     .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-save").addClass("ui-button")
+       .click(function() {
+         let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
+         if(key_data == undefined) { error_at(); return; };
+         let row=$(this).closest(".new_row");
+         let net_input=row.find(".net");
+         if(net_input.length != 1) { error_at(); return; };
+
+         let att_key=$(this).closest(".dialog_start").find(".sel_att_key").val();
+
+         let net=net_input.val();
+         if(String(net).match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+           net += "/32";
+         };
+
+         if(!cidr_valid(net)) {
+           net_input.animateHighlight();
+           return;
+         };
+
+         let m=String(net).match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/(\d+)$/);
+         let net_addr=v4ip2long(m[1]);
+         let masklen=Number(m[2]);
+
+         let name_input=row.find(".name");
+         if(name_input.length != 1) { error_at(); return; };
+
+         let values=Array();
+
+         let r;
+         try {
+           r = new RegExp(key_data['att_regex']);
+         } catch(e) {
+           error_at(e);
+           return;
+         };
+
+         let valid=true;
+
+         row.find(".values_list").find(".value").each(function() {
+           let _val=$(this).val();
+           if( !r.test( _val ) || in_array(values, _val) ) {
+             $(this).animateHighlight();
+             valid=false;
+             return false;
+           };
+           values.push(_val);
+         });
+
+         if(!valid) return;
+         if(values.length == 0) { error_at(); return; };
+
+         let query={ "action": "set_v4oob", "att_key": att_key,
+           "v4net": net, "values": values, "v4oob_descr": name_input.val()
+         };
+
+         run_query(query, function(data) {
+           throw("todo");
            let new_row=get_attv4_row(data['ok']);
            let _attop=row.data("attop");
          });
@@ -6734,8 +6901,16 @@ function attv4() {
 
      run_query({"action": "get_attv4vals", "att_key": key}, function(data) {
        tbody.append( get_add_v4att_val_row(true, _d) );
-       for(let i=0; i < data['ok'].length; i++) {
-         tbody.append( get_attv4_row(data['ok'][i]) );
+       let atv_keys=keys(data['ok']);
+
+       atv_keys.sort(function(a,b) {
+         if(data['ok'][a]['addr'] != data['ok'][b]['addr']) return Number(data['ok'][a]['addr']) - Number(data['ok'][b]['addr']);
+         return Number(data['ok'][a]['mask']) - Number(data['ok'][b]['mask']);
+       });
+
+       for(let i=0; i < atv_keys.length; i++) {
+         let atv_key=atv_keys[i];
+         tbody.append( get_attv4_row(data['ok'][atv_key], _d) );
        };
        tbody.append( get_add_v4att_val_row(false, _d) );
 

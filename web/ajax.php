@@ -58,6 +58,8 @@ const CHECK_n6c		= "n6c";
 const CHECK_site	= "site";
 const CHECK_att		= "att";
 const CHECK_atv		= "atv";
+const CHECK_v4oob	= "v4oob";
+const CHECK_v6oob	= "v6oob";
 
 const user_hide=Array("user_name", "user_username", "user_phone", "user_email", "user_sub", "user_last_login");
 
@@ -2407,6 +2409,23 @@ if($q['action'] == 'v4get_net') {
   check_tick(CHECK_atv, 0);
 
   audit_log("v4oob", $q['v4oob_id'], "v4oobs,atvs[att_key=".$key_row['att_key']."]", $q['action'], $prev_row, $new_row);
+
+  $query="SELECT v4oob_id as id, v4oob_addr as addr, v4oob_mask as mask, v4oob_descr as name";
+  $query .= " FROM v4oobs WHERE v4oob_id=".mq($q['v4oob_id']);
+
+  $ret=return_one($query, TRUE);
+  $ret['att_object'] = $key_row['att_object'];
+  $ret['values'] = [];
+
+  $query="SELECT atv_id, atv_value";
+  $query .=" FROM atvs WHERE atv_fk_att_id=".mq($key_row['att_id'])." AND atv_object_id=".mq($q['v4oob_id'])." ORDER BY atv_index";
+  $res=return_query($query);
+
+  foreach($res as $row) {
+    array_push($ret['values'], [$row['atv_id'], $row['atv_value']]);
+  };
+
+  ok_exit($ret);
 
 } else {
   error_exit("Unknown action '".$q['action']."'");
