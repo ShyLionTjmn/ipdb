@@ -6717,6 +6717,7 @@ function get_attv4_row(data, key_data) {
        .append( $(INPUT).addClass("name")
          .css({"width": "25em"})
          .val(data['name'])
+         .on("input", function() { $(this).closest(".row").addClass("unsaved"); })
        )
      )
     ;
@@ -6731,9 +6732,11 @@ function get_attv4_row(data, key_data) {
     ;
   };
 
+  let vl;
+
   ret
    .append( $(TD)
-     .append( $(DIV).addClass("values_list")
+     .append( vl=$(DIV).addClass("values_list")
        .append( $(DIV).addClass("value_row")
          .css({"white-space": "pre"})
          .append( key_data['att_multiple'] == 0?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-plus").addClass("ui-button")
@@ -6756,32 +6759,54 @@ function get_attv4_row(data, key_data) {
                 )
               )
              ;
+             row.addClass("unsaved");
            })
          )
-         .append( $(INPUT).addClass("value").val(data['value'][0])
+         .append( $(INPUT).addClass("value").val(data['values'][0][1]).data("id", data['values'][0][0])
            .title( key_data['att_regex'] )
+           .on("input", function() { $(this).closest(".row").addClass("unsaved"); })
          )
        )
      )
    )
+  ;
+
+  for(let i=1; i < data['values'].length; i++) {
+    vl
+     .append( $(DIV).addClass("value_row")
+       .css({"white-space": "pre"})
+       .append( key_data['att_multiple'] == 0?$(LABEL):$(LABEL).addClass("ui-icon").addClass("ui-icon-minus").addClass("ui-button")
+         .css({"margin-right": "0.5em"})
+         .click(function() {
+           //let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
+           //if(key_data == undefined) { error_at(); return; };
+           $(this).closest(".row").addClass("unsaved");
+           $(this).closest(".value_row").remove();
+         })
+       )
+       .append( $(INPUT).addClass("value").val(data['values'][i][1]).data("id", data['values'][i][0])
+         .title( key_data['att_regex'] )
+         .on("input", function() { $(this).closest(".row").addClass("unsaved"); })
+       )
+     )
+    ;
+  };
+
+  ret
    .append( $(TD)
      .append( $(LABEL).addClass("ui-icon").addClass("ui-icon-save").addClass("ui-button")
        .click(function() {
          let key_data=$(this).closest(".dialog_start").find(".sel_att_key").find("OPTION:selected").data("data");
          if(key_data == undefined) { error_at(); return; };
          let row=$(this).closest(".row");
-         let net_input=row.find(".net");
-         if(net_input.length != 1) { error_at(); return; };
-
          let att_key=$(this).closest(".dialog_start").find(".sel_att_key").val();
 
-         let net=net_input.val();
-         if(String(net).match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
-           net += "/32";
-         };
+         let row_data=row.data("data");
+
+         let net=v4long2ip( row_data['addr'] )+"/"+row_data['mask'];
 
          if(!cidr_valid(net)) {
-           net_input.animateHighlight();
+           error_at();
            return;
          };
 
