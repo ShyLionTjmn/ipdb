@@ -1,0 +1,2454 @@
+'use strict';
+
+var rights = {};
+rights[R_NAME] = {
+  'label': 'ПрИмнСет',
+  'descr': 'Просмотр имени сети в списке сетей',
+  'requred_by': [R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET],
+  'used_in': ['ext_net_range'],
+};
+rights[R_VIEW_NET_INFO] = {
+  'label': 'ПрИнфСет',
+  'descr': 'Просмотр информации о сети, кроме списка IP адресов',
+  'requred_by': [R_MANAGE_NET],
+  'used_in': ['ext_net_range', 'net_acl'],
+};
+rights[R_VIEW_NET_IPS] = {
+  'label': 'ПрАдрVLN',
+  'descr': 'Просмотр IP адресов или VLAN-ов',
+  'requred_by': [R_EDIT_IP_VLAN, R_MANAGE_NET],
+  'used_in': ['ext_net_range', 'net_acl', 'vlan_range'],
+};
+rights[R_EDIT_IP_VLAN] = {
+  'label': 'ИзмАдрVL',
+  'descr': 'Занятие, редактирование, освобождение IP адресов или VLAN-ов',
+  'requred_by': [R_MANAGE_NET],
+  'used_in': ['ext_net_range', 'net_acl', 'vlan_range', 'int_net_range'],
+};
+rights[R_MANAGE_NET] = {
+  'label': 'ИзмнСети',
+  'descr': 'Занятие, редактирование, освобождение сети',
+  'requred_by': [],
+};
+rights[R_IGNORE_R_DENY] = {
+  'label': 'ИгнорЗпр',
+  'descr': 'Игнорировать запрет в диапазонах',
+  'requred_by': [],
+  'used_in': ['ext_net_range', 'net_acl'],
+};
+rights[R_DENYIP] = {
+  'label': 'ЗпртРедт',
+  'descr': 'Запрет занимать, редактировать, удалять IP/VLAN в диапазоне',
+  'requred_by': [],
+  'used_in': ['int_net_range', 'vlan_range'],
+};
+
+var body;
+var workarea;
+var fixed_div;
+var user_self_sub="none";
+var user_self_id;
+
+var g_range_bar_width = 5;
+var g_range_bar_margin = 5;
+
+var global_mouse_down=false;
+
+var g_sorting = false;
+var g_autosave = true;
+var g_autosave_changes = 0;
+var g_autosave_timeout = 500; //ms
+
+var g_show_net_info = false;
+
+var g_edit_all = false;
+
+var initial_g_name = "usr_netapp_ipdb_";
+
+var g_default_range_style = {"color": "black"};
+
+var g_data; //resets by main pages
+
+
+function gen_code() {
+  let code_chars="qwertyuiopasdfghjkzxcvbnmQWERTYUPASDFGHJKLZXCVBNM23456789";
+  let code = "";
+
+  for(let i=0; i < 32; i++) {
+    let idx = Math.floor(Math.random() * code_chars.length);
+    code += code_chars.charAt(idx);
+  };
+
+  return code;
+};
+
+function debugLog(text) {
+  if(!DEBUG) return;
+
+  $("#debug_win").text( $("#debug_win").text() + "\n" + text);
+  $("#debug_win").scrollTop($("#debug_win").prop("scrollHeight"));
+};
+
+function save_local(key, value) {
+  localStorage.setItem(key+"_"+user_self_sub, JSON.stringify(value));
+};
+
+function del_local(key) {
+  if(typeof(key) === 'string') {
+    localStorage.removeItem(key+"_"+user_self_sub);
+  } else if(key instanceof RegExp) {
+    let keys=[];
+    for(let i=0; i < localStorage.length; i++) {
+      if(localStorage.key(i).match(key)) {
+        keys.push(localStorage.key(i));
+      };
+    };
+    for(let i in keys) {
+      localStorage.removeItem(keys[i]);
+    };
+  };
+};
+
+function get_local(key, on_error=undefined) {
+  let js=localStorage.getItem(key+"_"+user_self_sub);
+  if(js == undefined || js == "null") return on_error;
+  try {
+    return JSON.parse(localStorage.getItem(key+"_"+user_self_sub));
+  } catch(e) {
+    return on_error;
+  };
+};
+
+function sort_by_string_key(arr, obj, key, asc=true) {
+  if(asc) {
+    arr.sort(function(a, b) {
+      return String(obj[a][key]).toLowerCase().localeCompare( String(obj[b][key]).toLowerCase() );
+    });
+  } else {
+    arr.sort(function(b, a) {
+      return String(obj[a][key]).toLowerCase().localeCompare( String(obj[b][key]).toLowerCase() );
+    });
+  };
+};
+
+function sort_by_number_key(arr, obj, key, asc=true) {
+  if(asc) {
+    arr.sort(function(a, b) {
+      return num_compare(String(obj[a][key]).toLowerCase(), String(obj[b][key]).toLowerCase());
+    });
+  } else {
+    arr.sort(function(b, a) {
+      return num_compare(String(obj[a][key]).toLowerCase(), String(obj[b][key]).toLowerCase());
+    });
+  };
+};
+
+function num_compare(a, b) {
+  let aa=a.split(/(\d+)/);
+  let ba=b.split(/(\d+)/);
+
+  while(aa.length > 0 && ba.length > 0) {
+    let av=aa.shift();
+    let bv=ba.shift();
+    if(isNaN(av) && !isNaN(bv)) {
+      return 1;
+    } else if(isNaN(bv) && !isNaN(av)) {
+      return -1;
+    } else if(isNaN(av) && isNaN(bv)) {
+      let cres=av.localeCompare(bv);
+      if(cres != 0) return cres;
+    } else {
+      if(Number(av) > Number(bv)) {
+        return 1;
+      } else if(Number(av) < Number(bv)) {
+        return -1;
+      };
+    };
+  };
+
+  if(aa.length == ba.length) {
+    return 0;
+  } else if(aa.length > ba.length) {
+    return 1;
+  } else {
+    return -1;
+  };
+};
+
+function wdhm(time) {
+  time=Math.floor(time);
+  let w=Math.floor(time / (7*24*60*60));
+  time = time - w*(7*24*60*60);
+
+  let d=Math.floor(time / (24*60*60));
+  time = time - d*(24*60*60);
+
+  let h=Math.floor(time / (60*60));
+  time = time - h*(60*60);
+
+  let m=Math.floor(time / 60);
+  let s=time - m*60;
+
+  let ret="";
+  if(w > 0) {
+    ret = String(w)+" н. ";
+  };
+  if(d > 0 || w > 0) {
+    ret += String(d)+" д. ";
+  };
+  if(h > 0 || d > 0 || w > 0) {
+    ret += String(h)+" ч. ";
+  };
+  if(m > 0 || h > 0 || d > 0 || w > 0) {
+    ret += String(m)+" м. ";
+  };
+
+  ret += String(s)+" с.";
+
+  return ret;
+};
+
+const v4len2mask=[
+  0, //0.0.0.0
+  2147483648, //128.0.0.0
+  3221225472, //192.0.0.0
+  3758096384, //224.0.0.0
+  4026531840, //240.0.0.0
+  4160749568, //248.0.0.0
+  4227858432, //252.0.0.0
+  4261412864, //254.0.0.0
+  4278190080, //255.0.0.0
+  4286578688, //255.128.0.0
+  4290772992, //255.192.0.0
+  4292870144, //255.224.0.0
+  4293918720, //255.240.0.0
+  4294443008, //255.248.0.0
+  4294705152, //255.252.0.0
+  4294836224, //255.254.0.0
+  4294901760, //255.255.0.0
+  4294934528, //255.255.128.0
+  4294950912, //255.255.192.0
+  4294959104, //255.255.224.0
+  4294963200, //255.255.240.0
+  4294965248, //255.255.248.0
+  4294966272, //255.255.252.0
+  4294966784, //255.255.254.0
+  4294967040, //255.255.255.0
+  4294967168, //255.255.255.128
+  4294967232, //255.255.255.192
+  4294967264, //255.255.255.224
+  4294967280, //255.255.255.240
+  4294967288, //255.255.255.248
+  4294967292, //255.255.255.252
+  4294967294, //255.255.255.254
+  4294967295 //255.255.255.255
+];
+const v4len2maskN=[
+  0n, //0.0.0.0
+  2147483648n, //128.0.0.0
+  3221225472n, //192.0.0.0
+  3758096384n, //224.0.0.0
+  4026531840n, //240.0.0.0
+  4160749568n, //248.0.0.0
+  4227858432n, //252.0.0.0
+  4261412864n, //254.0.0.0
+  4278190080n, //255.0.0.0
+  4286578688n, //255.128.0.0
+  4290772992n, //255.192.0.0
+  4292870144n, //255.224.0.0
+  4293918720n, //255.240.0.0
+  4294443008n, //255.248.0.0
+  4294705152n, //255.252.0.0
+  4294836224n, //255.254.0.0
+  4294901760n, //255.255.0.0
+  4294934528n, //255.255.128.0
+  4294950912n, //255.255.192.0
+  4294959104n, //255.255.224.0
+  4294963200n, //255.255.240.0
+  4294965248n, //255.255.248.0
+  4294966272n, //255.255.252.0
+  4294966784n, //255.255.254.0
+  4294967040n, //255.255.255.0
+  4294967168n, //255.255.255.128
+  4294967232n, //255.255.255.192
+  4294967264n, //255.255.255.224
+  4294967280n, //255.255.255.240
+  4294967288n, //255.255.255.248
+  4294967292n, //255.255.255.252
+  4294967294n, //255.255.255.254
+  4294967295n //255.255.255.255
+];
+function cidr_valid(cidr) {
+  let m=String(cidr).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+  if(m === null) return false;
+  if(m[1] > 255 || m[2] > 255 || m[3] > 255 || m[4] > 255 || m[5] > 32) return false;
+
+  let ip=v4oct2long(m[1], m[2], m[3], m[4]);
+  let net = (ip & v4len2mask[ Number(m[5]) ]) >>> 0;
+  if(ip != net) return false;
+
+  return true;
+};
+
+function v4oct2long(i3, i2, i1, i0) {
+  let ret = Number(i3) * 16777216;
+  ret += Number(i2) * 65536;
+  ret += Number(i1) * 256;
+  ret += Number(i0);
+  return ret >>> 0;
+};
+
+function v4ip2long(ip) {
+  let m=String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if(m == null || m.length != 5 || Number(m[1]) > 255 || Number(m[2]) > 255 ||
+     Number(m[3]) > 255 || Number(m[4]) > 255
+  ) {
+    return false;
+  } else {
+    return(v4oct2long(m[1], m[2], m[3], m[4]));
+  };
+};
+function v4long2ip(net) {
+  let o=ip4octets(net);
+  return o[0]+"."+o[1]+"."+o[2]+"."+o[3];
+};
+
+function ip4octets(net) {
+  net = Number(net);
+  let ret=[];
+  ret[0] = Math.floor( net / 16777216);
+  ret[1] = Math.floor( (net & 0xFFFFFF) / 65536);
+  ret[2] = Math.floor( (net & 0xFFFF) / 256);
+  ret[3] = net & 0xFF;
+  return ret;
+};
+
+function ip4net(ip, masklen) {
+  return Number(BigInt(ip) & v4len2maskN[masklen]);
+};
+
+function net_mask_wc(net, masklen) {
+  return v4long2ip(net)+"/"+masklen+" ("+v4long2ip(v4len2mask[masklen])+" "+v4long2ip((~v4len2mask[masklen]) >>> 0) + ")";
+};
+
+function auth_check(res) {
+  if(res["ok"] === "noauth") {
+    if(res["auth_url"] != undefined) {
+      //show_dialog("Сеанс завершен по неактивности, пожалуйста, обновите страницу");
+      window.location = res["auth_url"]+encodeURIComponent(window.location);
+    } else {
+      show_dialog("Сеанс завершен по неактивности, пожалуйста, обновите страницу");
+    };
+    return false;
+  } else if(res["ok"]["fail"] === "noaccess") {
+
+    let dialog = $(DIV).title("Отазано в доступе")
+     .addClass("dialog_start")
+     .append( $(DIV)
+       .css({"white-space": "pre"})
+       .text("Вы успешно авторизовались как "+res["ok"]["userinfo"]["name"]+" ("+res["ok"]["userinfo"]["login"]+"),\n"+
+             "но у вас нет прав доступа к данному приложению или запрашиваемым данным.\n"+
+             "Пожалуйста, обратитесь к администрации приложения.\n"+
+             "Если вам уже выдали права доступа, попробуйте обновить страницу."
+       )
+     )
+     .appendTo("BODY")
+    ;
+
+    let dialog_options = {
+      close: function() {
+        $(this).dialog("destroy");
+        $(this).remove();
+      },
+      modal: true,
+      width: "auto",
+      buttons: [
+        {
+          text: "Войти под другой учетной записью",
+          click: function() {
+            window.location = "/logout";
+          },
+        },
+      ],
+    };
+
+    dialog.dialog(dialog_options);
+          
+    return false;
+  };
+
+  return true;
+};
+
+function autosave_normalize(elm) {
+  let elm_data = elm.data("autosave_data");
+  if(elm_data === undefined) { error_at(); return false; };
+  if(elm_data['object'] === undefined) { error_at(); return false; };
+
+  let value;
+
+  switch(elm_data['object']) {
+  case 'group':
+    switch(elm_data['prop']) {
+    case 'g_name':
+      return String(elm.val()).trim().toLowerCase();
+    case 'g_descr':
+      return String(elm.val()).trim();
+    default:
+      return elm.val();
+    };
+    break;
+  case 'ip_value':
+    return elm.val();
+  case 'net':
+    switch(elm_data['prop']) {
+    case 'v4net_name':
+      return String(elm.val()).trim();
+    default:
+      return elm.val();
+    };
+    break;
+  };
+  error_at();
+};
+
+function saveable_check(elm) {
+  let value = autosave_normalize(elm);
+  if(value === undefined) { error_at(); return false; };
+  let elm_data = elm.data("autosave_data");
+  if(elm_data === undefined) { error_at(); return false; };
+  if(elm_data['object'] === undefined) { error_at(); return false; };
+
+  switch(elm_data['object']) {
+  case 'group':
+    let id = elm_data['id'];
+    if(id === undefined) { error_at(); return false; };
+    switch(elm_data['prop']) {
+    case 'g_name':
+      if(!value.match(/^\S.*\S$/)) {
+        return false;
+      } else if(value == ADMIN_GROUP) {
+        return false;
+      } else {
+        let found = false;
+        elm.closest(".table").find(".tr").each(function() {
+          let row_id = $(this).data("id");
+          if(row_id === undefined) { error_at(); return false; };
+          let row_val = autosave_normalize($(this).find(".g_name"));
+          if(row_val === undefined) { error_at(); return false; };
+          if(row_id != id && row_val === value) {
+            found = true;
+            return false;
+          };
+        });
+        if(found) {
+          return false;
+        } else {
+          return true;
+        };
+      };
+      break;
+    default:
+      return true;
+    };
+    break;
+  case 'ip_value':
+    return true;
+  case 'net':
+    return true;
+  };
+  error_at();
+  return false;
+};
+
+$.fn.saveable=function(data) {
+  let timeout = (g_autosave_timeout===undefined?500:g_autosave_timeout);
+  $(this)
+   .addClass("autosave")
+   .data("autosave_data", data)
+   .data("autosave_changed", false)
+   .data("autosave_prev", autosave_normalize($(this)))
+   .data("autosave_saved", autosave_normalize($(this)))
+   .inputStop(timeout)
+   .on("input_stop", function() {
+
+     let normalized_val = autosave_normalize($(this));
+
+     if(!saveable_check($(this))) {
+       $(this).css({"background-color": "lightcoral"});
+       return;
+     } else {
+       $(this).css({"background-color": "white"});
+     };
+
+     let saved_val = $(this).data("autosave_saved");
+     let already_changed = $(this).data("autosave_changed");
+
+     if(already_changed) {
+       if(saved_val === normalized_val) {
+         g_autosave_changes--;
+         $(this).data("autosave_changed", false);
+       };
+     } else {
+       if(saved_val !== normalized_val) {
+         g_autosave_changes++;
+         $(this).data("autosave_changed", true);
+       };
+     };
+
+     if(g_autosave_changes < 0) {
+       error_at();
+       return;
+     } else if(g_autosave_changes == 0) {
+       $("#autosave_btn").css({"color": "gray"});
+     } else {
+       $("#autosave_btn").css({"color": "yellow"});
+       if(g_autosave) {
+         save_all();
+       };
+     };
+   })
+  ;
+  return $(this);
+};
+
+function ellipsed(text, chars) {
+  let ret = String(text);
+  if(ret.length > (chars-3)) {
+    ret = ret.substring(0, chars-3);
+    ret += "...";
+  };
+  return ret;
+};
+
+var userinfo = {};
+
+$( document ).ready(function() {
+
+  //BEGIN begin
+  window.onerror=function(errorMsg, url, lineNumber) {
+    alert("Error occured: " + errorMsg + ", at line: " + lineNumber);//or any message
+    return false;
+  };
+
+  $(document)
+   .on("mousedown mouseup mousemove", function(e) {
+     global_mouse_down = e.originalEvent.buttons === undefined ? e.which === 1 : e.buttons === 1;
+   })
+  ;
+
+  $(window).on('beforeunload', function() {
+    if(g_autosave_changes > 0) {
+      return "На странице есть несохраненные поля. Подтвердите уход.";
+    } else {
+      return undefined;
+    };
+  });
+
+  $(document).click(function() { $("UL.popupmenu").remove(); });
+  $(document).keyup(function(e) {
+    if (e.key === "Escape") { // escape key maps to keycode `27`
+      $("UL.popupmenu").remove();
+      $(".tooltip").remove();
+    };
+  });
+
+  $("BODY").append (
+    $(DIV).css({"position": "fixed", "right": "0.5em", "top": "0.5em", "min-width": "2em",
+                "border": "1px solid black", "background-color": "lightgrey"
+    }).prop("id", "indicator").text("Запуск интерфейса...")
+  );
+
+  if(version.match(/devel/)) {
+    $("BODY")
+     .append ( $(DIV).css({"position": "fixed", "right": "1em", "bottom": "1em", "color": "red" }).text("DEVELOPMENT"))
+     .append ( $(DIV).css({"position": "fixed", "left": "1em", "bottom": "1em", "color": "red" }).text("DEVELOPMENT"))
+    ;
+  };
+
+  $(document).ajaxComplete(function() {
+    $("#indicator").text("Запрос завершен").css("background-color", "lightgreen");
+  });
+
+  $(document).ajaxStart(function() {
+    $("#indicator").text("Запрос ...").css("background-color", "yellow");
+  });
+
+  //$( document ).tooltip({ items: ".tooltip[title]", show: null });
+  body=$( "body" );
+  body.css({"height": "100%", "margin": "0"});
+  $("HTML").css({"height": "100%", "margin": "0"});
+
+  if(DEBUG) {
+    body
+     .append( $(DIV).prop("id", "debug_win")
+       .addClass("wsp")
+       .css({"position": "fixed", "bottom": "1em", "right": "1em", "width": "35em",
+             "top": "15em", "overflow": "auto", "border": "1px black solid", "background-color": "white",
+             "z-index": 100000}
+       )
+       .toggle(false)
+     )
+     .append( $(LABEL)
+       .prop("id", "debug_clear_btn")
+       .css({"position": "fixed", "bottom": "0em", "right": "3em",
+             "z-index": 100001}
+       )
+       .append( $(LABEL)
+         .addClass(["ui-icon", "ui-icon-delete", "button"])
+         .click(function() {
+           $("#debug_win").contents().filter(function(){
+              return (this.nodeType == 3);
+           }).remove();
+         })
+       )
+       .toggle(false)
+     )
+     .append( $(LABEL)
+       .css({"position": "fixed", "bottom": "0em", "right": "1em",
+             "z-index": 100001}
+       )
+       .append( $(LABEL)
+         .addClass(["ui-icon", "ui-icon-arrowthick-2-n-s", "button"])
+         .click(function() {
+           $("#debug_win,#debug_clear_btn").toggle();
+         })
+       )
+     )
+    ;
+  };
+
+
+  run_query({"action": "userinfo"}, function(res) {
+    if(!auth_check(res)) return;
+
+    userinfo = res["ok"];
+
+    user_self_sub = userinfo["sub"];
+    user_self_id = userinfo["id"];
+
+    g_autosave = get_local("autosave", g_autosave);
+    g_autosave_timeout = get_local("autosave_timeout", g_autosave_timeout);
+
+    let menu = $(DIV).addClass("menu");
+    body.append( menu );
+
+    workarea = $(DIV).prop("id", "workarea").addClass("workarea");
+    fixed_div = $(DIV).prop("id", "fixed_div").addClass("fixed_div");
+
+    body.append( workarea );
+
+    menu
+     .append( userinfo_btn() )
+     .append( $(SPAN)
+       .css({"border": "1px solid #444444", "padding": "0.3em"})
+       .addClass("ns")
+       .append( $(LABEL).text("Автосохранение: ")
+         .prop({"for": "autosave"})
+       )
+       .append( $(INPUT)
+         .prop({"id": "autosave", "type": "checkbox", "checked": g_autosave})
+         .on("change", function() {
+           g_autosave = $(this).is(":checked");
+           save_local("autosave", g_autosave);
+           if(g_autosave) {
+             save_all();
+           };
+         })
+       )
+       .append( $(LABEL).addClass("min1em") )
+       .append( $(LABEL)
+         .prop({"id": "autosave_btn"})
+         .addClass(["button", "ui-icon", "ui-icon-save"])
+         .css({"color": "gray"})
+         .title("Сохранить")
+         .click(save_all)
+       )
+     )
+     .append( $(SPAN).addClass("bigbutton").text("IPDB")
+       .click( function() {
+         //actionFront();
+         window.location = "?action=front"+(DEBUG?"&debug":"");
+       })
+     )
+    ;
+
+    if(userinfo["is_admin"]) {
+      menu
+       .append( $(SPAN).addClass("bigbutton").text("Группы доступа")
+         .click( function() {
+           //actionGroups();
+           window.location = "?action=groups"+(DEBUG?"&debug":"");
+         })
+       )
+      ;
+    };
+
+    menu.append( fixed_div )
+
+    let action=getUrlParameter("action");
+    switch(action) {
+    case "front":
+      actionFront();
+      break;
+    case "groups":
+      actionGroups();
+      break;
+    case "nav_v4":
+      actionNav4();
+      break;
+    case "view_v4":
+      actionView4();
+      break;
+    default:
+      window.location = "?action=front"+(DEBUG?"&debug":"");
+      //history.pushState(undefined, undefined, "?action=front"+(DEBUG?"&debug":""));
+      //actionFront();
+    };
+
+  });
+});
+
+function userinfo_btn() {
+  let ret=$(DIV)
+   .addClass("userinfo")
+   .css({"display": "inline-block", "padding": "0.5em"})
+   .append( $(LABEL)
+     .addClass(["button", "ui-icon", "ui-icon-user"])
+     .css({"margin-right": "0.5em"})
+     .click(function() { $(this).closest(".userinfo").find(".hideable").toggle(); })
+   )
+   .append( $(DIV)
+     .css({"display": "inline-block", "position": "absolute", "top": "0em",
+            "left": "2em", "background-color": "white", "z-index": 1000000,
+            "border": "1px solid black", "padding": "0.5em"}
+     )
+     .addClass("hideable")
+     .hide()
+     .append( $(SPAN).text(userinfo["name"]).css({"margin-right": "0.5em"}) )
+     .append( $(SPAN).text(userinfo["login"]).css({"margin-right": "0.5em"}) )
+     .append( $(LABEL).addClass(["ui-icon", "ui-icon-info", "button"]).title(jstr(userinfo))
+       .click(function() { show_dialog(jstr(userinfo)); })
+     )
+     .append( $(LABEL).css({"margin-left": "0.2em"}) )
+     .append( $(LABEL).title("Выход")
+       .addClass(["button", "ui-icon", "ui-icon-logout"])
+       .click(function() { window.location = "/logout"; })
+     )
+   )
+  ;
+  return ret;
+};
+
+function save_all() {
+  debugLog("AUTOSAVING");
+  $("#autosave_btn").css({"color": "green"});
+
+  let queue = [];
+  let queue_elements = [];
+
+  let has_error = false;
+
+  $(".autosave").each(function() {
+    let value = autosave_normalize($(this));
+    if(!saveable_check($(this))) {
+      has_error = true;
+      return false;
+    };
+
+    if(value !== $(this).data("autosave_saved")) {
+      queue.push({"value": value, "data": $(this).data("autosave_data")});
+      queue_elements.push({"elm": $(this), "val": value, "data": $(this).data("autosave_data")});
+    };
+  });
+
+  if(has_error) {
+    $("#autosave_btn").css({"color": "red"});
+    return;
+  };
+
+  debugLog(jstr(queue));
+
+  if(queue.length == 0) {
+    $("#autosave_btn").css({"color": "green"});
+    return;
+  };
+
+  run_query({"action": "save_all", "queue": queue}, function(res) {
+
+    debugLog(jstr(res));
+    if(!auth_check(res)) return;
+
+    if(res['ok']['done'] === undefined) {
+      error_at();
+      return;
+    };
+
+    let highlight = $([]);
+
+    for(let i in queue_elements) {
+      let qelm = queue_elements[i]['elm'];
+      let qval = queue_elements[i]['val'];
+      let qdata = queue_elements[i]['data'];
+
+      qelm.data("autosave_saved", qval);
+      qelm.data("autosave_changed", false);
+      switch(qdata['object']) {
+      case "ip_value":
+        let tr = qelm.closest(".row");
+        let ipdata = tr.data("ipdata");
+        ipdata['values'][qdata['col_id']]['v'] = qval;
+        ipdata['values'][qdata['col_id']]['ts'] = unix_timestamp();
+        ipdata['values'][qdata['col_id']]['u_id'] = user_self_id;
+        tr.data("ipdata", ipdata);
+        let edit_state = qelm.hasClass("ip_edit");
+        let focus = qelm.is(":focus");
+        let new_elm = ip_val_elm(ipdata, qdata['col_id'], edit_state);
+        qelm.replaceWith( new_elm );
+        if(focus) new_elm.focus();
+        highlight = highlight.add(new_elm);
+        break;
+      default:
+        highlight = highlight.add(qelm);
+      };
+
+      if(qdata['_after_save'] !== undefined) {
+        qdata['_after_save'](qelm, qval);
+      };
+    };
+    highlight.animateHighlight("lightgreen", 200);
+    g_autosave_changes = 0;
+    $("#autosave_btn").css({"color": "green"});
+  });
+};
+
+function actionFront() {
+  //history.pushState(undefined, undefined, "?action=front"+(DEBUG?"&debug":""));
+  workarea.empty();
+  fixed_div.empty();
+  run_query({"action": "get_front"}, function(res) {
+
+    debugLog(jstr(res));
+
+    if(!auth_check(res)) return;
+
+    let nav_div = $(DIV).css({"display": "inline-block", "vertical-align": "top"})
+     .append( $(SPAN).text("Навигация: ") )
+     .append( $(A).prop({"href": "?action=nav_v4&net=0&masklen=0"+(DEBUG?"&debug":"")}).text("0.0.0.0/0") )
+     .append( $(SPAN).text(" (") )
+     .append( $(A)
+       .prop({"href": "?action=nav_v4&net=0&masklen=0&usedonly"+(DEBUG?"&debug":"")})
+       .text("исп.").title("Только используемые")
+     )
+     .append( $(SPAN).text(")") )
+     .append( $(BR) )
+     .append( $(SPAN).text("Перейти: ") )
+     .append( $(INPUT)
+       .prop({"type": "search", "placeholder": "x.x.x.x/x", "id": "ipv4_goto"})
+       .enterKey(function() {
+         $("#ipv4_goto_btn").trigger("click")
+       })
+     )
+     .append( $(LABEL).text(">").title("Перейти к отображению сети").addClass("button")
+       .prop({"id": "ipv4_goto_btn"})
+       .click(function() {
+         $("#ipv4_goto").animateHighlight("green", 500);
+       })
+     )
+     .append( $(BR) )
+     .append( $(SPAN).text("Поиск: ") )
+     .append( $(INPUT)
+       .prop({"type": "search", "id": "search_string"})
+       .enterKey(function() {
+         $("#search_btn").trigger("click")
+       })
+     )
+     .append( $(LABEL).text(">").title("Перейти к отображению сети").addClass("button")
+       .prop({"id": "search_btn"})
+       .click(function() {
+         $("#search_string").animateHighlight("green", 500);
+       })
+     )
+     .append( $(BR) )
+     .appendTo( workarea )
+    ;
+
+    if(res['ok']['v4favs'] !== undefined && Array.isArray(res['ok']['v4favs']) && res['ok']['v4favs'].length > 0) {
+      let v4favs = $(DIV)
+       .css({"display": "inline-block", "vertical-align": "top"})
+       .append( $(DIV)
+         .append( $(SPAN).text("Избранное") )
+       )
+      ;
+
+      res['ok']['v4favs'].sort(function(a,b) { return a['v4net_addr']-b['v4net_addr']; });
+
+      for(let i=0; i < res['ok']['v4favs'].length; i++) {
+        let mask_bits = v4len2mask[ res['ok']['v4favs'][i]['v4net_mask'] ];
+        let wildcard_bits = (~mask_bits) >>> 0;
+        v4favs
+         .append( $(DIV)
+           .addClass("wsp")
+           .addClass("fav_row")
+           .append( $(A).prop({"href": "?action=nav_v4&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
+                                        res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
+             .text( v4long2ip(res['ok']['v4favs'][i]['v4net_addr'])+"/"+res['ok']['v4favs'][i]['v4net_mask'] )
+             .title( "Mask: "+v4long2ip(mask_bits)+"\n"+"Wildcard: "+v4long2ip(wildcard_bits) )
+           )
+           .append( $(SPAN).text(" (") )
+           .append( $(A).prop({"href": "?action=nav_v4&usedonly&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
+                                        res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
+             .text( "исп." )
+             .title("Только используемые")
+           )
+           .append( $(SPAN).text(")") )
+           .append( $(SPAN).addClass("min05em") )
+           .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-trash"])
+             .css({"font-size": "smaller"})
+             .title("Убрать из избранного")
+             .data("net", res['ok']['v4favs'][i]['v4net_addr'])
+             .data("masklen", res['ok']['v4favs'][i]['v4net_mask'])
+             .click(function() {
+               let net = $(this).data("net");
+               let masklen = $(this).data("masklen");
+               let row = $(this).closest(".fav_row");
+               show_confirm("Подтвердите удаление сети из избранного", function() {
+                 run_query({"action": "fav_v4", "net": String(net), "masklen": String(masklen), "fav": 0}, function(res) {
+                   debugLog(jstr(res));
+                   if(!auth_check(res)) return;
+                   row.remove();
+                 });
+               });
+             })
+           )
+         )
+        ;
+      };
+
+      v4favs.appendTo( workarea );
+    };
+    if(res['ok']['v4accessible'] !== undefined && Array.isArray(res['ok']['v4accessible']) &&
+       res['ok']['v4accessible'].length > 0
+    ) {
+      let v4accessible = $(DIV)
+       .css({"display": "inline-block", "vertical-align": "top"})
+       .append( $(DIV)
+         .append( $(SPAN).text("С доступом") )
+       )
+      ;
+
+      res['ok']['v4accessible'].sort(function(a,b) { return a['v4net_addr']-b['v4net_addr']; });
+
+      for(let i=0; i < res['ok']['v4accessible'].length; i++) {
+        let mask_bits = v4len2mask[ res['ok']['v4accessible'][i]['v4net_mask'] ];
+        let wildcard_bits = (~mask_bits) >>> 0;
+        v4accessible
+         .append( $(DIV)
+           .addClass("wsp")
+           .append( $(A)
+             .prop({"href": "?action=nav_v4&net="+res['ok']['v4accessible'][i]['v4net_addr']+"&masklen="+
+                            res['ok']['v4accessible'][i]['v4net_mask']+(DEBUG?"&debug":"")}
+             )
+             .text( v4long2ip(res['ok']['v4accessible'][i]['v4net_addr'])+"/"+
+                    res['ok']['v4accessible'][i]['v4net_mask']
+             )
+             .title( "Mask: "+v4long2ip(mask_bits)+"\n"+"Wildcard: "+v4long2ip(wildcard_bits) )
+           )
+           .append( $(SPAN).text(" (") )
+           .append( $(A)
+             .prop({"href": "?action=nav_v4&usedonly&net="+res['ok']['v4accessible'][i]['v4net_addr']+
+                            "&masklen="+res['ok']['v4accessible'][i]['v4net_mask']+(DEBUG?"&debug":"")}
+             )
+             .text( "исп." )
+             .title("Только используемые")
+           )
+           .append( $(SPAN).text(")") )
+         )
+        ;
+      };
+
+      v4accessible.appendTo( workarea );
+    };
+  });
+};
+
+function actionGroups() {
+  //history.pushState(undefined, undefined, "?action=groups"+(DEBUG?"&debug":""));
+  workarea.empty();
+  fixed_div.empty();
+
+  let table = $(DIV)
+   .addClass("table")
+   .appendTo( workarea )
+  ;
+
+  table
+   .append( $(DIV)
+     .addClass("thead")
+     .append( $(DIV)
+       .addClass("th")
+       .append( $(SPAN)
+         .text("id")
+         .title("g_id в базе данных")
+       )
+     )
+     .append( $(DIV)
+       .addClass("th")
+       .append( $(SPAN)
+         .text("sAMAccountName")
+         .title("Имя группы \"pre-Windows 2000\"")
+       )
+     )
+     .append( $(DIV)
+       .addClass("th")
+       .append( $(SPAN)
+         .text("Описание")
+         .title("Назначение группы")
+       )
+     )
+     .append( $(DIV)
+       .addClass("th")
+       .append( $(LABEL).html("&nbsp;")
+       )
+     )
+   )
+   .append( $(DIV)
+     .addClass("tfoot")
+     .append( $(DIV)
+       .addClass("td")
+       .append( $(LABEL).html("&nbsp;")
+       )
+     )
+     .append( $(DIV)
+       .addClass("td")
+       .append( $(INPUT)
+         .val(initial_g_name)
+         .addClass("g_name")
+         .data("autosave_data", {"object": "group", "prop": "g_name"})
+       )
+     )
+     .append( $(DIV)
+       .addClass("td")
+       .append( $(INPUT)
+         .addClass("g_descr")
+         .data("autosave_data", {"object": "group", "prop": "g_descr"})
+       )
+     )
+     .append( $(DIV)
+       .addClass("td")
+       .append( $(LABEL)
+         .addClass(["button", "ui-icon", "ui-icon-plus"])
+       )
+       .title("Добавить")
+       .click(function() {
+         let g_name = autosave_normalize($(this).closest(".tfoot").find(".g_name"));
+         if(g_name === undefined) error_at();
+         g_name = String(g_name).trim().toLowerCase();
+
+         let g_descr = autosave_normalize($(this).closest(".tfoot").find(".g_descr"));
+         if(g_descr === undefined) error_at();
+         g_descr = String(g_descr).trim();
+
+         if(g_name == initial_g_name || g_name == ADMIN_GROUP) {
+           $(this).closest(".tfoot").find(".g_name").animateHighlight("red", 500);
+           $(this).closest(".tfoot").find(".g_name").focus();
+           return;
+         };
+         let found = undefined;
+         $(this).closest(".table").find(".tr").find(".g_name").each(function() {
+           if( autosave_normalize($(this)) == g_name) {
+             found = $(this);
+             return false;
+           };
+         });
+         if( found != undefined ) {
+           found.add($(this).closest(".tfoot").find(".g_name")).animateHighlight("red", 500);
+           $(this).closest(".tfoot").find(".g_name").focus();
+           return;
+         };
+
+         let insert_before = $(this).closest(".tfoot");
+
+         run_query({"action": "add_group", "g_name": g_name, "g_descr": g_descr}, function(res) {
+           debugLog(jstr(res));
+
+           if(!auth_check(res)) return;
+
+           if(res['ok']['gs'] === undefined || !Array.isArray(res['ok']['gs'])) { return; };
+
+
+           for(let i in res['ok']['gs']) {
+             get_group_row(res['ok']['gs'][i], res['ok']['users']).insertBefore(insert_before);
+           };
+           insert_before.find(".g_name").val(initial_g_name);
+           insert_before.find(".g_descr").val("");
+           insert_before.find(".g_name").focus();
+         });
+       })
+     )
+   )
+  ;
+
+  table.find(".tfoot").find(".g_name").focus();
+
+  run_query({"action": "get_groups"}, function(res) {
+    debugLog(jstr(res));
+
+    if(!auth_check(res)) return;
+
+    if(res['ok']['gs'] === undefined || !Array.isArray(res['ok']['gs'])) { return; };
+
+
+    for(let i in res['ok']['gs']) {
+      get_group_row(res['ok']['gs'][i], res['ok']['users']).insertBefore(table.find(".tfoot"));
+    };
+
+  });
+};
+
+function get_group_row(db_row, users) {
+  let id_title = "Добавлено: "+from_unix_time(db_row['added'], false, 'н/д');
+  id_title += "\nИзменено: "+from_unix_time(db_row['ts'], false, 'н/д');
+  if(users !== undefined && db_row['fk_u_id'] !== null && users[ db_row['fk_u_id'] ] !== undefined) {
+    id_title += "\nКем: "+users[ db_row['fk_u_id'] ]['u_name']+" ("+users[ db_row['fk_u_id'] ]['u_login']+")";
+  };
+
+  let ret = $(DIV)
+   .addClass("tr")
+   .addClass("id_data")
+   .data("id", db_row['g_id'])
+   .data("data", db_row)
+   .append( $(DIV)
+     .addClass("td")
+     .append( $(SPAN).text( db_row['g_id'] )
+     )
+     .title( id_title )
+   )
+   .append( $(DIV)
+     .addClass("td")
+     .append( $(INPUT)
+       .addClass("g_name")
+       .val( db_row['g_name'] )
+       .saveable({"object": "group", "id": db_row['g_id'], "prop": "g_name"})
+     )
+   )
+   .append( $(DIV)
+     .addClass("td")
+     .append( $(INPUT)
+       .addClass("g_descr")
+       .val( db_row['g_descr'] )
+       .saveable({"object": "group", "id": db_row['g_id'], "prop": "g_descr"})
+     )
+   )
+   .append( $(DIV)
+     .addClass("td")
+     .append( $(LABEL)
+       .addClass(["button", "ui-icon", "ui-icon-delete"])
+       .click(function() {
+         let elm = $(this);
+         let id_elm = elm.closest(".id_data");
+         if(id_elm.length == 0) error_at();
+         let id = id_elm.data("id");
+         if(id === undefined) error_at();
+         let g_name = autosave_normalize(elm.closest(".tr").find(".g_name"));
+         show_confirm("Подтвердите удаление группы \""+g_name+"\".\nОТМЕНА ОПЕРАЦИИ БУДЕТ НЕВОЗМОЖНА!", function() {
+           run_query({"action": "del_group", "id": id}, function(res) {
+           
+             debugLog(jstr(res));
+
+             if(!auth_check(res)) return;
+
+             if(res['ok']['used'] !== undefined) {
+               show_confirm_checkbox("ВНИМАНИЕ! Группа \""+g_name+"\" используется\nв "+res['ok']['used']+
+                                     " списках доступа.\nУдаление приведет к удалению группы также из списков"+
+                                     " доступа.\nОТМЕНА ОПЕРАЦИИ БУДЕТ НЕВОЗМОЖНА!", function() {
+                 run_query({"action": "del_group", "id": id, "confirmed": 1}, function(_res) {
+           
+                   debugLog(jstr(_res));
+
+                   if(!auth_check(_res)) return;
+                   if(_res['ok']['done'] === undefined) {
+                     error_at();
+                     return;
+                   };
+                   elm.closest(".tr").remove();
+                 });
+               });
+             } else if(res['ok']['done'] === undefined) {
+               error_at();
+               return;
+             } else {
+               elm.closest(".tr").remove();
+             };
+           });
+         });
+       })
+     )
+   )
+  ;
+  return ret;
+};
+
+function v4range_title(range) {
+  let ret = "";
+  ret += range['v4r_name'];
+  ret += " (id:"+range['v4r_id']+")";
+  ret += "\n";
+  ret += v4long2ip(range['v4r_start'])+"-"+v4long2ip(range['v4r_stop']);
+  ret += "\n";
+  ret += "Rights:" + range['rights'];
+  ret += "\n";
+  ret += range['v4r_descr'];
+  return ret;
+};
+function actionNav4() {
+  workarea.empty();
+  fixed_div.empty();
+  let net = getUrlParameter("net", undefined);
+  let masklen = getUrlParameter("masklen", undefined);
+  let usedonly = getUrlParameter("usedonly", false);
+
+  if(net === undefined || ! String(net).match(/^\d+$/) || Number(net) > 4294967295) { error_at(); return; };
+  if(masklen === undefined || ! String(masklen).match(/^\d{1,2}$/) || Number(masklen) > 32) { error_at(); return; };
+
+  if(Number(net) != ip4net(net, masklen)) {
+    error_at();
+    return;
+  };
+
+  run_query({"action": "nav_v4", "net": net, "masklen": masklen}, function(res) {
+    debugLog(jstr(res));
+    if(!auth_check(res)) return;
+
+    if(res['ok']['taken'] !== undefined) {
+      window.location = "?action=view_v4&net="+net+"&masklen="+masklen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+      return;
+    };
+
+    let backlen = 0;
+    if(masklen <=8 ) {
+      backlen = 0;
+    } else if(masklen <= 16) {
+      backlen = 8;
+    } else if(masklen <= 24) {
+      backlen = 16;
+    } else {
+      backlen = 24;
+    };
+
+    fixed_div
+     .append( $(A)
+       .prop("href", "?action=nav_v4&net="+ip4net(net, backlen)+"&masklen="+backlen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+       .text("<<<")
+       .title( "Назад к сети: "+net_mask_wc(net, backlen) )
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(LABEL).text("Сеть: ") )
+     .append( $(SPAN)
+       .text( net_mask_wc(net, masklen) )
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(A)
+       .prop("href", "?action=nav_v4&net="+net+"&masklen="+masklen+(!usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+       .text(usedonly?"(Показать все)":"(Только используемые)")
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(LABEL).text("В избранном: ") )
+     .append( $(INPUT).prop({"type": "checkbox", "checked": res['ok']['fav'] == 1})
+       .on("change", function() {
+         let checked = $(this).is(":checked");
+         run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
+           debugLog(jstr(res));
+           if(!auth_check(res)) return;
+         });
+       })
+     )
+    ;
+
+    workarea
+     .append( $(DIV)
+     )
+    ;
+
+    let table = $(DIV).addClass("table")
+    ;
+
+    let thead = $(DIV).addClass("thead")
+    ;
+
+    thead.append( $(SPAN).addClass("th").text("Сеть") );
+
+    for(let col_mask = Number(masklen)+1; col_mask <= Number(res['ok']['lastmask']); col_mask++) {
+      let th = $(SPAN).addClass("th")
+       .text("/"+String(col_mask))
+       .title( v4long2ip(v4len2mask[col_mask])+" "+v4long2ip((~v4len2mask[col_mask]) >>> 0) )
+       .appendTo(thead)
+      ;
+    };
+
+    for(let i in res['ok']['ranges']) {
+      let th = $(SPAN).addClass("th")
+       .css({"padding-left": "0.1em", "padding-right": "0.1em"})
+       .title(v4range_title(res['ok']['ranges'][i]))
+      ;
+      if(res['ok']['ranges'][i]['v4r_icon'] != "") {
+        let label = $(LABEL)
+         .html("&bull;")
+        ;
+        if(res['ok']['ranges'][i]['v4r_style'] != "") {
+          try {
+            let style = JSON.parse(res['ok']['ranges'][i]['v4r_style']);
+            label.css(style);
+          } catch(e) {
+            //ignore
+          };
+        };
+        label.appendTo(th);
+      };
+      th.appendTo(thead);
+    };
+
+    thead.append( $(SPAN).addClass("th") );
+
+    thead.appendTo(table);
+
+    for(let i in res['ok']['rows']) {
+      let row = res['ok']['rows'][i];
+      let this_net = row['net'];
+      let this_net_last_addr = row['last_addr'];
+      if(usedonly &&
+         res['ok']['rows'][i]['is_taken'] === undefined &&
+         res['ok']['rows'][i]['is_part_of_taken'] === undefined &&
+         res['ok']['rows'][i]['subnets'] === undefined &&
+         true
+      ) {
+        continue;
+      };
+      let tr = $(DIV).addClass("tr")
+      ;
+      tr
+       .append( $(SPAN).addClass("td")
+         .text(v4long2ip(row["net"]))
+       )
+      ;
+
+      for(let ci in res['ok']['rows'][i]['cols']) {
+        let col_mask = Number(masklen)+Number(ci)+Number(1);
+        let td = $(SPAN).addClass("td");
+
+        if(res['ok']['rows'][i]['cols'][ci]['is_net'] !== undefined) {
+          if(res['ok']['rows'][i]['cols'][ci]['is_taken'] == undefined) {
+            if(res['ok']['rows'][i]['cols'][ci]['is_part_of_taken'] == undefined ) {
+              if(col_mask < 32) {
+                td
+                 .append( $(A)
+                   .prop("href", "?action=nav_v4&net="+row['net']+"&masklen="+col_mask+(usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+                   .text("><")
+                   .title("Перейти к "+v4long2ip(row["net"])+"/"+col_mask+"\n"+net_mask_wc(row["net"], col_mask))
+                 )
+                ;
+              };
+              if(res['ok']['rows'][i]['cols'][ci]['is_busy'] === undefined &&
+                 (res['ok']['rows'][i]['cols'][ci]['ranges_rights'] & R_TAKENET) > 0
+              ) {
+                td
+                 .append( $(SPAN).addClass("min1em") )
+                 .append( $(A)
+                   .prop("href", "?action=take_v4&net="+row['net']+"&masklen="+col_mask+(DEBUG?"&debug":""))
+                   .text("T")
+                   .title("Занять "+v4long2ip(row["net"])+"/"+col_mask+"\n"+net_mask_wc(row["net"], col_mask))
+                 )
+                ;
+              };
+            };
+            if(res['ok']['rows'][i]['cols'][ci]['is_busy']) {
+              td.css({"background-color": "gray"});
+            };
+          } else {
+            if((res['ok']['rows'][i]['cols'][ci]['net_rights'] & (R_VIEW_NET_INFO | R_VIEW_NET_IPS)) > 0) {
+              td
+               .append( $(A)
+                 .prop("href", "?action=view_v4&net="+row['net']+"&masklen="+col_mask+(usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+                 .text("V")
+                 .title("Просмотр "+v4long2ip(row["net"])+"/"+col_mask+"\n"+net_mask_wc(row["net"], col_mask))
+               )
+              ;
+            };
+            td.css({"border-top": "1px solid white"});
+          };
+          tr.append(td);
+        };
+        if(res['ok']['rows'][i]['cols'][ci]['is_taken'] !== undefined ||
+           res['ok']['rows'][i]['cols'][ci]['is_part_of_taken'] !== undefined ||
+           false
+        ) {
+          td.css({"background-color": "lightgray"});
+          if(res['ok']['rows'][i]['is_taken'] !== undefined) {
+            td.css({"background-color": "lightgray", "border-top": "1px solid white"});
+          };
+        };
+        tr.append( td );
+      };
+
+      for(let r in res['ok']['ranges']) {
+        let td = $(SPAN).addClass("td")
+         .css({"padding-left": "0.1em", "padding-right": "0.1em"})
+         .title(v4range_title(res['ok']['ranges'][r]))
+        ;
+        if(res['ok']['rows'][i]['ranges'][r]['in_range'] !== undefined) {
+          let label_style = g_default_range_style;
+          try {
+            label_style = JSON.parse(res['ok']['ranges'][r]['v4r_style']);
+          } catch(e) {
+            label_style = g_default_range_style;
+          };
+
+          let label = $(LABEL)
+           .css(label_style)
+          ;
+          let range_start = res['ok']['ranges'][r]['v4r_start'];
+          let range_stop = res['ok']['ranges'][r]['v4r_stop'];
+
+          if(range_start === this_net) {
+            if(range_stop === this_net_last_addr) {
+              //label.html("&#x2550;"); // ═
+              label.html("&#x25C6;"); // ◆
+            } else if(range_stop < this_net_last_addr) {
+              label.html("&#x25BC;"); // ▼
+            } else { //range_stop > this_net_last_addr
+              label.html("&#x2533;"); // ┳
+            };
+          } else if(range_start < this_net) {
+            if(range_stop === this_net_last_addr) {
+              label.html("&#x253B;"); // ┻
+            } else if(range_stop < this_net_last_addr) {
+              label.html("&#x251B;"); // ┛
+            } else { //range_stop > this_net_last_addr
+              label.html("&#x2503;"); // ┃
+            };
+          } else { //range_start > this_net
+            if(range_stop === this_net_last_addr) {
+              label.html("&#x25B2;"); // ▲
+            } else if(range_stop < this_net_last_addr) {
+              label.html("&#x25BA;"); // ►
+            } else { //range_stop > this_net_last_addr
+              label.html("&#x2513;"); // ┓
+            };
+          };
+
+          label.appendTo(td);
+        };
+        td.appendTo(tr);
+      };
+
+      if(res['ok']['rows'][i]['subnets'] != undefined) {
+        tr
+         .append( $(SPAN).addClass("td")
+           .text(res['ok']['rows'][i]['subnets']+" подсетей...")
+           .title(res['ok']['rows'][i]['subnets_names']+"\n...")
+         )
+        ;
+      } else {
+        tr
+         .append( $(SPAN).addClass("td")
+           .text(res['ok']['rows'][i]['net_name'] === undefined?"":ellipsed(res['ok']['rows'][i]['net_name'], 60))
+           .title(res['ok']['rows'][i]['net_name'] === undefined?"":res['ok']['rows'][i]['net_name'])
+         )
+        ;
+      };
+
+      tr.appendTo(table);
+    };
+
+    table.appendTo(workarea);
+  });
+};
+
+function ip_row(ipdata, net_cols_ids) {
+  let empty_colspan = net_cols_ids.length;
+  let tr = $(TR).addClass("row")
+   .data("ipdata", ipdata)
+  ;
+
+  let ip_td = $(TD).addClass("wsp")
+  ;
+
+  let ranges_span = $(SPAN)
+   .css({"width": (g_range_bar_width+g_range_bar_margin)*g_data["net_ranges"].length, "display": "inline-block"})
+  ;
+
+  for(let i in g_data["net_ranges"]) {
+    let r_label = $(LABEL).addClass("iprange");
+    r_label.html('&#x200b;');
+    r_label.css({"left": ((g_range_bar_width+g_range_bar_margin)*i)+"px",
+                 "width": g_range_bar_width+"px",
+                 "margin-right": g_range_bar_width+"px",
+    });
+    if(ipdata['ranges'][i]['in_range'] !== undefined) {
+      if(g_data["net_ranges"][i]['v4r_style'] != "{}") {
+        try {
+          let r_label_css = JSON.parse(g_data["net_ranges"][i]['v4r_style']);
+          r_label.css(r_label_css);
+        } catch(e) {
+          r_label.css({"background-color": "black"});
+        };
+      } else {
+        r_label.css({"background-color": "black"});
+      };
+      r_label.title(v4range_title(g_data["net_ranges"][i]));
+    };
+    ranges_span.append( r_label );
+  };
+
+  ip_td.append( ranges_span );
+
+  if(ipdata['is_network'] !== undefined) {
+    ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])) );
+    ip_td.appendTo( tr );
+    let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td")
+     .text("Сеть")
+    ;
+    empty_td.appendTo( tr );
+  } else if(ipdata['is_broadcast'] !== undefined) {
+    ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])) );
+    ip_td.appendTo( tr );
+    let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td")
+     .text("Broadcast")
+    ;
+    empty_td.appendTo( tr );
+  } else if(ipdata['is_empty'] !== undefined) {
+    ip_td.appendTo( tr );
+    let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td");
+    if((ipdata['rights'] & R_EDIT_IP_VLAN) != 0 &&
+       ((ipdata['rights'] & R_DENYIP) == 0 ||
+        (ipdata['rights'] & R_IGNORE_R_DENY) != 0
+       )
+    ) {
+      empty_td
+       .append( $(SPAN).text("Занять: ") )
+       .append( $(LABEL).text(v4long2ip(ipdata['start']))
+         .addClass("button")
+         .data("take_type", "ip")
+         .data("ip", ipdata['start'])
+         .click(function() { take_ip($(this)); })
+       )
+      ;
+      if((ipdata['stop'] - ipdata['start']) > 1) {
+        let next_ip = ipdata['start'] + 1;
+        let next_ip_t = v4long2ip(next_ip);
+        let last_ip_t = v4long2ip(ipdata['stop']);
+
+        let val = "";
+        let i=1;
+
+        while(i < next_ip_t.length && i < last_ip_t.length) {
+          if(next_ip_t.substring(0, i) == last_ip_t.substring(0, i)) {
+            val = next_ip_t.substring(0, i);
+            i++;
+          } else {
+            break;
+          };
+        };
+
+        empty_td
+         .append( $(SPAN).text(" - ") )
+         .append( $(INPUT)
+           .css({"width": "8em"})
+           .addClass("any_ip")
+           .val(val)
+           .data("first", next_ip)
+           .data("last", ipdata['stop']-1)
+           .enterKey(function() { $(this).closest(".row").find(".take_any_btn").click(); })
+         )
+         .append( $(LABEL).text("+")
+           .addClass("button")
+           .addClass("take_any_btn")
+           .data("take_type", "any_ip")
+           .data("first", next_ip)
+           .data("last", ipdata['stop']-1)
+           .click(function() { take_ip($(this)); })
+         )
+        ;
+      };
+      if(ipdata['start'] !== ipdata['stop']) {
+        empty_td
+         .append( $(SPAN).text(" - ") )
+         .append( $(LABEL).text(v4long2ip(ipdata['stop']))
+           .addClass("button")
+           .data("ip", ipdata['stop'])
+           .data("take_type", "ip")
+           .click(function() { take_ip($(this)); })
+         )
+        ;
+      };
+    } else {
+      if(ipdata['start'] === ipdata['stop']) {
+        empty_td
+         .append( $(SPAN).text("Свободно: ") )
+         .append( $(SPAN).text(v4long2ip(ipdata['start']))
+         )
+        ;
+      } else {
+        empty_td
+         .append( $(SPAN).text("Свободно: ") )
+         .append( $(SPAN).text(v4long2ip(ipdata['start']))
+         )
+         .append( $(SPAN).text(" - ") )
+         .append( $(SPAN).text(v4long2ip(ipdata['stop']))
+         )
+        ;
+      };
+    };
+    empty_td.appendTo( tr );
+  } else {
+    // menu
+    ip_td
+     .append( $(LABEL)
+       .addClass("button")
+       .addClass("ns")
+       .addClass(["ui-icon", "ui-icon-bars"])
+       .css({"float": "right", "clear": "none"})
+       .click(function(e) {
+         e.stopPropagation();
+         ip_menu($(this));
+       })
+     )
+    ;
+    //
+    ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])) );
+
+    ip_td
+     .append( $(SPAN)
+       .addClass("ns")
+       .css({"display": "inline-block", "min-width": "2em"})
+       //.html('&#x200b;')
+     )
+    ;
+
+    ip_td.tooltip({
+      classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+      items: "TD",
+      content: function() {
+        if( $("UL").length > 0 ) return undefined;
+        let row = $(this).closest(".row");
+        let ipdata = row.data("ipdata");
+        let lines=[];
+        if(ipdata['ts'] > 0) {
+          lines.push("Занят: "+from_unix_time(ipdata['ts'], false, 'н/д'));
+          if(ipdata['fk_u_id'] !== null && g_data['aux_userinfo'][ipdata['fk_u_id']] != undefined) {
+            let user_row = g_data['aux_userinfo'][ipdata['fk_u_id']];
+            lines.push("\t"+user_row['u_name']+" ("+user_row['u_login']+")");
+          };
+        };
+        let latest_ts=0;
+        let latest_u=undefined;
+        let latest_c_id=undefined;
+
+        for(let i in ipdata['values']) {
+          if(ipdata['values'][i]['ts'] !== undefined && ipdata['values'][i]['ts'] > latest_ts) {
+            latest_ts = ipdata['values'][i]['ts'];
+            latest_c_id = i;
+            if(ipdata['values'][i]['u_id'] !== undefined) {
+              latest_u = g_data['aux_userinfo'][ipdata['values'][i]['u_id']];
+            };
+          };
+        };
+
+        if(latest_ts > 0) {
+          lines.push("Последнее изменение: "+from_unix_time(latest_ts, false, 'н/д'));
+          lines.push("Поле: "+g_data['net_cols'][latest_c_id]['ic_name']);
+          if(latest_u != undefined) {
+            lines.push("\t"+latest_u['u_name']+" ("+latest_u['u_login']+")");
+          };
+        };
+        return lines.join("\n");
+      }
+    });
+
+
+    ip_td.appendTo( tr );
+    for(let col_i in net_cols_ids) {
+      let col_id = net_cols_ids[col_i];
+      let td = $(TD)
+      ;
+      td
+       .append( ip_val_elm(ipdata, col_id, g_edit_all) )
+      ;
+
+      td.tooltip({
+        classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+        items: "TD",
+        content: function() {
+          if( $("UL").length > 0 ) return undefined;
+          return $(this).find(".ip_value").data("title");
+        }
+      });
+
+      td.appendTo( tr );
+    };
+  };
+
+  if((ipdata['rights'] & R_EDIT_IP_VLAN) != 0 &&
+     ((ipdata['rights'] & R_DENYIP) == 0 ||
+      (ipdata['rights'] & R_IGNORE_R_DENY) != 0
+     )
+  ) {
+    tr
+     .on("click dblclick", function(e) {
+       if ((e.type == "click" && e.ctrlKey) ||
+           e.type == "dblclick"
+       ) {
+         let ipdata = $(this).data("ipdata");
+         let td;
+         if(e.target.nodeName == "TD") {
+           td = $(e.target);
+         } else {
+           td = $(e.target).closest("TD");
+         };
+         $(this).find(".ip_view").each(function() {
+           $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), true));
+         });
+         let focuson = td.find(".ip_edit");
+
+         if(focuson.length > 0) {
+           focuson.focus();
+         };
+       };
+     })
+    ;
+  };
+
+  return tr;
+};
+
+function actionView4() {
+  workarea.empty();
+  fixed_div.empty();
+  let net = getUrlParameter("net", undefined);
+  let masklen = getUrlParameter("masklen", undefined);
+  let usedonly = getUrlParameter("usedonly", false);
+
+  if(net === undefined || ! String(net).match(/^\d+$/) || Number(net) > 4294967295) { error_at(); return; };
+  if(masklen === undefined || ! String(masklen).match(/^\d{1,2}$/) || Number(masklen) > 32) { error_at(); return; };
+
+  if(Number(net) != ip4net(net, masklen)) {
+    error_at();
+    return;
+  };
+
+  run_query({"action": "view_v4", "net": net, "masklen": masklen}, function(res) {
+    debugLog(jstr(res));
+    if(!auth_check(res)) return;
+
+    if(res['ok']['gone'] !== undefined) {
+      window.location = "?action=nav_v4net&net="+net+"&masklen="+masklen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+      return;
+    };
+
+    g_data = res['ok'];
+
+    let backlen = 0;
+    if(masklen <=8 ) {
+      backlen = 0;
+    } else if(masklen <= 16) {
+      backlen = 8;
+    } else if(masklen <= 24) {
+      backlen = 16;
+    } else {
+      backlen = 24;
+    };
+
+    document.title = "IPDB: "+v4long2ip(net)+"/"+masklen+" "+res['ok']['net_name']
+    fixed_div
+     .append( $(DIV)
+       .append( $(A)
+         .prop("href", "?action=nav_v4&net="+ip4net(net, backlen)+"&masklen="+backlen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+         .text("<<<")
+         .title( "Назад к сети: "+net_mask_wc(net, backlen) )
+       )
+       .append( $(SPAN).addClass("min1em") )
+       .append( $(SPAN).text( net_mask_wc(net, masklen) ) )
+       .append( $(SPAN).addClass("min1em") )
+       .append( $(LABEL).text("В избранном: ") )
+       .append( $(INPUT).prop({"type": "checkbox", "checked": res['ok']['fav'] == 1})
+         .on("change", function() {
+           let checked = $(this).is(":checked");
+           run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
+             debugLog(jstr(res));
+             if(!auth_check(res)) return;
+           });
+         })
+       )
+     )
+     .append( $(DIV)
+       .css({"display": "flex", "align-items": "center"})
+       .append( $(LABEL).addClass(["ui-icon", "ui-icon-info", "button"])
+         .css({"margin-left": "0.5em"})
+         .click(function() {
+           g_show_net_info = !g_show_net_info;
+           $("#net_info").toggle(g_show_net_info);
+           save_local("show_net_info", g_show_net_info);
+         })
+       )
+       .append( $(SPAN).addClass("min1em") )
+       .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
+         .addClass(["ui-icon", "ui-icon-edit"])
+         .title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+         .click(function() {
+           let elm = $("#net_name_editable");
+           if(elm.hasClass("editable_edit")) {
+             $(this).title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+           } else {
+             $(this).title("Отменить редактирование. Также можно нажать ESC когда курсор в поле ввода");
+           };
+           elm.trigger("editable_toggle");
+         })
+       )
+       .append( $(SPAN)
+         .css({"font-size": "xx-large"})
+         .append(
+           editable_elm({
+             'object': 'net',
+             'prop': 'v4net_name',
+             'id': g_data['net_id'],
+             '_edit_css': { 'width': '50em' },
+             '_elm_id': 'net_name_editable',
+             '_after_save': function(elm, new_val) {
+               g_data['net_name'] = new_val;
+               $("#net_changed_ts").text( from_unix_time( unix_timestamp() ) );
+               $("#net_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
+             }
+           }, false)
+         )
+       )
+     )
+    ;
+
+    g_show_net_info = get_local("show_net_info", g_show_net_info);
+
+    var info_div = $(DIV)
+     .prop("id", "net_info")
+    ;
+
+    fixed_div
+     .append( info_div.toggle(g_show_net_info) )
+    ;
+
+    if(res['ok']['taken_ts'] > 0 && res['ok']['taken_u_id'] !== null &&
+       res['ok']['taken_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['taken_u_id'] ] != undefined
+    ) {
+      info_div
+       .append( $(DIV)
+         .append( $(SPAN).text("Занята: ") )
+         .append( $(SPAN).text(from_unix_time(res['ok']['taken_ts']) ) )
+         .append( $(SPAN).text(" Пользователем: ") )
+         .append( $(SPAN)
+           .text(g_data['aux_userinfo'][ res['ok']['taken_u_id'] ]['u_name']+" ("+
+                 g_data['aux_userinfo'][ res['ok']['taken_u_id'] ]['u_login']+")"
+           )
+         )
+       )
+      ;
+    };
+
+    if(res['ok']['ts'] > 0 && res['ok']['net_u_id'] !== null &&
+       res['ok']['net_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['net_u_id'] ] != undefined
+    ) {
+      info_div
+       .append( $(DIV)
+         .append( $(SPAN).text("Изменена: ") )
+         .append( $(SPAN).text(from_unix_time(res['ok']['ts']) )
+           .prop("id", "net_changed_ts")
+         )
+         .append( $(SPAN).text(" Пользователем: ") )
+         .append( $(SPAN)
+           .text(g_data['aux_userinfo'][ res['ok']['net_u_id'] ]['u_name']+" ("+
+                 g_data['aux_userinfo'][ res['ok']['net_u_id'] ]['u_login']+")"
+           )
+           .prop("id", "net_changed_user")
+         )
+       )
+      ;
+    };
+
+    info_div
+     .append( $(DIV)
+       .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
+         .addClass(["ui-icon", "ui-icon-edit"])
+         .css({"vertical-align": "top"})
+         .title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+         .click(function() {
+           let elm = $("#net_descr_editable");
+           if(elm.hasClass("editable_edit")) {
+             $(this).title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+           } else {
+             $(this).title("Отменить редактирование. Также можно нажать ESC когда курсор в поле ввода");
+           };
+           elm.trigger("editable_toggle");
+         })
+       )
+       .append(
+         editable_elm({
+           'object': 'net',
+           'prop': 'v4net_descr',
+           'id': g_data['net_id'],
+           '_view_classes': ["wsp"],
+           '_view_css': {"display": "inline-block"},
+           '_edit_css': { 'width': '50em', 'min-height': '20em' },
+           '_elm_id': 'net_descr_editable',
+           '_after_save': function(elm, new_val) {
+             g_data['net_descr'] = new_val;
+             $("#net_changed_ts").text( from_unix_time( unix_timestamp() ) );
+             $("#net_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
+           }
+         }, false)
+       )
+     )
+    ;
+
+    info_div
+     .append( $(DIV)
+       .append( $(SPAN).text("Владелец: ") )
+       .append( editable_elm({
+           "object": "net",
+           "prop": "v4net_owner",
+           'id': g_data['net_id'],
+           '_elm_id': 'net_owner_editable',
+           '_after_save': function(elm, new_val) {
+             g_data['net_owner'] = new_val;
+             $("#net_changed_ts").text( from_unix_time( unix_timestamp() ) );
+             $("#net_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
+           }
+         })
+       )
+
+       .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
+         .addClass(["ui-icon", "ui-icon-edit"])
+         .click(function() {
+           $("#net_owner_editable").trigger("editable_toggle");
+         })
+       )
+     )
+    ;
+
+    let current_net_rights_span = $(SPAN);
+
+    let r_keys = keys(rights);
+
+    if(res['ok']['ips'] !== undefined) {
+
+      g_edit_all = get_local("edit_all", g_edit_all);
+
+      fixed_div
+       .append( $(DIV)
+         .append( $(SPAN)
+           .append( $(LABEL)
+             .text("Редактировать все: ")
+             .prop("for", "edit_all")
+           )
+           .append( $(INPUT)
+             .prop({"id": "edit_all", "type": "checkbox", "checked": g_edit_all})
+             .on("change", function() {
+               let state = $(this).is(":checked");
+               save_local("edit_all", state);
+
+
+               $(".ips_table").find("TBODY").find("TR").each(function() {
+                 let row = $(this);
+                 let row_ipdata = row.data("ipdata");
+                 if(row_ipdata['is_taken'] !== undefined) {
+                   row.find(".ip_value").each(function() {
+                     let col_id = $(this).data("col_id");
+                     let changed = $(this).data("autosave_changed");
+                     if(changed === undefined || changed === false) {
+                       let new_elm = ip_val_elm(row_ipdata, col_id, state);
+                       $(this).replaceWith(new_elm);
+                     };
+                   });
+                 };
+               });
+             })
+           )
+         )
+       )
+      ;
+
+      let table = $(TABLE).addClass("ips_table")
+      ;
+
+      let thead = $(TR)
+      ;
+
+      thead
+       .append( $(TH)
+         .text("IP")
+       )
+      ;
+
+      let net_cols_ids = keys(res['ok']['net_cols']);
+      net_cols_ids.sort(function(a, b) {
+        return Number(res['ok']['net_cols'][a]['ic_sort']) - Number(res['ok']['net_cols'][b]['ic_sort']);
+      });
+
+      for(let col_i in net_cols_ids) {
+        let col_id = net_cols_ids[col_i];
+        let th = $(TH)
+         .text(res['ok']['net_cols'][col_id]['ic_name'])
+        ;
+        if(res['ok']['net_cols'][col_id]['ic_icon'] != '') {
+          let icon_css;
+          try {
+            icon_css = JSON.parse(res['ok']['net_cols'][col_id]['ic_icon_style']);
+          } catch(e) {
+            ison_css = {};
+          };
+          th
+           .append( $(LABEL)
+             .addClass("ui-icon")
+             .addClass(res['ok']['net_cols'][col_id]['ic_icon'])
+             .css(icon_css)
+           )
+          ;
+        };
+        th.appendTo(thead);
+      };
+
+      table
+       .append( $(THEAD)
+         .append( thead )
+       )
+      ;
+
+      let tbody = $(TBODY);
+
+
+      for(let ip_i in res['ok']['ips']) {
+        let ipdata = res['ok']['ips'][ip_i];
+        let tr = ip_row(ipdata, net_cols_ids);
+        tr.appendTo( tbody );
+
+      };
+
+      table.append( tbody );
+      table.appendTo( workarea );
+    };
+  });
+};
+
+function take_ip(elm) {
+  let row = elm.closest(".row");
+  let prev_ipdata = row.data("ipdata");
+  let take_type = elm.data("take_type");
+  if(take_type == undefined) { error_at(); return; };
+  if(prev_ipdata == undefined) { error_at(); return; };
+
+  let take_ip = undefined;
+  if(take_type === "ip") {
+    take_ip = elm.data("ip");
+  } else if(take_type === "any_ip") {
+    let v = row.find(".any_ip").val();
+    take_ip = v4ip2long(v);
+    if(take_ip === false) {
+      row.find(".any_ip").animateHighlight("red", 500);
+      return;
+    };
+    let first = elm.data("first");
+    let last = elm.data("last");
+    if(take_ip < first || take_ip > last) {
+      row.find(".any_ip").animateHighlight("red", 500);
+      return;
+    };
+  } else {
+    error_at(); return;
+  };
+
+  if(take_ip === undefined) { error_at(); return; };
+
+  run_query({"action": "take_ip4", "take_ip": String((take_ip >>> 0)), "ranges_orig": g_data['ranges_orig']}, function(res) {
+    debugLog(jstr(res));
+    if(!auth_check(res)) return;
+
+    if(res['ok']['taken'] !== undefined) {
+      show_dialog("Адрес уже кем-то занят, обновите страницу!");
+      return;
+    };
+
+    if(res['ok']['gone'] !== undefined) {
+      show_dialog("Сеть не существует. Возможно кто-то ее уже удалил, обновите страницу!");
+      return;
+    };
+
+    if(res['ok']['ranges_changed'] !== undefined) {
+      show_dialog("Кто-то внес изменения в диапазоны сети, обновите страницу!");
+      return;
+    };
+
+    let new_ipdata = res['ok']['ipdata'];
+    let net_cols_ids = keys(g_data['net_cols']);
+    net_cols_ids.sort(function(a, b) {
+      return Number(g_data['net_cols'][a]['ic_sort']) - Number(g_data['net_cols'][b]['ic_sort']);
+    });
+
+    let new_ip_row = ip_row(new_ipdata, net_cols_ids);
+    row.replaceWith( new_ip_row );
+
+    let prev_start = prev_ipdata['start'];
+    let prev_stop = prev_ipdata['stop'];
+
+    if(prev_start != prev_stop) {
+      if(take_ip > prev_start) {
+        let before_data = dup(prev_ipdata);
+        before_data['stop'] = take_ip - 1;
+        let before_row = ip_row(before_data, net_cols_ids);
+        before_row.insertBefore(new_ip_row);
+      };
+      if(take_ip < prev_stop) {
+        let after_data = dup(prev_ipdata);
+        after_data['start'] = take_ip + 1;
+        let after_row = ip_row(after_data, net_cols_ids);
+        after_row.insertAfter(new_ip_row);
+      };
+    };
+  });
+};
+
+function ip_menu(elm) {
+  $("UL.popupmenu").remove();
+  let row = elm.closest(".row");
+  let ipdata = row.data("ipdata");
+  
+  let menu=$(UL)
+   .addClass("popupmenu")
+   .css({"background-color": "white", "border": "1px solid black", "display": "inline-block", "z-index": 100})
+   .css({"padding": "0.2em"})
+   .css({"position": "absolute"})
+   .append( $(LI)
+     .title("Закрыть меню")
+     .append( $(DIV)
+       //.css({"display": "inline-block"})
+       .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrowreturn-1-w"]) )
+       .append( $(SPAN).html("&#x200b;") )
+       .click(function(e) {
+         e.stopPropagation();
+         $("UL.popupmenu").remove();
+       })
+     )
+   )
+   .append( $(LI)
+     .append( $(DIV).text("Ссылки") )
+     .append( $(UL)
+       .append( $(LI)
+         .append( $(DIV)
+           .append( $(A)
+             .prop({"target": "_blank", "href": "http://"+v4long2ip(ipdata['v4ip_addr'])+"/"})
+             .text("HTTP")
+           )
+         )
+       )
+       .append( $(LI)
+         .append( $(DIV)
+           .append( $(A)
+             .prop({"target": "_blank", "href": "https://"+v4long2ip(ipdata['v4ip_addr'])+"/"})
+             .text("HTTPS")
+           )
+         )
+       )
+       .append( $(LI)
+         .append( $(DIV)
+           .append( $(A)
+             .prop({"target": "_blank", "href": "ssh://"+v4long2ip(ipdata['v4ip_addr'])})
+             .text("SSH")
+           )
+         )
+       )
+     )
+   )
+  ;
+
+
+  if((ipdata['rights'] & R_EDIT_IP_VLAN) != 0 &&
+     ((ipdata['rights'] & R_DENYIP) == 0 ||
+      (ipdata['rights'] & R_IGNORE_R_DENY) != 0
+     )
+  ) {
+
+    if(row.find(".ip_view").length > 0) {
+      menu
+       .append( $(LI)
+         .append( $(DIV)
+           .title("Также можно сделать CTRL-Click или dbl-Click на строке...")
+           .append( $(LABEL).addClass(["ui-icon", "ui-icon-edit"]) )
+           .append( $(SPAN).html("Редактировать&#x20F0;") )
+           .click(function(e) {
+             e.stopPropagation();
+
+             row.find(".ip_view").each(function() {
+               $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), true));
+             });
+             $("UL.popupmenu").remove();
+
+             row.find(".ip_edit").first().focus();
+           })
+         )
+       )
+      ;
+    };
+
+    if(row.find(".ip_edit").length > 0) {
+      menu
+       .append( $(LI)
+         .append( $(DIV)
+           //.css({"display": "inline-block"})
+           .append( $(LABEL).addClass(["ui-icon", "ui-icon-undo"]) )
+           .append( $(SPAN).text("Перестать редактировать") )
+           .click(function(e) {
+             e.stopPropagation();
+
+             row.find(".ip_edit").each(function() {
+               let changed = $(this).data("autosave_changed");
+               if(changed) {
+                 g_autosave_changes--;
+                 if(g_autosave_changes < 0) {
+                   error_at();
+                   return;
+                 } else if(g_autosave_changes == 0) {
+                   $("#autosave_btn").css({"color": "gray"});
+                 } else {
+                   $("#autosave_btn").css({"color": "yellow"});
+                 };
+               };
+               $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), false));
+             });
+             $("UL.popupmenu").remove();
+           })
+         )
+       )
+      ;
+    };
+
+    menu
+     .append( $(LI)
+       .append( $(DIV)
+         //.css({"display": "inline-block"})
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-trash"]) )
+         .append( $(SPAN).text("Освободить") )
+         .click(function(e) {
+           e.stopPropagation();
+         })
+       )
+     )
+    ;
+
+  };
+
+  //let elm_offset = elm.offset();
+  //let elm_width = elm.width();
+
+  let td_width = elm.closest("TD").width();
+
+  menu.css({"top": "0px", "left": td_width+10+"px"});
+
+  menu.appendTo(elm.closest("TD"));
+
+  menu.menu();
+
+  $(".tooltip").remove();
+};
+
+function ip_val_elm(ipdata, col_id, state) {
+  let ret;
+  let coldata = g_data['net_cols'][col_id];
+
+  let value = "";
+  let ts = undefined;
+  let u_id = undefined;
+
+  if(ipdata["values"][col_id] !== undefined) {
+    value = ipdata["values"][col_id]['v'];
+    ts = ipdata["values"][col_id]['ts'];
+    u_id = ipdata["values"][col_id]['u_id'];
+  };
+
+  let title = "";
+  if(ts !== undefined) {
+    title = "Изменен: "+from_unix_time(ts);
+    if(u_id !== undefined && g_data['aux_userinfo'][u_id] !== undefined) {
+      title += "\n"+g_data['aux_userinfo'][u_id]['u_name']+" ("+g_data['aux_userinfo'][u_id]['u_login']+")";
+    };
+  };
+
+  let style = "{}";
+
+  if(state) {
+    style = coldata['ic_style'];
+    if(coldata['ic_type'] == "textarea") {
+      ret = $(TEXTAREA);
+      ret.css({"min-height": "1em"});
+      let lines = String(value).split("\n").length;
+      ret.css({"height": lines+"em"});
+    } else {
+      ret = $(INPUT);
+    };
+    ret.val(value);
+
+    ret.saveable({"object": "ip_value", "id": ipdata['v4ip_id'], "col_id": col_id});
+    ret.addClass("ip_edit");
+
+    ret.keyup(function(e) {
+      if(e.key === "Escape") {
+        e.stopPropagation();
+        let row = $(this).closest(".row");
+        row.find(".ip_edit").each(function() {
+          if(!$(this).data("autosave_changed")) {
+            $(this).replaceWith( ip_val_elm(row.data("ipdata"), $(this).data("col_id"), false ));
+          };
+        });
+      };
+
+    });
+
+  } else {
+    style = coldata['ic_view_style'];
+    ret = $(SPAN)
+     .addClass("wsp")
+     .addClass("ip_view")
+     .text(value)
+    ;
+  };
+
+  let css = {};
+
+  try {
+    css = JSON.parse(style);
+  } catch(e) {
+    css = {};
+  };
+  ret.addClass("ip_value");
+  ret.data("col_id", col_id);
+  ret.css(css);
+  ret.data("title", title);
+
+  return ret;
+};
+
+function editable_elm(data, edit) {
+  let ret;
+  let value = "";
+
+  if(data['object'] == 'net' && data['prop'] == 'v4net_descr') {
+    value = g_data[ 'net_descr' ];
+  } else if(data['object'] == 'net' && data['prop'] == 'v4net_name') {
+    value = g_data[ 'net_name' ];
+  } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
+    value = g_data[ 'net_owner' ];
+  } else {
+    error_at();
+    return;
+  };
+  if(edit) {
+    if(data['object'] == 'net' && data['prop'] == 'v4net_descr') {
+      ret = $(TEXTAREA);
+    } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
+      ret = $(SELECT);
+      ret.append( $(OPTION).text("не задан").val(0) );
+      run_query({"action": "users_list"}, function(res) {
+        debugLog(jstr(res));
+        if(!auth_check(res)) return;
+
+        for(let i in res['ok']['users_list']) {
+          let u_id = res['ok']['users_list'][i]['u_id'];
+          if(g_data['aux_userinfo'][u_id] === undefined) {
+            g_data['aux_userinfo'][u_id] = res['ok']['users_list'][i];
+          };
+          ret.append( $(OPTION).val(u_id).text(res['ok']['users_list'][i]['u_name']+" ("+res['ok']['users_list'][i]['u_login']+")") );
+        };
+
+        ret.val(value);
+        ret.on("select change", function() { $(this).trigger("input_stop"); });
+      });
+    } else {
+      ret = $(INPUT).css("font-size", "inherit");
+    };
+    ret.addClass("editable_edit");
+    ret.val(value);
+    ret.saveable(data);
+    ret.keyup(function(e) {
+      if(e.key === "Escape") {
+        e.stopPropagation();
+        if($(this).data("autosave_changed")) {
+          g_autosave_changes--;
+          if(g_autosave_changes < 0) {
+            error_at();
+            return;
+          } else if(g_autosave_changes == 0) {
+            $("#autosave_btn").css({"color": "gray"});
+          };
+        };
+        $(this).replaceWith( editable_elm( $(this).data("autosave_data"), false ) );
+      };
+    });
+    if(data['_edit_css'] !== undefined) {
+      ret.css(data['_edit_css']);
+    };
+    if(data['_edit_classes'] !== undefined) {
+      ret.addClass(data['_edit_classes']);
+    };
+  } else {
+    ret = $(SPAN);
+    ret.addClass("editable_view");
+    if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
+      if(value == 0) {
+        ret.text("не задан");
+      } else if(g_data['aux_userinfo'][value] !== undefined) {
+        ret.text(g_data['aux_userinfo'][value]['u_name']+" ("+
+                 g_data['aux_userinfo'][value]['u_login']+")"
+        );
+      } else {
+        ret.text("нет данных");
+      };
+    } else {
+      ret.text(value);
+    };
+    if(data['_view_css'] !== undefined) {
+      ret.css(data['_view_css']);
+    };
+    if(data['_view_classes'] !== undefined) {
+      ret.addClass(data['_view_classes']);
+    };
+    ret
+     .on("click dblclick", function(e) {
+       if ((e.type == "click" && e.ctrlKey) ||
+           e.type == "dblclick"
+       ) {
+         $(this).trigger("editable_toggle");
+       };
+     })
+    ;
+  };
+  ret.data("editable_data", data);
+  ret.on("editable_toggle", function() {
+    let data = $(this).data("editable_data");
+    if(data['object'] == 'net') {
+      if( (g_data['net_rights'] & R_MANAGE_NET) == 0 ) return;
+    };
+    let new_state = $(this).hasClass("editable_view");
+    if(!new_state && $(this).data("autosave_changed") === true) {
+      g_autosave_changes--;
+      if(g_autosave_changes < 0) {
+        error_at();
+        return;
+      } else if(g_autosave_changes == 0) {
+        $("#autosave_btn").css({"color": "gray"});
+      } else {
+        $("#autosave_btn").css({"color": "yellow"});
+      };
+    };
+    let new_elm = editable_elm(data, new_state);
+    $(this).replaceWith( new_elm );
+    if(new_state) new_elm.focus();
+  });
+  if(data['_elm_id'] !== undefined) {
+    ret.prop('id', data['_elm_id']);
+  };
+  return ret;
+};
