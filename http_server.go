@@ -60,43 +60,43 @@ func init() {
   g_rights[R_NAME]["label"] = "ПрИмнСет"
   g_rights[R_NAME]["descr"] = "Просмотр имени сети в списке сетей"
   g_rights[R_NAME]["requred_by"] = [...]uint64{R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET}
-  g_rights[R_NAME]["used_in"] = [...]string{"ext_net_range", "net_acl"}
+  g_rights[R_NAME]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
 
   g_rights[R_VIEW_NET_INFO] = make(M)
   g_rights[R_VIEW_NET_INFO]["label"] = "ПрИнфСет"
   g_rights[R_VIEW_NET_INFO]["descr"] = "Просмотр информации о сети, кроме списка IP адресов"
   g_rights[R_VIEW_NET_INFO]["requred_by"] = [...]uint64{R_MANAGE_NET}
-  g_rights[R_VIEW_NET_INFO]["used_in"] = [...]string{"ext_net_range", "net_acl"}
+  g_rights[R_VIEW_NET_INFO]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
 
   g_rights[R_VIEW_NET_IPS] = make(M)
   g_rights[R_VIEW_NET_IPS]["label"] = "ПрАдрVLN"
   g_rights[R_VIEW_NET_IPS]["descr"] = "Просмотр IP адресов или VLAN-ов"
   g_rights[R_VIEW_NET_IPS]["requred_by"] = [...]uint64{R_EDIT_IP_VLAN, R_MANAGE_NET}
-  g_rights[R_VIEW_NET_IPS]["used_in"] = [...]string{"ext_net_range", "net_acl", "vlan_range"}
+  g_rights[R_VIEW_NET_IPS]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range"}
 
   g_rights[R_EDIT_IP_VLAN] = make(M)
   g_rights[R_EDIT_IP_VLAN]["label"] = "ИзмАдрVL"
   g_rights[R_EDIT_IP_VLAN]["descr"] = "Занятие, редактирование, освобождение IP адресов или VLAN-ов"
   g_rights[R_EDIT_IP_VLAN]["requred_by"] = [...]uint64{R_MANAGE_NET}
-  g_rights[R_EDIT_IP_VLAN]["used_in"] = [...]string{"ext_net_range", "net_acl", "vlan_range", "int_net_range"}
+  g_rights[R_EDIT_IP_VLAN]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range", "int_v4net_range"}
 
   g_rights[R_MANAGE_NET] = make(M)
   g_rights[R_MANAGE_NET]["label"] = "ИзмнСети"
   g_rights[R_MANAGE_NET]["descr"] = "Занятие, редактирование, освобождение сети"
   g_rights[R_MANAGE_NET]["requred_by"] = [...]uint64{}
-  g_rights[R_MANAGE_NET]["used_in"] = [...]string{"ext_net_range", "net_acl"}
+  g_rights[R_MANAGE_NET]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
 
   g_rights[R_IGNORE_R_DENY] = make(M)
   g_rights[R_IGNORE_R_DENY]["label"] = "ИгнорЗпр"
   g_rights[R_IGNORE_R_DENY]["descr"] = "Игнорировать запрет в диапазонах"
   g_rights[R_IGNORE_R_DENY]["requred_by"] = [...]uint64{}
-  g_rights[R_IGNORE_R_DENY]["used_in"] = [...]string{"ext_net_range", "net_acl"}
+  g_rights[R_IGNORE_R_DENY]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
 
   g_rights[R_DENYIP] = make(M)
   g_rights[R_DENYIP]["label"] = "ЗпртРедт"
   g_rights[R_DENYIP]["descr"] = "Запрет занимать, редактировать, удалять IP/VLAN в диапазоне"
   g_rights[R_DENYIP]["requred_by"] = [...]uint64{}
-  g_rights[R_DENYIP]["used_in"] = [...]string{"int_net_range", "vlan_range"}
+  g_rights[R_DENYIP]["used_in"] = [...]string{"int_v4net_range", "vlan_range"}
 
 }
 
@@ -2001,7 +2001,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var object string
     var object_id string
 
-    if object, err = get_p_string(q, "object", "^(?:net_acl)$"); err != nil { panic(err) }
+    if object, err = get_p_string(q, "object", "^(?:v4net_acl)$"); err != nil { panic(err) }
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
 
     var dbnet M
@@ -2016,7 +2016,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if groups, err = return_query_M(db, query, "g_id"); err != nil { panic(err) }
 
     switch object {
-    case "net_acl":
+    case "v4net_acl":
       var rows []M
       query = "SELECT"+
               " v4nets.*"+
@@ -2104,7 +2104,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var object_id string
     var rights map[string]string
 
-    if object, err = get_p_string(q, "object", "^(?:net_acl)$"); err != nil { panic(err) }
+    if object, err = get_p_string(q, "object", "^(?:v4net_acl)$"); err != nil { panic(err) }
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
     if rights, err = get_p_map(q, "rights", g_num_reg); err != nil { panic(err) }
 
@@ -2129,7 +2129,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var right_mask_field string
 
     switch object {
-    case "net_acl":
+    case "v4net_acl":
       table = "gn4rs"
       group_key = "gn4r_fk_g_id"
       object_key = "gn4r_fk_v4net_id"
@@ -2174,13 +2174,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         dbnet_rights = dbnet_rights | ADMIN_RIGHTS
       }
 
-      if (dbnet_rights & (
-          R_NAME |
-          R_VIEW_NET_INFO |
-          R_VIEW_NET_IPS |
-          R_EDIT_IP_VLAN |
-          R_MANAGE_NET |
-      0)) == 0 { panic(NoAccess()) }
+      for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
+        if (dbnet_rights & r) == 0 { panic(NoAccess()) }
+      }
 
     default:
       panic(PE)
@@ -2230,6 +2226,322 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     commited = true
 
   } else if action == "save_range" {
+    var object string
+    var object_id string
+    var rights map[string]string
+
+    if object, err = get_p_string(q, "object", "^(?:int_v4net_range)$"); err != nil { panic(err) }
+    if object_id, err = get_p_string(q, "object_id", "^\\d*"); err != nil { panic(err) }
+    if rights, err = get_p_map(q, "rights", g_num_reg); err != nil { panic(err) }
+
+    var net_id string
+
+    var r_start interface{}
+    var r_stop interface{}
+
+    var r_name string
+    var r_descr string
+    var r_style string
+    var r_icon string
+    var r_icon_style string
+
+    if r_name, err = get_p_string(q, "r_name", nil); err != nil { panic(err) }
+    if r_descr, err = get_p_string(q, "r_descr", nil); err != nil { panic(err) }
+    if r_style, err = get_p_string(q, "r_style", nil); err != nil { panic(err) }
+    if r_icon, err = get_p_string(q, "r_icon", nil); err != nil { panic(err) }
+    if r_icon_style, err = get_p_string(q, "r_icon_style", nil); err != nil { panic(err) }
+
+    tx, tx_err := db.Begin()
+    if tx_err != nil { panic(tx_err) }
+    var commited bool = false
+    defer func() {
+      if !commited {
+        tx.Rollback()
+      }
+    } ()
+
+    var dbnet M
+    var dbnet_rights uint64
+
+    var rquery string
+    var var_ok bool
+
+    var table string
+    var group_key string
+    var object_key string
+    var right_mask_field string
+
+    switch object {
+    case "int_v4net_range":
+      if net_id, err = get_p_string(q, "net_id", g_num_reg); err != nil { panic(err) }
+      if r_start, err = get_p_uint32(q, "r_start"); err != nil { panic(err) }
+      if r_stop, err = get_p_uint32(q, "r_stop"); err != nil { panic(err) }
+
+      if r_start.(uint32) > r_stop.(uint32) { panic("Bad range") }
+
+      table = "gr4rs"
+      group_key = "gr4r_fk_g_id"
+      object_key = "gr4r_fk_v4r_id"
+      right_mask_field = "gr4r_rmask"
+
+      var rows []M
+      query = "SELECT"+
+              " v4nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
+                         " FROM gn4rs WHERE"+
+                         " gn4r_fk_v4net_id=v4net_id"+
+                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
+                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
+                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v4r_fk_v4net_id IS NULL"+
+                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v4nets WHERE v4net_id=?"
+      if rows, err = return_query_A(tx, query, net_id); err != nil { panic(err) }
+      if len(rows) != 1 {
+        panic("Сеть не существует. Обновите страницу.")
+      }
+      dbnet = rows[0]
+
+      var dbnet_addr uint64
+      var dbnet_last_addr uint64
+
+      if dbnet_addr, var_ok = dbnet.Uint64("v4net_addr"); !var_ok { panic(PE) }
+      if dbnet_last_addr, var_ok = dbnet.Uint64("v4net_last"); !var_ok { panic(PE) }
+
+      if uint64(r_start.(uint32)) < dbnet_addr || uint64(r_stop.(uint32)) > dbnet_last_addr { panic("Range is out of network bounds") }
+
+      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
+
+      var dbnet_r_rights uint64
+      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
+
+      dbnet_rights |= dbnet_r_rights
+
+      var dbnet_owner string
+      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
+
+      if dbnet_owner == user_id {
+        dbnet_rights = dbnet_rights | OWNER_RIGHTS
+      }
+
+      if user_is_admin {
+        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
+      }
+
+      for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
+        if (dbnet_rights & r) == 0 { panic(NoAccess()) }
+      }
+
+      if object_id == "" {
+        query = "INSERT INTO v4rs SET"+
+                " v4r_start=?"+
+                ",v4r_stop=?"+
+                ",v4r_name=?"+
+                ",v4r_descr=?"+
+                ",v4r_style=?"+
+                ",v4r_icon=?"+
+                ",v4r_icon_style=?"+
+                ",v4r_fk_v4net_id=?"+
+                ",ts=?"+
+                ",fk_u_id=?"
+        if dbres, err = tx.Exec(query, r_start, r_stop, r_name, r_descr, r_style, r_icon, r_icon_style, net_id, ts, user_id);
+        err != nil { panic(err) }
+        var lid int64
+
+        if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
+        if lid <= 0 { panic("weird LastInsertId returned") }
+
+        object_id = strconv.FormatInt(lid, 10)
+      } else {
+        query = "UPDATE v4rs SET"+
+                " v4r_start=?"+
+                ",v4r_stop=?"+
+                ",v4r_name=?"+
+                ",v4r_descr=?"+
+                ",v4r_style=?"+
+                ",v4r_icon=?"+
+                ",v4r_icon_style=?"+
+                ",ts=?"+
+                ",fk_u_id=?"+
+                " WHERE v4r_fk_v4net_id=? AND v4r_id=?"
+        if _, err = tx.Exec(query, r_start, r_stop, r_name, r_descr, r_style, r_icon, r_icon_style, ts, user_id, net_id, object_id);
+        err != nil { panic(err) }
+      }
+
+    default:
+      panic(PE)
+    }
+
+    rquery = "SELECT "+right_mask_field+" as rights"+
+             ", "+group_key+" as g_id"+
+             " FROM "+table+
+             " WHERE "+object_key+"=?"
+
+    var groups_rights M
+    if groups_rights, err = return_query_M(tx, rquery, "g_id", object_id); err != nil { panic(err) }
+
+    for g_id, m := range groups_rights {
+      var current_rights string
+      if current_rights, var_ok = m.(M).UintString("rights"); !var_ok { panic(PE) }
+
+      if _, ex := rights[g_id]; !ex {
+        // has to delete currently assigned right
+        query = "DELETE FROM "+table+
+                " WHERE "+group_key+"=? AND "+object_key+"=?"
+        if _, err = tx.Exec(query, g_id, object_id); err != nil { panic(err) }
+      } else if current_rights != rights[g_id] {
+        query = "UPDATE "+table+
+                " SET "+right_mask_field+"=?"+
+                ", ts=?, fk_u_id=?"+
+                " WHERE "+group_key+"=? AND "+object_key+"=?"
+        if _, err = tx.Exec(query,  rights[g_id], ts, user_id, g_id, object_id); err != nil { panic(err) }
+      }
+    }
+
+    for g_id, _ := range rights {
+      if _, ex := groups_rights[g_id]; !ex {
+        query = "INSERT INTO "+table+
+                " SET "+right_mask_field+"=?"+
+                ", ts=?, fk_u_id=?"+
+                ", "+group_key+"=?"+
+                ", "+object_key+"=?"
+        if _, err = tx.Exec(query,  rights[g_id], ts, user_id, g_id, object_id); err != nil { panic(err) }
+      }
+    }
+
+    out["done"] = 1
+
+    err = tx.Commit()
+    if err != nil { panic(err) }
+    commited = true
+  } else if action == "get_net_range" {
+    var object string
+    var object_id string
+
+    if object, err = get_p_string(q, "object", "^(?:int_v4net_range)$"); err != nil { panic(err) }
+    if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
+
+    var net_id string
+    var dbnet M
+    var dbnet_rights uint64
+
+    var rquery string
+    var var_ok bool
+
+    var table string
+    var group_key string
+    var object_key string
+    var right_mask_field string
+
+    switch object {
+    case "int_v4net_range":
+      table = "gr4rs"
+      group_key = "gr4r_fk_g_id"
+      object_key = "gr4r_fk_v4r_id"
+      right_mask_field = "gr4r_rmask"
+
+      var rows []M
+
+      query = "SELECT * FROM v4rs WHERE v4r_id=?"
+      if rows, err = return_query_A(db, query, object_id); err != nil { panic(err) }
+      if len(rows) != 1 { panic("Диапазон удален другим пользователем, обновите страницу") }
+      out = rows[0]
+
+      if net_id, var_ok = rows[0].UintString("v4r_fk_v4net_id"); !var_ok { panic(PE) }
+
+      query = "SELECT"+
+              " v4nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
+                         " FROM gn4rs WHERE"+
+                         " gn4r_fk_v4net_id=v4net_id"+
+                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
+                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
+                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v4r_fk_v4net_id IS NULL"+
+                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v4nets WHERE v4net_id=?"
+      if rows, err = return_query_A(db, query, net_id); err != nil { panic(err) }
+      if len(rows) != 1 {
+        panic("Сеть не существует. Обновите страницу.")
+      }
+      dbnet = rows[0]
+
+      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
+
+      var dbnet_r_rights uint64
+      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
+
+      dbnet_rights |= dbnet_r_rights
+
+      var dbnet_owner string
+      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
+
+      if dbnet_owner == user_id {
+        dbnet_rights = dbnet_rights | OWNER_RIGHTS
+      }
+
+      if user_is_admin {
+        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
+      }
+
+      for _, r := range [...]uint64{R_NAME, R_VIEW_NET_IPS} {
+        if (dbnet_rights & r) == 0 { panic(NoAccess()) }
+      }
+
+
+    default:
+      panic(PE)
+    }
+
+    rquery = "SELECT "+right_mask_field+" as rights"+
+             ", "+group_key+" as g_id"+
+             ", ts"+
+             ", fk_u_id"+
+             " FROM "+table+
+             " WHERE "+object_key+"=?"
+
+    var groups M
+
+    query = "SELECT g_id, g_name, g_descr FROM gs"
+    if groups, err = return_query_M(db, query, "g_id"); err != nil { panic(err) }
+
+    var aux_userinfo M
+    user_ids := make([]string, 0)
+
+    var rights M
+    if rights, err = return_query_M(db, rquery, "g_id", object_id); err != nil { panic(err) }
+
+    for g_id, _ := range groups {
+      if _, ex := rights[g_id]; ex {
+        var s string
+        if s, var_ok = rights[g_id].(M).UintString("fk_u_id"); !var_ok { panic(PE) }
+        user_ids = append(user_ids, s)
+        groups[g_id].(M)["ts"] = rights[g_id].(M)["ts"]
+        groups[g_id].(M)["fk_u_id"] = rights[g_id].(M)["fk_u_id"]
+        groups[g_id].(M)["rights"] = rights[g_id].(M)["rights"]
+      } else {
+        groups[g_id].(M)["ts"] = nil
+        groups[g_id].(M)["fk_u_id"] = nil
+        groups[g_id].(M)["rights"] = uint64(0)
+      }
+    }
+
+    if len(user_ids) > 0 {
+      if aux_userinfo, err = return_query_M(db, "SELECT * FROM us WHERE u_id IN("+strings.Join(user_ids, ",")+")", "u_id");
+      err != nil { panic(err) }
+    } else {
+      aux_userinfo = make(M)
+    }
+
+    out["groups"] = groups
+    out["aux_userinfo"] = aux_userinfo
+
   } else if action == "query" {
     out["_query"] = q
   } else {

@@ -26,6 +26,7 @@ var g_default_range_style = {"color": "black"};
 
 var g_data; //resets by main pages
 
+var usedonly = false;
 /* fetched from consts.js node in http_server.go
 const R_NAME = 1;
 const R_VIEW_NET_INFO = 2;
@@ -47,8 +48,8 @@ const g_rights = {
       32
     ],
     "used_in": [
-      "ext_net_range",
-      "net_acl"
+      "ext_v4net_range",
+      "v4net_acl"
     ]
   },
   "16": {
@@ -56,8 +57,8 @@ const g_rights = {
     "label": "ИгнорЗпр",
     "requred_by": [],
     "used_in": [
-      "ext_net_range",
-      "net_acl"
+      "ext_v4net_range",
+      "v4net_acl"
     ]
   },
   "2": {
@@ -67,8 +68,8 @@ const g_rights = {
       32
     ],
     "used_in": [
-      "ext_net_range",
-      "net_acl"
+      "ext_v4net_range",
+      "v4net_acl"
     ]
   },
   "32": {
@@ -76,8 +77,8 @@ const g_rights = {
     "label": "ИзмнСети",
     "requred_by": [],
     "used_in": [
-      "ext_net_range",
-      "net_acl"
+      "ext_v4net_range",
+      "v4net_acl"
     ]
   },
   "4": {
@@ -88,8 +89,8 @@ const g_rights = {
       32
     ],
     "used_in": [
-      "ext_net_range",
-      "net_acl",
+      "ext_v4net_range",
+      "v4net_acl",
       "vlan_range"
     ]
   },
@@ -98,7 +99,7 @@ const g_rights = {
     "label": "ЗпртРедт",
     "requred_by": [],
     "used_in": [
-      "int_net_range",
+      "int_v4net_range",
       "vlan_range"
     ]
   },
@@ -109,10 +110,10 @@ const g_rights = {
       32
     ],
     "used_in": [
-      "ext_net_range",
-      "net_acl",
+      "ext_v4net_range",
+      "v4net_acl",
       "vlan_range",
-      "int_net_range"
+      "int_v4net_range"
     ]
   }
 };
@@ -575,6 +576,8 @@ function ellipsed(text, chars) {
 var userinfo = {};
 
 $( document ).ready(function() {
+ 
+  let usedonly = getUrlParameter("usedonly", false);
 
   //BEGIN begin
   window.onerror=function(errorMsg, url, lineNumber) {
@@ -1257,7 +1260,6 @@ function actionNav4() {
   fixed_div.empty();
   let net = getUrlParameter("net", undefined);
   let masklen = getUrlParameter("masklen", undefined);
-  let usedonly = getUrlParameter("usedonly", false);
 
   if(net === undefined || ! String(net).match(/^\d+$/) || Number(net) > 4294967295) { error_at(); return; };
   if(masklen === undefined || ! String(masklen).match(/^\d{1,2}$/) || Number(masklen) > 32) { error_at(); return; };
@@ -1536,6 +1538,7 @@ function ip_row(ipdata, net_cols_ids) {
                  "margin-right": g_range_bar_width+"px",
     });
     if(ipdata['ranges'][i]['in_range'] !== undefined) {
+      r_label.addClass("iprange_shown");
       if(g_data["net_ranges"][i]['v4r_style'] != "{}") {
         try {
           let r_label_css = JSON.parse(g_data["net_ranges"][i]['v4r_style']);
@@ -1547,6 +1550,7 @@ function ip_row(ipdata, net_cols_ids) {
         r_label.css({"background-color": "black"});
       };
       r_label.title(v4range_title(g_data["net_ranges"][i]));
+      r_label.data("r_i", i);
     };
     ranges_span.append( r_label );
   };
@@ -1673,7 +1677,7 @@ function ip_row(ipdata, net_cols_ids) {
      )
     ;
     //
-    ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])) );
+    ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])).addClass("ip_addr") );
 
     ip_td
      .append( $(SPAN)
@@ -1685,7 +1689,7 @@ function ip_row(ipdata, net_cols_ids) {
 
     ip_td.tooltip({
       classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
-      items: "TD",
+      items: "SPAN.ip_addr",
       content: function() {
         if( $("UL").length > 0 ) return undefined;
         let row = $(this).closest(".row");
@@ -1752,6 +1756,7 @@ function ip_row(ipdata, net_cols_ids) {
        if ((e.type == "click" && e.ctrlKey) ||
            e.type == "dblclick"
        ) {
+         e.stopPropagation();
          let ipdata = $(this).data("ipdata");
          let td;
          if(e.target.nodeName == "TD") {
@@ -1780,7 +1785,6 @@ function actionView4() {
   fixed_div.empty();
   let net = getUrlParameter("net", undefined);
   let masklen = getUrlParameter("masklen", undefined);
-  let usedonly = getUrlParameter("usedonly", false);
 
   if(net === undefined || ! String(net).match(/^\d+$/) || Number(net) > 4294967295) { error_at(); return; };
   if(masklen === undefined || ! String(masklen).match(/^\d{1,2}$/) || Number(masklen) > 32) { error_at(); return; };
@@ -1994,8 +1998,8 @@ function actionView4() {
       let right = r_keys[k];
       let found = false;
       for(let i in g_rights[right]['used_in']) {
-        if(g_rights[right]['used_in'][i] == "ext_net_range" ||
-           g_rights[right]['used_in'][i] == "net_acl"
+        if(g_rights[right]['used_in'][i] == "ext_v4net_range" ||
+           g_rights[right]['used_in'][i] == "v4net_acl"
         ) {
           found = true;
           break;
@@ -2021,7 +2025,7 @@ function actionView4() {
          .text("Права групп")
          .addClass("button")
          .click(function() {
-           edit_rights("net_acl", g_data['net_id'], (g_data['net_rights'] & R_MANAGE_NET) > 0,  function() {
+           edit_rights("v4net_acl", g_data['net_id'], (g_data['net_rights'] & R_MANAGE_NET) > 0,  function() {
              window.location = "?action=view_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
                                (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
              return;
@@ -2115,7 +2119,7 @@ function actionView4() {
            .addClass(["button", "ui-icon", "ui-icon-plus"])
            .title("Добавить диапазон")
            .css({"float": "right"})
-           .click(function() { edit_net_range("int_net_range", undefined); })
+           .click(function() { edit_net_range("int_v4net_range", undefined); })
          )
        )
       ;
@@ -2166,6 +2170,30 @@ function actionView4() {
 
       table.append( tbody );
       table.appendTo( workarea );
+
+      table.tooltip({
+        classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+        items: ".iprange",
+        content: function() {
+          let r_i = $(this).data("r_i");
+          if(r_i === undefined) return;
+          return v4range_title(g_data['net_ranges'][r_i]);
+        }
+      });
+
+      if((g_data['net_rights'] & R_MANAGE_NET) > 0) {
+        table.find(".iprange_shown").on("click dblclick", function(e) {
+          if ((e.type == "click" && e.ctrlKey) ||
+              e.type == "dblclick"
+          ) {
+            e.stopPropagation();
+            let r_i = $(this).data("r_i");
+            if(r_i === undefined) return;
+            edit_net_range("int_v4net_range", g_data['net_ranges'][r_i]['v4r_id']);
+          };
+        });
+      };
+        
     } else {
       fixed_div
        .append( $(DIV).text("У вас нет прав просмотра IP адресов этой сети") )
@@ -2615,7 +2643,7 @@ function edit_rights(object, object_id, allow_edit, on_done) {
     ;
 
     switch(object) {
-    case "net_acl":
+    case "v4net_acl":
       dialog.title("Права доступа к сети: "+v4long2ip(g_data['net_addr'])+"/"+g_data['net_masklen']+" "+
                    g_data['net_name']
       );
@@ -2910,7 +2938,7 @@ function edit_net_range(object, object_id) {
       let r_start;
       let r_stop;
       switch(object) {
-      case "int_net_range":
+      case "int_v4net_range":
         r_start = g_data['net_addr'];
         r_stop = g_data['net_last_addr'];
 
@@ -2938,7 +2966,7 @@ function edit_net_range(object, object_id) {
           "v4r_name": "",
           "v4r_descr": "",
           "v4r_id": undefined,
-          "v4r_style": '{"color": "black"}',
+          "v4r_style": '{"background-color": "black"}',
           "v4r_icon": "ui-icon-arrow-2-n-s",
           "v4r_icon_style": '{"color": "black"}',
           "ts": 0,
@@ -2949,7 +2977,7 @@ function edit_net_range(object, object_id) {
 
     let title = "Диапазон адресов";
     switch(object) {
-    case "int_net_range":
+    case "int_v4net_range":
       title += " для сети "+g_data['net_name'];
       break;
     default:
@@ -2989,7 +3017,7 @@ function edit_net_range(object, object_id) {
     ;
 
     $(DIV)
-     .append( $(SPAN).html("CSS значка &#x2503;: ").title("Например: {\"color\": \"red\"}") )
+     .append( $(SPAN).html("CSS колонки: ").title("Например: {\"background-color\": \"red\"}") )
      .append( $(INPUT)
        .prop({"id": "r_style", "readonly": !allow_edit})
        .val(res['ok']['v4r_style'])
@@ -3176,7 +3204,7 @@ function edit_net_range(object, object_id) {
           let object = dlg.data("object");
 
           switch(object) {
-          case "int_net_range":
+          case "int_v4net_range":
             if(r_start < g_data['net_addr']) {
               $("#r_start").animateHighlight("red", 300);
               return;
@@ -3213,11 +3241,11 @@ function edit_net_range(object, object_id) {
           let query = {
             "action": "save_range",
             "object": dlg.data("object"),
-            "object_id": dlg.data("object_id"),
-            "net_id": dlg.data("object") === "int_net_range"?g_data['net_id']:null,
+            "object_id": dlg.data("object_id")===undefined?"":dlg.data("object_id"),
+            "net_id": dlg.data("object") === "int_v4net_range"?g_data['net_id']:null,
             "rights": rights,
-            "r_start": r_start,
-            "r_stop": r_stop,
+            "r_start": String(r_start),
+            "r_stop": String(r_stop),
             "r_name": String($("#r_name").val()).trim(),
             "r_descr": String($("#r_descr").val()).trim(),
             "r_style": String($("#r_style").val()).trim(),
@@ -3232,7 +3260,7 @@ function edit_net_range(object, object_id) {
             dlg.dialog( "close" );
 
             switch(object) {
-            case "int_net_range":
+            case "int_v4net_range":
               window.location = "?action=view_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
                                 (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
               break;
