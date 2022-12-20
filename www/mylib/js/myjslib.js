@@ -156,7 +156,7 @@ function ln() {
   return frameRE.exec(stack.shift())[1];
 };
 
-function error_at(message) {
+function error_at(message, full=false) {
   let e = new Error();
   if (!e.stack) try {
     // IE requires the Error to actually be throw or else the Error's 'stack'
@@ -167,6 +167,7 @@ function error_at(message) {
       return 0; // IE < 10, likely
     }
   }
+  let full_stack = e.stack.toString().split(/\r\n|\n/);
   let stack = e.stack.toString().split(/\r\n|\n/);
   // We want our caller's frame. It's index into |stack| depends on the
   // browser and browser version, so we need to search for the second frame:
@@ -187,7 +188,7 @@ function error_at(message) {
   } else {
     line=0;
   };
-  error_dialog(message+" at "+line);
+  error_dialog(message+" at "+line+(full?"\n"+full_stack.join("\n"):""));
 };
 function addZero(num) {
   if(num > 9) return num.toString();
@@ -407,6 +408,12 @@ function login_dialog(message, success_query, success_func) {
   dialog.dialog(d);
 };
 function run_query(query, successfunc) {
+  if(query === undefined) {
+    if(successfunc !== undefined) {
+      successfunc();
+    };
+    return;
+  };
   $.ajax({
     url: AJAX,
     method: 'POST',
@@ -462,8 +469,10 @@ function has_right(right) {
 };
 
 function in_array(list, value) {
-  if(list === undefined) error_at();
-  if(typeof(list) !== "Array") error_at();
+  if(list === undefined) error_at("in_array(): Undefined list", true);
+  if(!Array.isArray(list)) error_at("in_array(): list is not an array: "+typeof(list)+
+    "\n"+jstr(list)+"\n", true
+  );
   for(let i in list) {
     if(list[i] == value) return true;
   };
