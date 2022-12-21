@@ -253,6 +253,20 @@ func return_arrays(db interface{}, query string, args ...interface{}) ([][]inter
   return ret, nil
 }
 
+func must_return_one_M(db interface{}, query string, args ...interface{}) (M, error) {
+  a, err := return_query_A(db, query, args...)
+  if err != nil { return nil, err }
+
+  if len(a) == 0 {
+    return nil, errors.New("Zero rows returned")
+  }
+  if len(a) > 1 {
+    return nil, errors.New("More than one rows returned")
+  }
+
+  return a[0], nil
+}
+
 func must_return_one_uint(db interface{}, query string, args ...interface{}) (uint64, error) {
   a, err := return_arrays(db, query, args...)
   if err != nil { return 0, err }

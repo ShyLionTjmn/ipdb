@@ -125,6 +125,7 @@ table.dataTable tfoot td {
   background-color: white;
   padding-left: 0.5em;
   padding-right: 0.5em;
+  z-index: 10;
 }
 .thead > .th:first-child {
   border-left: 1px solid lightgray;

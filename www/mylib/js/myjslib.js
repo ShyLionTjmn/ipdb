@@ -407,12 +407,64 @@ function login_dialog(message, success_query, success_func) {
 
   dialog.dialog(d);
 };
+
+function auth_check(res) {
+  if(res["ok"] === "noauth") {
+    if(res["auth_url"] != undefined) {
+      //show_dialog("Сеанс завершен по неактивности, пожалуйста, обновите страницу");
+      window.location = res["auth_url"]+encodeURIComponent(window.location);
+    } else {
+      show_dialog("Сеанс завершен по неактивности, пожалуйста, обновите страницу");
+    };
+    return false;
+  } else if(res["ok"]["fail"] === "noaccess") {
+
+    let dialog = $(DIV).title("Отазано в доступе")
+     .addClass("dialog_start")
+     .append( $(DIV)
+       .css({"white-space": "pre"})
+       .text("Вы успешно авторизовались как "+res["ok"]["userinfo"]["name"]+" ("+res["ok"]["userinfo"]["login"]+"),\n"+
+             "но у вас нет прав доступа к данному приложению или запрашиваемым данным.\n"+
+             "Пожалуйста, обратитесь к администрации приложения.\n"+
+             "Если вам уже выдали права доступа, попробуйте обновить страницу."
+       )
+     )
+     .appendTo("BODY")
+    ;
+    let dialog_options = {
+      close: function() {
+        $(this).dialog("destroy");
+        $(this).remove();
+      },
+      modal: true,
+      width: "auto",
+      buttons: [
+        {
+          text: "Войти под другой учетной записью",
+          click: function() {
+            window.location = "/logout";
+          },
+        },
+      ],
+    };
+
+    dialog.dialog(dialog_options);
+
+    return false;
+  };
+
+  return true;
+};
+
 function run_query(query, successfunc) {
   if(query === undefined) {
     if(successfunc !== undefined) {
       successfunc();
     };
     return;
+  };
+  if(DEBUG != undefined && DEBUG && debugLog !== undefined) {
+    debugLog("Query: "+jstr(query));
   };
   $.ajax({
     url: AJAX,
@@ -423,10 +475,11 @@ function run_query(query, successfunc) {
     data: JSON.stringify(query),
     success: function(data) {
       if(data["ok"] != undefined) {
-        if(DEBUG) {
-          $("#debug").text(JSON.stringify(data, null, 2));
+        if(DEBUG != undefined && DEBUG && debugLog !== undefined) {
+          debugLog("Result: "+jstr(data)+"\n");
         };
         if(successfunc != null) {
+          if(!auth_check(data)) return;
           successfunc(data);
         };
         return;

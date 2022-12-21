@@ -59,49 +59,49 @@ func init() {
   g_rights[R_NAME] = make(M)
   g_rights[R_NAME]["label"] = "ПрИмнСет"
   g_rights[R_NAME]["descr"] = "Просмотр имени сети в списке сетей"
-  g_rights[R_NAME]["requred_by"] = [...]uint64{R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET}
+  g_rights[R_NAME]["required_by"] = [...]uint64{R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET}
   g_rights[R_NAME]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
   g_rights[R_NAME]["conflict_with"] = [...]uint64{}
 
   g_rights[R_VIEW_NET_INFO] = make(M)
   g_rights[R_VIEW_NET_INFO]["label"] = "ПрИнфСет"
   g_rights[R_VIEW_NET_INFO]["descr"] = "Просмотр информации о сети, кроме списка IP адресов"
-  g_rights[R_VIEW_NET_INFO]["requred_by"] = [...]uint64{R_MANAGE_NET}
+  g_rights[R_VIEW_NET_INFO]["required_by"] = [...]uint64{R_MANAGE_NET}
   g_rights[R_VIEW_NET_INFO]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
   g_rights[R_VIEW_NET_INFO]["conflict_with"] = [...]uint64{}
 
   g_rights[R_VIEW_NET_IPS] = make(M)
   g_rights[R_VIEW_NET_IPS]["label"] = "ПрАдрVLN"
   g_rights[R_VIEW_NET_IPS]["descr"] = "Просмотр IP адресов или VLAN-ов"
-  g_rights[R_VIEW_NET_IPS]["requred_by"] = [...]uint64{R_EDIT_IP_VLAN, R_MANAGE_NET}
+  g_rights[R_VIEW_NET_IPS]["required_by"] = [...]uint64{R_EDIT_IP_VLAN, R_MANAGE_NET}
   g_rights[R_VIEW_NET_IPS]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range"}
   g_rights[R_VIEW_NET_IPS]["conflict_with"] = [...]uint64{}
 
   g_rights[R_EDIT_IP_VLAN] = make(M)
   g_rights[R_EDIT_IP_VLAN]["label"] = "ИзмАдрVL"
   g_rights[R_EDIT_IP_VLAN]["descr"] = "Занятие, редактирование, освобождение IP адресов или VLAN-ов"
-  g_rights[R_EDIT_IP_VLAN]["requred_by"] = [...]uint64{R_MANAGE_NET}
+  g_rights[R_EDIT_IP_VLAN]["required_by"] = [...]uint64{R_MANAGE_NET}
   g_rights[R_EDIT_IP_VLAN]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range", "int_v4net_range"}
-  g_rights[R_EDIT_IP_VLAN]["conflict_with"] = [...]uint64{}
+  g_rights[R_EDIT_IP_VLAN]["conflict_with"] = [...]uint64{R_DENYIP}
 
   g_rights[R_MANAGE_NET] = make(M)
   g_rights[R_MANAGE_NET]["label"] = "ИзмнСети"
   g_rights[R_MANAGE_NET]["descr"] = "Занятие, редактирование, освобождение сети"
-  g_rights[R_MANAGE_NET]["requred_by"] = [...]uint64{}
+  g_rights[R_MANAGE_NET]["required_by"] = [...]uint64{}
   g_rights[R_MANAGE_NET]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
   g_rights[R_MANAGE_NET]["conflict_with"] = [...]uint64{}
 
   g_rights[R_IGNORE_R_DENY] = make(M)
   g_rights[R_IGNORE_R_DENY]["label"] = "ИгнорЗпр"
   g_rights[R_IGNORE_R_DENY]["descr"] = "Игнорировать запрет в диапазонах"
-  g_rights[R_IGNORE_R_DENY]["requred_by"] = [...]uint64{}
+  g_rights[R_IGNORE_R_DENY]["required_by"] = [...]uint64{}
   g_rights[R_IGNORE_R_DENY]["used_in"] = [...]string{"int_v4net_range", "vlan_range"}
   g_rights[R_IGNORE_R_DENY]["conflict_with"] = [...]uint64{R_DENYIP}
 
   g_rights[R_DENYIP] = make(M)
   g_rights[R_DENYIP]["label"] = "ЗпртРедт"
   g_rights[R_DENYIP]["descr"] = "Запрет занимать, редактировать, удалять IP/VLAN в диапазоне"
-  g_rights[R_DENYIP]["requred_by"] = [...]uint64{}
+  g_rights[R_DENYIP]["required_by"] = [...]uint64{}
   g_rights[R_DENYIP]["used_in"] = [...]string{"int_v4net_range", "vlan_range"}
   g_rights[R_DENYIP]["conflict_with"] = [...]uint64{R_EDIT_IP_VLAN,R_IGNORE_R_DENY}
 
@@ -1896,8 +1896,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if u64 > 32 { panic(PE) }
     masklen = uint32(u64)
 
-    if masklen > 30 && take_ip == dbnet_addr { panic(PE) }
-    if masklen > 30 && take_ip == dbnet_last_addr { panic(PE) }
+    if masklen <= 30 && take_ip == dbnet_addr { panic(PE) }
+    if masklen <= 30 && take_ip == dbnet_last_addr { panic(PE) }
 
     var dbnet_rights uint64
     if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
@@ -2923,6 +2923,90 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     commited = true
 
     out["done"] = 1
+
+  } else if action == "list_net_templates" {
+    if out["templates"], err = return_query_A(db, "SELECT tp_id, tp_name FROM tps ORDER BY tp_name");
+    err != nil { panic(err) }
+
+  } else if action == "take_net" {
+    var v string
+    if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
+
+    var tp_id string
+    if tp_id, err = get_p_string(q, "tp_id", g_num_reg); err != nil { panic(err) }
+
+    var template M
+    if template, err = must_return_one_M(db, "SELECT tp_descr FROM tps WHERE tp_id=?", tp_id); err != nil { panic(err) }
+
+    var template_cols []M
+    query = "SELECT tc_fk_ic_id FROM tcs WHERE tc_fk_tp_id=?"
+    if template_cols, err = return_query_A(db, query, tp_id); err != nil { panic(err) }
+
+    var masklen uint32
+    if masklen, err = get_p_uint32(q, "masklen"); err != nil { panic(err) }
+
+    var net_addr interface{}
+    var net_last_addr interface{}
+
+    if v == "4" {
+      if masklen > 32 { panic("Bad mask len") }
+
+      var v4net_addr uint32
+      if v4net_addr, err = get_p_uint32(q, "net"); err != nil { panic(err) }
+
+      if v4net_addr != ip4net(v4net_addr, masklen) { panic("Wrong network/mask") }
+
+      net_last_addr = uint32(v4net_addr | (0xFFFFFFFF >> masklen))
+      net_addr = v4net_addr
+
+    } else {
+      //v6
+      panic("not implemented yet")
+    }
+
+    tx, tx_err := db.Begin()
+    if tx_err != nil { panic(tx_err) }
+    var commited bool = false
+    defer func() {
+      if !commited {
+        tx.Rollback()
+      }
+    } ()
+
+    query = "SELECT COUNT(*) AS c FROM v"+v+"nets"+
+            " WHERE v"+v+"net_addr <= ? AND v"+v+"net_last >= ?"
+    if u64, err = must_return_one_uint(tx, query, net_last_addr, net_addr); err != nil { panic(err) }
+    if u64 > 0 { panic("Сеть пересекается с существующими. Обновите страницу!") }
+
+    query = "INSERT INTO v"+v+"nets SET"+
+            " v"+v+"net_addr=?"+
+            ",v"+v+"net_last=?"+
+            ",v"+v+"net_mask=?"+
+            ",v"+v+"net_owner=?"+
+            ",v"+v+"net_descr=?"+
+            ",ts=?"+
+            ",taken_ts=?"+
+            ",fk_u_id=?"+
+            ",taken_u_id=?"
+    if dbres, err = tx.Exec(query, net_addr, net_last_addr, masklen, user_id, template["tp_descr"], ts, ts, user_id, user_id);
+    err != nil { panic(err) }
+
+    var lid int64
+
+    if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
+    if lid <= 0 { panic("weird LastInsertId returned") }
+
+    for _, tc := range template_cols {
+      if _, err = tx.Exec("INSERT INTO n"+v+"cs SET nc_fk_v"+v+"net_id=?, nc_fk_ic_id=?, ts=?, fk_u_id=?",
+                          lid, tc["tc_fk_ic_id"], ts, user_id);
+      err != nil { panic(err) }
+    }
+
+    out["done"] = 1
+
+    err = tx.Commit()
+    if err != nil { panic(err) }
+    commited = true
 
   } else if action == "query" {
     out["_query"] = q

@@ -46,7 +46,7 @@ const g_rights = {
   "1": {
     "descr": "Просмотр имени сети в списке сетей",
     "label": "ПрИмнСет",
-    "requred_by": [
+    "required_by": [
       2,
       4,
       8,
@@ -60,7 +60,7 @@ const g_rights = {
   "16": {
     "descr": "Игнорировать запрет в диапазонах",
     "label": "ИгнорЗпр",
-    "requred_by": [],
+    "required_by": [],
     "used_in": [
       "ext_v4net_range",
       "v4net_acl"
@@ -69,7 +69,7 @@ const g_rights = {
   "2": {
     "descr": "Просмотр информации о сети, кроме списка IP адресов",
     "label": "ПрИнфСет",
-    "requred_by": [
+    "required_by": [
       32
     ],
     "used_in": [
@@ -80,7 +80,7 @@ const g_rights = {
   "32": {
     "descr": "Занятие, редактирование, освобождение сети",
     "label": "ИзмнСети",
-    "requred_by": [],
+    "required_by": [],
     "used_in": [
       "ext_v4net_range",
       "v4net_acl"
@@ -89,7 +89,7 @@ const g_rights = {
   "4": {
     "descr": "Просмотр IP адресов или VLAN-ов",
     "label": "ПрАдрVLN",
-    "requred_by": [
+    "required_by": [
       8,
       32
     ],
@@ -102,7 +102,7 @@ const g_rights = {
   "64": {
     "descr": "Запрет занимать, редактировать, удалять IP/VLAN в диапазоне",
     "label": "ЗпртРедт",
-    "requred_by": [],
+    "required_by": [],
     "used_in": [
       "int_v4net_range",
       "vlan_range"
@@ -111,7 +111,7 @@ const g_rights = {
   "8": {
     "descr": "Занятие, редактирование, освобождение IP адресов или VLAN-ов",
     "label": "ИзмАдрVL",
-    "requred_by": [
+    "required_by": [
       32
     ],
     "used_in": [
@@ -388,55 +388,6 @@ function net_mask_wc(net, masklen) {
   return v4long2ip(net)+"/"+masklen+" ("+v4long2ip(v4len2mask[masklen])+" "+v4long2ip((~v4len2mask[masklen]) >>> 0) + ")";
 };
 
-function auth_check(res) {
-  if(res["ok"] === "noauth") {
-    if(res["auth_url"] != undefined) {
-      //show_dialog("Сеанс завершен по неактивности, пожалуйста, обновите страницу");
-      window.location = res["auth_url"]+encodeURIComponent(window.location);
-    } else {
-      show_dialog("Сеанс завершен по неактивности, пожалуйста, обновите страницу");
-    };
-    return false;
-  } else if(res["ok"]["fail"] === "noaccess") {
-
-    let dialog = $(DIV).title("Отазано в доступе")
-     .addClass("dialog_start")
-     .append( $(DIV)
-       .css({"white-space": "pre"})
-       .text("Вы успешно авторизовались как "+res["ok"]["userinfo"]["name"]+" ("+res["ok"]["userinfo"]["login"]+"),\n"+
-             "но у вас нет прав доступа к данному приложению или запрашиваемым данным.\n"+
-             "Пожалуйста, обратитесь к администрации приложения.\n"+
-             "Если вам уже выдали права доступа, попробуйте обновить страницу."
-       )
-     )
-     .appendTo("BODY")
-    ;
-
-    let dialog_options = {
-      close: function() {
-        $(this).dialog("destroy");
-        $(this).remove();
-      },
-      modal: true,
-      width: "auto",
-      buttons: [
-        {
-          text: "Войти под другой учетной записью",
-          click: function() {
-            window.location = "/logout";
-          },
-        },
-      ],
-    };
-
-    dialog.dialog(dialog_options);
-          
-    return false;
-  };
-
-  return true;
-};
-
 function autosave_normalize(elm) {
   let elm_data = elm.data("autosave_data");
   if(elm_data === undefined) { error_at(); return false; };
@@ -679,7 +630,6 @@ $( document ).ready(function() {
 
 
   run_query({"action": "userinfo"}, function(res) {
-    if(!auth_check(res)) return;
 
     userinfo = res["ok"];
 
@@ -835,9 +785,6 @@ function save_all() {
 
   run_query({"action": "save_all", "queue": queue}, function(res) {
 
-    debugLog(jstr(res));
-    if(!auth_check(res)) return;
-
     if(res['ok']['done'] === undefined) {
       error_at();
       return;
@@ -886,10 +833,6 @@ function actionFront() {
   workarea.empty();
   fixed_div.empty();
   run_query({"action": "get_front"}, function(res) {
-
-    debugLog(jstr(res));
-
-    if(!auth_check(res)) return;
 
     let nav_div = $(DIV).css({"display": "inline-block", "vertical-align": "top"})
      .append( $(SPAN).text("Навигация: ") )
@@ -973,8 +916,6 @@ function actionFront() {
                let row = $(this).closest(".fav_row");
                show_confirm("Подтвердите удаление сети из избранного", function() {
                  run_query({"action": "fav_v4", "net": String(net), "masklen": String(masklen), "fav": 0}, function(res) {
-                   debugLog(jstr(res));
-                   if(!auth_check(res)) return;
                    row.remove();
                  });
                });
@@ -1081,6 +1022,7 @@ function actionGroups() {
      .append( $(DIV)
        .addClass("td")
        .append( $(INPUT)
+         .css({"width": "20em"})
          .val(initial_g_name)
          .addClass("g_name")
          .data("autosave_data", {"object": "group", "prop": "g_name"})
@@ -1089,6 +1031,7 @@ function actionGroups() {
      .append( $(DIV)
        .addClass("td")
        .append( $(INPUT)
+         .css({"width": "50em"})
          .addClass("g_descr")
          .data("autosave_data", {"object": "group", "prop": "g_descr"})
        )
@@ -1129,9 +1072,6 @@ function actionGroups() {
          let insert_before = $(this).closest(".tfoot");
 
          run_query({"action": "add_group", "g_name": g_name, "g_descr": g_descr}, function(res) {
-           debugLog(jstr(res));
-
-           if(!auth_check(res)) return;
 
            if(res['ok']['gs'] === undefined || !Array.isArray(res['ok']['gs'])) { return; };
 
@@ -1151,15 +1091,12 @@ function actionGroups() {
   table.find(".tfoot").find(".g_name").focus();
 
   run_query({"action": "get_groups"}, function(res) {
-    debugLog(jstr(res));
-
-    if(!auth_check(res)) return;
 
     if(res['ok']['gs'] === undefined || !Array.isArray(res['ok']['gs'])) { return; };
 
 
     for(let i in res['ok']['gs']) {
-      if(res['ok']['gs'][i]['any'] == 0) {
+      if(res['ok']['gs'][i]['any'] == 0 && res['ok']['gs'][i]['g_name'] != ADMIN_GROUP) {
         get_group_row(res['ok']['gs'][i], res['ok']['users']).insertBefore(table.find(".tfoot"));
       };
     };
@@ -1188,6 +1125,7 @@ function get_group_row(db_row, users) {
    .append( $(DIV)
      .addClass("td")
      .append( $(INPUT)
+       .css({"width": "20em"})
        .addClass("g_name")
        .val( db_row['g_name'] )
        .saveable({"object": "group", "id": db_row['g_id'], "prop": "g_name"})
@@ -1196,6 +1134,7 @@ function get_group_row(db_row, users) {
    .append( $(DIV)
      .addClass("td")
      .append( $(INPUT)
+       .css({"width": "50em"})
        .addClass("g_descr")
        .val( db_row['g_descr'] )
        .saveable({"object": "group", "id": db_row['g_id'], "prop": "g_descr"})
@@ -1215,19 +1154,12 @@ function get_group_row(db_row, users) {
          show_confirm("Подтвердите удаление группы \""+g_name+"\".\nОТМЕНА ОПЕРАЦИИ БУДЕТ НЕВОЗМОЖНА!", function() {
            run_query({"action": "del_group", "id": id}, function(res) {
            
-             debugLog(jstr(res));
-
-             if(!auth_check(res)) return;
-
              if(res['ok']['used'] !== undefined) {
                show_confirm_checkbox("ВНИМАНИЕ! Группа \""+g_name+"\" используется\nв "+res['ok']['used']+
                                      " списках доступа.\nУдаление приведет к удалению группы также из списков"+
                                      " доступа.\nОТМЕНА ОПЕРАЦИИ БУДЕТ НЕВОЗМОЖНА!", function() {
                  run_query({"action": "del_group", "id": id, "confirmed": 1}, function(_res) {
            
-                   debugLog(jstr(_res));
-
-                   if(!auth_check(_res)) return;
                    if(_res['ok']['done'] === undefined) {
                      error_at();
                      return;
@@ -1277,9 +1209,6 @@ function actionNav4() {
   };
 
   run_query({"action": "nav_v4", "net": net, "masklen": masklen}, function(res) {
-    debugLog(jstr(res));
-    debugLog("Usedonly: "+usedonly);
-    if(!auth_check(res)) return;
 
     if(res['ok']['taken'] !== undefined) {
       window.location = "?action=view_v4&net="+net+"&masklen="+masklen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
@@ -1321,8 +1250,6 @@ function actionNav4() {
        .on("change", function() {
          let checked = $(this).is(":checked");
          run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
-           debugLog(jstr(res));
-           if(!auth_check(res)) return;
          });
        })
      )
@@ -1428,10 +1355,14 @@ function actionNav4() {
               ) {
                 td
                  .append( $(SPAN).addClass("min1em") )
-                 .append( $(A)
-                   .prop("href", "?action=take_v4&net="+row['net']+"&masklen="+col_mask+(DEBUG?"&debug":""))
-                   .text("T")
+                 .append( $(LABEL)
+                   .addClass(["button", "ui-icon", "ui-icon-plus"])
                    .title("Занять "+v4long2ip(row["net"])+"/"+col_mask+"\n"+net_mask_wc(row["net"], col_mask))
+                   .data("take_net", row['net'])
+                   .data("take_masklen", col_mask)
+                   .click(function() {
+                     take_v4net($(this).data("take_net"), $(this).data("take_masklen"));
+                   })
                  )
                 ;
               };
@@ -1829,6 +1760,8 @@ function actionView4() {
   let net = getUrlParameter("net", undefined);
   let masklen = getUrlParameter("masklen", undefined);
 
+  let is_new = getUrlParameter("is_new", false);
+
   if(net === undefined || ! String(net).match(/^\d+$/) || Number(net) > 4294967295) { error_at(); return; };
   if(masklen === undefined || ! String(masklen).match(/^\d{1,2}$/) || Number(masklen) > 32) { error_at(); return; };
 
@@ -1838,8 +1771,6 @@ function actionView4() {
   };
 
   run_query({"action": "view_v4", "net": net, "masklen": masklen}, function(res) {
-    debugLog(jstr(res));
-    if(!auth_check(res)) return;
 
     if(res['ok']['gone'] !== undefined) {
       window.location = "?action=nav_v4net&net="+net+"&masklen="+masklen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
@@ -1877,8 +1808,6 @@ function actionView4() {
          .on("change", function() {
            let checked = $(this).is(":checked");
            run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
-             debugLog(jstr(res));
-             if(!auth_check(res)) return;
            });
          })
        )
@@ -1921,7 +1850,7 @@ function actionView4() {
                $("#net_changed_ts").text( from_unix_time( unix_timestamp() ) );
                $("#net_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
              }
-           }, false)
+           }, is_new && (g_data['net_rights'] & R_MANAGE_NET) > 0)
          )
        )
      )
@@ -1960,8 +1889,6 @@ function actionView4() {
              let backlen = $(this).data("backlen");
              show_confirm_checkbox("Подтвердите удаление сети.\nВнимание: отменить операцию будет невозможно!", function() {
                run_query({"action": "del_net", "v": "4", "net_id": String(g_data['net_id'])}, function(res) {
-                 debugLog(jstr(res));
-                 if(!auth_check(res)) return;
                  window.location = "?action=nav_v4&net="+back_net+"&masklen="+backlen+
                                    (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
 
@@ -2260,6 +2187,13 @@ function actionView4() {
        .append( $(DIV).text("У вас нет прав просмотра IP адресов этой сети") )
       ;
     };
+
+    if(is_new && (g_data['net_rights'] & R_MANAGE_NET) > 0) {
+      $("#net_name_editable").focus();
+      history.pushState(undefined, undefined,
+                        "?action=view_v4&net="+net+"&masklen="+masklen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"")
+      );
+    };
   });
 };
 
@@ -2293,8 +2227,6 @@ function take_ip(elm) {
   if(take_ip === undefined) { error_at(); return; };
 
   run_query({"action": "take_ip4", "take_ip": String((take_ip >>> 0)), "ranges_orig": g_data['ranges_orig']}, function(res) {
-    debugLog(jstr(res));
-    if(!auth_check(res)) return;
 
     if(res['ok']['taken'] !== undefined) {
       show_dialog("Адрес уже кем-то занят, обновите страницу!");
@@ -2469,8 +2401,6 @@ function ip_menu(elm) {
              let ip_id = ipdata['v4ip_id'];
              run_query({"action": "free_ip", "v": "4", "id": ip_id}, function(res) {
                $("UL.popupmenu").remove();
-               debugLog(jstr(res));
-               if(!auth_check(res)) return;
                let new_ip_data = {};
                new_ip_data['ranges'] = ipdata['ranges'];
                new_ip_data['rights'] = ipdata['rights'];
@@ -2611,8 +2541,6 @@ function editable_elm(data, edit) {
       ret = $(SELECT);
       ret.append( $(OPTION).text("не задан").val(0) );
       run_query({"action": "users_list"}, function(res) {
-        debugLog(jstr(res));
-        if(!auth_check(res)) return;
 
         for(let i in res['ok']['users_list']) {
           let u_id = res['ok']['users_list'][i]['u_id'];
@@ -2714,8 +2642,6 @@ function editable_elm(data, edit) {
 
 function edit_rights(object, object_id, allow_edit, on_done) {
   run_query({'action': 'get_rights', 'object': object, 'object_id': String(object_id)}, function(res) {
-    debugLog(jstr(res));
-    if(!auth_check(res)) return;
 
     let dialog = $(DIV).addClass("dialog_start")
      .data('object', object)
@@ -2877,8 +2803,6 @@ function edit_rights(object, object_id, allow_edit, on_done) {
             "object_id": dlg.data("object_id"),
             "rights": rights
           }, function(res) {
-            debugLog(jstr(res));
-            if(!auth_check(res)) return;
             let done_func = dlg.data("on_done");
             dlg.dialog( "close" );
             if(done_func !== undefined) done_func();
@@ -2929,16 +2853,20 @@ function rights_tds(object, rights_mask, allow_edit=false) {
            if($(this).hasClass("right_on")) {
              $(this).removeClass("right_on").addClass("right_off");
 
-             for(let i in g_rights[right]['requred_by']) {
-               let rr = g_rights[right]['requred_by'][i];
+             for(let i in g_rights[right]['required_by']) {
+               let rr = g_rights[right]['required_by'][i];
                row.find(".right_"+rr).removeClass("right_on").addClass("right_off");
              };
            } else {
              $(this).removeClass("right_off").addClass("right_on");
              for(let i in g_rights) {
-               if(in_array(g_rights[i]['requred_by'], right)) {
+               if(in_array(g_rights[i]['required_by'], right)) {
                  row.find(".right_"+i).removeClass("right_off").addClass("right_on");
                };
+             };
+             for(let i in g_rights[right]['conflict_with']) {
+               let rr = g_rights[right]['conflict_with'][i];
+               row.find(".right_"+rr).removeClass("right_on").addClass("right_off");
              };
            };
          })
@@ -3025,8 +2953,6 @@ function edit_net_range(object, object_id) {
     query = {"action": "get_groups"};
   };
   run_query(query, function(res) {
-    debugLog(jstr(res));
-    if(!auth_check(res)) return;
 
     if(res['ok']['aux_userinfo'] !== undefined) {
       if(g_data['aux_userinfo'] === undefined) g_data['aux_userinfo'] = {};
@@ -3410,8 +3336,6 @@ function edit_net_range(object, object_id) {
           show_confirm("Подтвердите удаление диапазона.\nВнимание: отмена операции будет невозможна!", function() {
             run_query({"action": "del_net_range", "object": dlg.data("object"), "object_id": dlg.data("object_id")}, function(res) {
 
-              debugLog(jstr(res));
-              if(!auth_check(res)) return;
               dlg.dialog( "close" );
 
               switch(object) {
@@ -3535,8 +3459,6 @@ function edit_net_range(object, object_id) {
           debugLog("Query:");
           debugLog(jstr(query));
           run_query(query, function(res) {
-            debugLog(jstr(res));
-            if(!auth_check(res)) return;
             dlg.dialog( "close" );
 
             switch(object) {
@@ -3581,5 +3503,84 @@ function edit_net_range(object, object_id) {
 
     $("#r_style").trigger("input");
     $("#r_icon").trigger("input");
+  });
+};
+
+function take_v4net(net, masklen) {
+  run_query({"action": "list_net_templates"}, function(res) {
+    if(res['ok']['templates'].length == 0) {
+      show_dialog("В БД нет ни одного шаблона сети. Обратитесь к администратору.");
+      return;
+    };
+
+    let dialog = $(DIV).addClass("dialog_start")
+     .title("Занятие сети "+v4long2ip(net)+"/"+masklen)
+     .data("net", net)
+     .data("masklen", masklen)
+    ;
+
+    let select = $(SELECT)
+     .append( $(OPTION).text("Выберите шаблон...").val(0) )
+     .val(0)
+    ;
+    for(let i in res['ok']['templates']) {
+      select
+       .append( $(OPTION).text(res['ok']['templates'][i]['tp_name'])
+         .val(res['ok']['templates'][i]['tp_id'])
+       )
+      ;
+    };
+
+    dialog
+     .append( $(DIV)
+       .append( select )
+     )
+    ;
+
+    let buttons = [];
+    buttons.push({
+      'text': 'Занять',
+      'click': function() {
+        let dlg = $(this);
+        let net = dlg.data("net");
+        let masklen = dlg.data("masklen");
+        let tp_id = dlg.find("SELECT").val();
+
+        if(tp_id == 0) {
+          dlg.find("SELECT").animateHighlight("red", 200);
+          return;
+        };
+
+        run_query({"action": "take_net", "v": "4", "tp_id": String(tp_id),
+                   "net": String(net), "masklen": String(masklen)},
+                  function(res) {
+          window.location = "?action=view_v4&net="+net+"&masklen="+masklen+"&is_new"+
+                            (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+        });
+      }, //click: function
+    });
+
+    buttons.push({
+      'text': 'Отмена',
+      'click': function() {$(this).dialog( "close" );},
+    });
+
+    let dialog_options = {
+      modal:true,
+      //maxHeight:1000,
+      //maxWidth:1800,
+      minWidth: 600,
+      width: 600,
+      height: "auto",
+      buttons: buttons,
+      close: function() {
+        $(this).dialog("destroy");
+        $(this).remove();
+      }
+    };
+
+    dialog.appendTo("BODY");
+    dialog.dialog( dialog_options );
+     
   });
 };
