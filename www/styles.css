@@ -244,3 +244,7 @@ BODY {
   margin-right: 0.2em;
   margin-top: 0.1em;
 }
+.left_dlg_button {
+  position: absolute;
+  left: 1em;
+}

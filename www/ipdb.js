@@ -6,7 +6,7 @@ var fixed_div;
 var user_self_sub="none";
 var user_self_id;
 
-var g_range_bar_width = 5;
+var g_range_bar_width = 10;
 var g_range_bar_margin = 5;
 
 var global_mouse_down=false;
@@ -16,13 +16,18 @@ var g_autosave = true;
 var g_autosave_changes = 0;
 var g_autosave_timeout = 500; //ms
 
+var g_default_range_style = {"background-color": "black"};
+var g_default_ext_range_style = {"color": "black"};
+var g_default_range_icon = "ui-icon-arrow-2-n-s";
+var g_default_range_icon_style = {"color": "black"};
+
 var g_show_net_info = false;
 
 var g_edit_all = false;
 
 var initial_g_name = "usr_netapp_ipdb_";
 
-var g_default_range_style = {"color": "black"};
+var net_cols_ids;
 
 var g_data; //resets by main pages
 
@@ -577,7 +582,7 @@ var userinfo = {};
 
 $( document ).ready(function() {
  
-  let usedonly = getUrlParameter("usedonly", false);
+  usedonly = getUrlParameter("usedonly", false);
 
   //BEGIN begin
   window.onerror=function(errorMsg, url, lineNumber) {
@@ -1103,7 +1108,7 @@ function actionGroups() {
          if(g_descr === undefined) error_at();
          g_descr = String(g_descr).trim();
 
-         if(g_name == initial_g_name || g_name == ADMIN_GROUP) {
+         if(g_name == initial_g_name || g_name == ADMIN_GROUP || g_name == "Все") {
            $(this).closest(".tfoot").find(".g_name").animateHighlight("red", 500);
            $(this).closest(".tfoot").find(".g_name").focus();
            return;
@@ -1154,7 +1159,9 @@ function actionGroups() {
 
 
     for(let i in res['ok']['gs']) {
-      get_group_row(res['ok']['gs'][i], res['ok']['users']).insertBefore(table.find(".tfoot"));
+      if(res['ok']['gs'][i]['any'] == 0) {
+        get_group_row(res['ok']['gs'][i], res['ok']['users']).insertBefore(table.find(".tfoot"));
+      };
     };
 
   });
@@ -1271,12 +1278,15 @@ function actionNav4() {
 
   run_query({"action": "nav_v4", "net": net, "masklen": masklen}, function(res) {
     debugLog(jstr(res));
+    debugLog("Usedonly: "+usedonly);
     if(!auth_check(res)) return;
 
     if(res['ok']['taken'] !== undefined) {
       window.location = "?action=view_v4&net="+net+"&masklen="+masklen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
       return;
     };
+
+    g_data = res['ok'];
 
     let backlen = 0;
     if(masklen <=8 ) {
@@ -1347,6 +1357,8 @@ function actionNav4() {
       if(res['ok']['ranges'][i]['v4r_icon'] != "") {
         let label = $(LABEL)
          .html("&bull;")
+         .data("r_i", i)
+         .addClass("range_shown")
         ;
         if(res['ok']['ranges'][i]['v4r_style'] != "") {
           try {
@@ -1361,7 +1373,17 @@ function actionNav4() {
       th.appendTo(thead);
     };
 
-    thead.append( $(SPAN).addClass("th") );
+    thead
+     .append( $(SPAN).addClass("th")
+       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
+         .addClass(["button", "ui-icon", "ui-icon-plus"])
+         .title("Создать диапазон")
+         .click(function() {
+           edit_net_range("ext_v4net_range", undefined);
+         })
+       )
+     )
+    ;
 
     thead.appendTo(table);
 
@@ -1449,14 +1471,16 @@ function actionNav4() {
          .title(v4range_title(res['ok']['ranges'][r]))
         ;
         if(res['ok']['rows'][i]['ranges'][r]['in_range'] !== undefined) {
-          let label_style = g_default_range_style;
+          let label_style;
           try {
             label_style = JSON.parse(res['ok']['ranges'][r]['v4r_style']);
           } catch(e) {
-            label_style = g_default_range_style;
+            label_style = g_default_ext_range_style;
           };
 
           let label = $(LABEL)
+           .data("r_i", r)
+           .addClass("range_shown")
            .css(label_style)
           ;
           let range_start = res['ok']['ranges'][r]['v4r_start'];
@@ -1514,10 +1538,28 @@ function actionNav4() {
     };
 
     table.appendTo(workarea);
+
+    table.find(".range_shown")
+     .on("click dblclick", function(e) {
+       if ((e.type == "click" && e.ctrlKey) ||
+           e.type == "dblclick"
+       ) {
+         e.stopPropagation();
+         let r_i = $(this).data("r_i");
+         let r_id = g_data['ranges'][r_i]['v4r_id'];
+         if(r_id === undefined) {
+           error_at();
+           return;
+         };
+
+         edit_net_range("ext_v4net_range", r_id);
+       };
+     })
+    ;
   });
 };
 
-function ip_row(ipdata, net_cols_ids) {
+function ip_row(ipdata) {
   let empty_colspan = net_cols_ids.length;
   let tr = $(TR).addClass("row")
    .data("ipdata", ipdata)
@@ -1544,10 +1586,11 @@ function ip_row(ipdata, net_cols_ids) {
           let r_label_css = JSON.parse(g_data["net_ranges"][i]['v4r_style']);
           r_label.css(r_label_css);
         } catch(e) {
-          r_label.css({"background-color": "black"});
+          r_label.css(g_default_range_style);
+
         };
       } else {
-        r_label.css({"background-color": "black"});
+        r_label.css(g_default_range_style);
       };
       r_label.title(v4range_title(g_data["net_ranges"][i]));
       r_label.data("r_i", i);
@@ -1816,6 +1859,8 @@ function actionView4() {
       backlen = 24;
     };
 
+    let back_net = ip4net(net, backlen);
+
     document.title = "IPDB: "+v4long2ip(net)+"/"+masklen+" "+res['ok']['net_name']
     fixed_div
      .append( $(DIV)
@@ -1894,22 +1939,38 @@ function actionView4() {
 
     if((g_data['net_rights'] & R_VIEW_NET_INFO) > 0) {
 
-      if(res['ok']['taken_ts'] > 0 && res['ok']['taken_u_id'] !== null &&
-         res['ok']['taken_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['taken_u_id'] ] != undefined
-      ) {
-        info_div
-         .append( $(DIV)
-           .append( $(SPAN).text("Занята: ") )
-           .append( $(SPAN).text(from_unix_time(res['ok']['taken_ts']) ) )
-           .append( $(SPAN).text(" Пользователем: ") )
-           .append( $(SPAN)
-             .text(g_data['aux_userinfo'][ res['ok']['taken_u_id'] ]['u_name']+" ("+
-                   g_data['aux_userinfo'][ res['ok']['taken_u_id'] ]['u_login']+")"
-             )
+      info_div
+       .append( $(DIV)
+         .append( $(SPAN).text("Занята: ") )
+         .append( $(SPAN).text(from_unix_time(res['ok']['taken_ts'], false, 'н.д.') ) )
+         .append( res['ok']['taken_u_id'] === null?$(SPAN):$(SPAN).text(" Пользователем: ") )
+         .append( res['ok']['taken_u_id'] === null?$(SPAN):$(SPAN)
+           .text(g_data['aux_userinfo'][ res['ok']['taken_u_id'] ]['u_name']+" ("+
+                 g_data['aux_userinfo'][ res['ok']['taken_u_id'] ]['u_login']+")"
            )
          )
-        ;
-      };
+         .append( $(SPAN).addClass("min1em") )
+         .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
+           .addClass(["button", "ui-icon", "ui-icon-trash"])
+           .title("Удалить сеть")
+           .data("back_net", back_net)
+           .data("backlen", backlen)
+           .click(function() {
+             let back_net = $(this).data("back_net");
+             let backlen = $(this).data("backlen");
+             show_confirm_checkbox("Подтвердите удаление сети.\nВнимание: отменить операцию будет невозможно!", function() {
+               run_query({"action": "del_net", "v": "4", "net_id": String(g_data['net_id'])}, function(res) {
+                 debugLog(jstr(res));
+                 if(!auth_check(res)) return;
+                 window.location = "?action=nav_v4&net="+back_net+"&masklen="+backlen+
+                                   (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+
+               });
+             });
+           })
+         )
+       )
+      ;
 
       if(res['ok']['ts'] > 0 && res['ok']['net_u_id'] !== null &&
          res['ok']['net_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['net_u_id'] ] != undefined
@@ -1953,7 +2014,7 @@ function actionView4() {
              'prop': 'v4net_descr',
              'id': g_data['net_id'],
              '_view_classes': ["wsp"],
-             '_view_css': {"display": "inline-block"},
+             '_view_css': {"display": "inline-block", "border": "2px inset gray", "padding": "2px"},
              '_edit_css': { 'width': '50em', 'min-height': '20em' },
              '_elm_id': 'net_descr_editable',
              '_after_save': function(elm, new_val) {
@@ -2046,7 +2107,7 @@ function actionView4() {
         } catch(e) {
           range_icon_css = {};
         };
-        let range_icon = "ui-icon-arrow-2-n-s";
+        let range_icon = g_default_range_icon;
         if(range['v4r_icon'] !== "") {
           range_icon = range['v4r_icon'];
         };
@@ -2124,7 +2185,7 @@ function actionView4() {
        )
       ;
 
-      let net_cols_ids = keys(res['ok']['net_cols']);
+      net_cols_ids = keys(res['ok']['net_cols']);
       net_cols_ids.sort(function(a, b) {
         return Number(res['ok']['net_cols'][a]['ic_sort']) - Number(res['ok']['net_cols'][b]['ic_sort']);
       });
@@ -2163,7 +2224,7 @@ function actionView4() {
 
       for(let ip_i in res['ok']['ips']) {
         let ipdata = res['ok']['ips'][ip_i];
-        let tr = ip_row(ipdata, net_cols_ids);
+        let tr = ip_row(ipdata);
         tr.appendTo( tbody );
 
       };
@@ -2251,12 +2312,7 @@ function take_ip(elm) {
     };
 
     let new_ipdata = res['ok']['ipdata'];
-    let net_cols_ids = keys(g_data['net_cols']);
-    net_cols_ids.sort(function(a, b) {
-      return Number(g_data['net_cols'][a]['ic_sort']) - Number(g_data['net_cols'][b]['ic_sort']);
-    });
-
-    let new_ip_row = ip_row(new_ipdata, net_cols_ids);
+    let new_ip_row = ip_row(new_ipdata);
     row.replaceWith( new_ip_row );
 
     let prev_start = prev_ipdata['start'];
@@ -2266,13 +2322,13 @@ function take_ip(elm) {
       if(take_ip > prev_start) {
         let before_data = dup(prev_ipdata);
         before_data['stop'] = take_ip - 1;
-        let before_row = ip_row(before_data, net_cols_ids);
+        let before_row = ip_row(before_data);
         before_row.insertBefore(new_ip_row);
       };
       if(take_ip < prev_stop) {
         let after_data = dup(prev_ipdata);
         after_data['start'] = take_ip + 1;
-        let after_row = ip_row(after_data, net_cols_ids);
+        let after_row = ip_row(after_data);
         after_row.insertAfter(new_ip_row);
       };
     };
@@ -2349,6 +2405,8 @@ function ip_menu(elm) {
            .click(function(e) {
              e.stopPropagation();
 
+             let row = $(this).closest("TR");
+
              row.find(".ip_view").each(function() {
                $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), true));
              });
@@ -2370,6 +2428,8 @@ function ip_menu(elm) {
            .append( $(SPAN).text("Перестать редактировать") )
            .click(function(e) {
              e.stopPropagation();
+
+             let row = $(this).closest("TR");
 
              row.find(".ip_edit").each(function() {
                let changed = $(this).data("autosave_changed");
@@ -2401,6 +2461,26 @@ function ip_menu(elm) {
          .append( $(SPAN).text("Освободить") )
          .click(function(e) {
            e.stopPropagation();
+           let row = $(this).closest("TR");
+           let ipdata = row.data("ipdata");
+           if(ipdata === undefined) { error_at(); return; };
+           show_confirm("Подтвердите освобождение адреса "+v4long2ip(ipdata['v4ip_addr'])+
+                        "\nВнимание: все данные по этому адресу будут удалены. Отмена будет невозможна", function() {
+             let ip_id = ipdata['v4ip_id'];
+             run_query({"action": "free_ip", "v": "4", "id": ip_id}, function(res) {
+               $("UL.popupmenu").remove();
+               debugLog(jstr(res));
+               if(!auth_check(res)) return;
+               let new_ip_data = {};
+               new_ip_data['ranges'] = ipdata['ranges'];
+               new_ip_data['rights'] = ipdata['rights'];
+               new_ip_data['is_empty'] = 1;
+               new_ip_data['start'] = ipdata['v4ip_addr'];
+               new_ip_data['stop'] = ipdata['v4ip_addr'];
+
+               row.replaceWith( ip_row(new_ip_data) );
+             });
+           });
          })
        )
      )
@@ -2418,6 +2498,8 @@ function ip_menu(elm) {
   menu.appendTo(elm.closest("TD"));
 
   menu.menu();
+
+  menu.on("click dblclick", function(e) { e.stopPropagation(); });
 
   $(".tooltip").remove();
 };
@@ -2924,6 +3006,17 @@ function rights_row(object, object_id, group_data, allow_edit=false) {
 
 function edit_net_range(object, object_id) {
   let allow_edit = false;
+  switch(object) {
+  case "int_v4net_range":
+    allow_edit = (g_data['net_rights'] & R_MANAGE_NET) > 0;
+    break;
+  case "ext_v4net_range":
+    allow_edit = userinfo["is_admin"];
+    break;
+  default:
+    error_at(object);
+    return;
+  };
 
   let query;
   if(object_id !== undefined) {
@@ -2934,15 +3027,30 @@ function edit_net_range(object, object_id) {
   run_query(query, function(res) {
     debugLog(jstr(res));
     if(!auth_check(res)) return;
+
+    if(res['ok']['aux_userinfo'] !== undefined) {
+      if(g_data['aux_userinfo'] === undefined) g_data['aux_userinfo'] = {};
+      for(let u_id in res['ok']['aux_userinfo']) {
+        g_data['aux_userinfo'][u_id] = res['ok']['aux_userinfo'][u_id];
+      };
+    };
+
     if(object_id === undefined) {
       let r_start;
       let r_stop;
+      let style;
+
       switch(object) {
       case "int_v4net_range":
         r_start = g_data['net_addr'];
         r_stop = g_data['net_last_addr'];
+        style = JSON.stringify(g_default_range_style);
+        break;
+      case "ext_v4net_range":
+        r_start = g_data['net_addr'];
+        r_stop = g_data['net_last_addr'];
+        style = JSON.stringify(g_default_ext_range_style);
 
-        allow_edit = (g_data['net_rights'] & R_MANAGE_NET) > 0;
         break;
       default:
         error_at();
@@ -2966,9 +3074,9 @@ function edit_net_range(object, object_id) {
           "v4r_name": "",
           "v4r_descr": "",
           "v4r_id": undefined,
-          "v4r_style": '{"background-color": "black"}',
-          "v4r_icon": "ui-icon-arrow-2-n-s",
-          "v4r_icon_style": '{"color": "black"}',
+          "v4r_style": style,
+          "v4r_icon": g_default_range_icon,
+          "v4r_icon_style": JSON.stringify(g_default_range_icon_style),
           "ts": 0,
           "fk_u_id": null,
         }
@@ -2979,6 +3087,8 @@ function edit_net_range(object, object_id) {
     switch(object) {
     case "int_v4net_range":
       title += " для сети "+g_data['net_name'];
+      break;
+    case "ext_v4net_range":
       break;
     default:
       error_at();
@@ -2991,6 +3101,19 @@ function edit_net_range(object, object_id) {
      .data('object_id', object_id)
      .data('groups', res['ok']['groups'])
      .data('r_data', res['ok'])
+    ;
+
+    $(DIV)
+     .append( $(SPAN).text("Посл. изменение: ") )
+     .append( $(SPAN).text(from_unix_time( res['ok']['ts'], false, 'н.д.' )) )
+     .append( $(SPAN).addClass("min1em") )
+     .append( res['ok']['fk_u_id'] === null?$(SPAN):$(SPAN)
+       .text(
+         g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_name']+" ("+
+         g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_login']+")"
+       )
+     )
+     .appendTo( dialog )
     ;
 
     $(DIV)
@@ -3016,11 +3139,66 @@ function edit_net_range(object, object_id) {
      .appendTo( dialog )
     ;
 
+    let css;
+    try {
+      css = JSON.parse(res['ok']['v4r_style']);
+    } catch(e) {
+      css = g_default_range_style;
+    };
+
+    let sample_label;
+
+    switch(object) {
+    case "int_v4net_range":
+      sample_label = $(LABEL).addClass("iprange")
+       .html('&#x200b;')
+       .prop("id", "r_style_sample")
+       .css({"width": g_range_bar_width+"px", "margin-right": g_range_bar_width+"px"})
+      ;
+      break;
+    case "ext_v4net_range":
+      sample_label = $(LABEL)
+       .html('&#x2503;')
+       .prop("id", "r_style_sample")
+      ;
+      break;
+    default:
+      error_at();
+      return;
+    };
+
     $(DIV)
      .append( $(SPAN).html("CSS колонки: ").title("Например: {\"background-color\": \"red\"}") )
      .append( $(INPUT)
        .prop({"id": "r_style", "readonly": !allow_edit})
        .val(res['ok']['v4r_style'])
+       .on("input change keyup", function() {
+         let j = $(this).val();
+         try {
+           css = JSON.parse(j);
+           $("#r_style_sample").css(css);
+           $("#r_style_error").hide();
+           $(this).css("background-color", "white");
+         } catch(e) {
+           $("#r_style_error").show();
+           $(this).css("background-color", "lightcoral");
+         };
+       })
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .css({"position": "relative"})
+       .append( sample_label )
+     )
+     .append( $(SPAN)
+       .css({"padding-left": g_range_bar_width+g_range_bar_width+2+"px"})
+       .append( $(LABEL)
+         .prop("id", "r_style_error")
+         .addClass(["ui-icon", "ui-icon-alert"])
+         .css({"color": "red"})
+         .title("Неверный JSON стиля")
+         .hide()
+       )
      )
      .appendTo( dialog )
     ;
@@ -3028,12 +3206,65 @@ function edit_net_range(object, object_id) {
     $(DIV)
      .append( $(A)
        .prop({"href": "https://mkkeck.github.io/jquery-ui-iconfont/#icons", "target": "_blank"})
-       .title("Выбрать можно тут")
+       .dotted("Выбрать можно тут")
        .text("Значек диапазона ui-icon-*: ")
      )
      .append( $(INPUT)
        .prop({"id": "r_icon", "readonly": !allow_edit})
        .val(res['ok']['v4r_icon'])
+       .on("input change keyup", function() {
+         let v = $(this).val();
+         let j = $("#r_icon_style").val();
+         let css;
+         try {
+           css = JSON.parse(j);
+           $("#r_icon_style").css("background-color", "white");
+           $("#r_icon_style_error").hide();
+         } catch(e) {
+           $("#r_icon_style").css("background-color", "lightcoral");
+           $("#r_icon_style_error").show();
+           switch( $(this).closest(".dialog_start").data("object") ) {
+           case "int_v4net_range":
+             css = g_default_range_icon_style;
+             break;
+           case "ext_v4net_range":
+             css = g_default_range_icon_style;
+             break;
+           default:
+             error_at();
+             return;
+           };
+         };
+         if(!String(v).match(/^ui-icon-[\-a-z0-9]+$/)) {
+           $("#r_icon").css("background-color", "lightcoral");
+           $("#r_icon_error").show();
+           $("#r_icon_span").empty();
+         } else {
+           $("#r_icon").css("background-color", "white");
+           $("#r_icon_error").hide();
+           $("#r_icon_span")
+            .empty()
+            .append( $(LABEL)
+              .addClass(["ui-icon", v])
+              .css(css)
+            )
+           ;
+         };
+       })
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .prop("id", "r_icon_span")
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .append( $(LABEL)
+         .prop("id", "r_icon_error")
+         .addClass(["ui-icon", "ui-icon-alert"])
+         .css({"color": "red"})
+         .title("Неверный класс значка. Должен начинаться на ui-icon-")
+         .hide()
+       )
      )
      .appendTo( dialog )
     ;
@@ -3043,6 +3274,19 @@ function edit_net_range(object, object_id) {
      .append( $(INPUT)
        .prop({"id": "r_icon_style", "readonly": !allow_edit})
        .val(res['ok']['v4r_icon_style'])
+       .on("input change keyup", function() {
+         $("#r_icon").trigger("input");
+       })
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .append( $(LABEL)
+         .prop("id", "r_icon_style_error")
+         .addClass(["ui-icon", "ui-icon-alert"])
+         .css({"color": "red"})
+         .title("Неверный JSON значка")
+         .hide()
+       )
      )
      .appendTo( dialog )
     ;
@@ -3155,6 +3399,40 @@ function edit_net_range(object, object_id) {
 
     let buttons = [];
 
+    if(allow_edit && object_id !== undefined) {
+      buttons.push({
+        'class': 'left_dlg_button',
+        'text': 'Удалить',
+        'click': function() {
+          let dlg = $(this);
+          let object = dlg.data("object");
+
+          show_confirm("Подтвердите удаление диапазона.\nВнимание: отмена операции будет невозможна!", function() {
+            run_query({"action": "del_net_range", "object": dlg.data("object"), "object_id": dlg.data("object_id")}, function(res) {
+
+              debugLog(jstr(res));
+              if(!auth_check(res)) return;
+              dlg.dialog( "close" );
+
+              switch(object) {
+              case "int_v4net_range":
+                window.location = "?action=view_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
+                                  (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+                break;
+              case "ext_v4net_range":
+                window.location = "?action=nav_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
+                                  (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+                break;
+              default:
+                error_at();
+                return;
+              };
+            });
+          });
+        },
+      });
+    };
+
     if(allow_edit) {
       buttons.push({
         'text': object_id===undefined?'Создать':'Сохранить',
@@ -3214,6 +3492,8 @@ function edit_net_range(object, object_id) {
               return;
             };
             break;
+          case "ext_v4net_range":
+            break;
           default:
             error_at();
             return;
@@ -3264,6 +3544,13 @@ function edit_net_range(object, object_id) {
               window.location = "?action=view_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
                                 (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
               break;
+            case "ext_v4net_range":
+              window.location = "?action=nav_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
+                                (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+              break;
+            default:
+              error_at();
+              return;
             };
           });
         },
@@ -3291,5 +3578,8 @@ function edit_net_range(object, object_id) {
 
     dialog.appendTo("BODY");
     dialog.dialog( dialog_options );
+
+    $("#r_style").trigger("input");
+    $("#r_icon").trigger("input");
   });
 };

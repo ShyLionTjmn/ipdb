@@ -16,6 +16,7 @@ CREATE TABLE gs (
   g_name    VARCHAR(256) NOT NULL,
   g_descr   VARCHAR(256) NOT NULL DEFAULT '',
   added		BIGINT UNSIGNED NOT NULL,
+  any		SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   ts        BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
   PRIMARY KEY pk_g_id(g_id),
@@ -23,6 +24,9 @@ CREATE TABLE gs (
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   tc        TINYINT COMMENT 'Groups. Name should be samaccountname from AD.'
 );
+
+INSERT INTO gs SET g_name='usr_netapp_ipdb_appadmins', g_descr='Администраторы приложения', added=0, ts=0;
+INSERT INTO gs SET any=1, g_name='Все', g_descr='Любой пользователь', added=0, ts=0;
 
 CREATE TABLE atts (
   `att_id`	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

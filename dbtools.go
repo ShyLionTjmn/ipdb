@@ -295,7 +295,7 @@ func must_return_one_uint(db interface{}, query string, args ...interface{}) (ui
   case uint:
     return uint64(v), nil
   default:
-    return 0, errors.New("Non-numeric value returned")
+    return 0, errors.New("Non-numeric value returned: type: "+reflect.TypeOf(a[0][0]).Name())
   }
   panic("Should not get here")
 }
