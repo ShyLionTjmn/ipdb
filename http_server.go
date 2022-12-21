@@ -61,30 +61,35 @@ func init() {
   g_rights[R_NAME]["descr"] = "Просмотр имени сети в списке сетей"
   g_rights[R_NAME]["requred_by"] = [...]uint64{R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET}
   g_rights[R_NAME]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
+  g_rights[R_NAME]["conflict_with"] = [...]uint64{}
 
   g_rights[R_VIEW_NET_INFO] = make(M)
   g_rights[R_VIEW_NET_INFO]["label"] = "ПрИнфСет"
   g_rights[R_VIEW_NET_INFO]["descr"] = "Просмотр информации о сети, кроме списка IP адресов"
   g_rights[R_VIEW_NET_INFO]["requred_by"] = [...]uint64{R_MANAGE_NET}
   g_rights[R_VIEW_NET_INFO]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
+  g_rights[R_VIEW_NET_INFO]["conflict_with"] = [...]uint64{}
 
   g_rights[R_VIEW_NET_IPS] = make(M)
   g_rights[R_VIEW_NET_IPS]["label"] = "ПрАдрVLN"
   g_rights[R_VIEW_NET_IPS]["descr"] = "Просмотр IP адресов или VLAN-ов"
   g_rights[R_VIEW_NET_IPS]["requred_by"] = [...]uint64{R_EDIT_IP_VLAN, R_MANAGE_NET}
   g_rights[R_VIEW_NET_IPS]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range"}
+  g_rights[R_VIEW_NET_IPS]["conflict_with"] = [...]uint64{}
 
   g_rights[R_EDIT_IP_VLAN] = make(M)
   g_rights[R_EDIT_IP_VLAN]["label"] = "ИзмАдрVL"
   g_rights[R_EDIT_IP_VLAN]["descr"] = "Занятие, редактирование, освобождение IP адресов или VLAN-ов"
   g_rights[R_EDIT_IP_VLAN]["requred_by"] = [...]uint64{R_MANAGE_NET}
   g_rights[R_EDIT_IP_VLAN]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range", "int_v4net_range"}
+  g_rights[R_EDIT_IP_VLAN]["conflict_with"] = [...]uint64{}
 
   g_rights[R_MANAGE_NET] = make(M)
   g_rights[R_MANAGE_NET]["label"] = "ИзмнСети"
   g_rights[R_MANAGE_NET]["descr"] = "Занятие, редактирование, освобождение сети"
   g_rights[R_MANAGE_NET]["requred_by"] = [...]uint64{}
   g_rights[R_MANAGE_NET]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
+  g_rights[R_MANAGE_NET]["conflict_with"] = [...]uint64{}
 
   g_rights[R_IGNORE_R_DENY] = make(M)
   g_rights[R_IGNORE_R_DENY]["label"] = "ИгнорЗпр"
