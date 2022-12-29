@@ -22,6 +22,7 @@ var g_default_range_icon = "ui-icon-arrow-2-n-s";
 var g_default_range_icon_style = {"color": "black"};
 
 var g_show_net_info = false;
+var g_show_vdom_info = false;
 
 var g_edit_all = false;
 
@@ -400,24 +401,50 @@ function autosave_normalize(elm) {
     switch(elm_data['prop']) {
     case 'g_name':
       return String(elm.val()).trim().toLowerCase();
+      break;
     case 'g_descr':
       return String(elm.val()).trim();
+      break;
     default:
       return elm.val();
     };
     break;
   case 'ip_value':
     return elm.val();
+    break;
   case 'net':
     switch(elm_data['prop']) {
     case 'v4net_name':
       return String(elm.val()).trim();
+      break;
     default:
       return elm.val();
     };
     break;
+  case 'vdom':
+    switch(elm_data['prop']) {
+    case 'vd_name':
+      return String(elm.val()).trim();
+      break;
+    default:
+      return elm.val();
+    };
+    break;
+  case 'vlan_value':
+    switch(elm_data['prop']) {
+    case 'vlan_name':
+      return String(elm.val()).trim();
+      break;
+    case 'vlan_descr':
+      return String(elm.val()).trim();
+      break;
+    default:
+      error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
+    };
+    return elm.val();
+    break;
   };
-  error_at();
+  error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
 };
 
 function saveable_check(elm) {
@@ -464,8 +491,31 @@ function saveable_check(elm) {
     return true;
   case 'net':
     return true;
+  case 'vdom':
+    return true;
+  case 'vlan_value':
+    switch(elm_data['prop']) {
+    case 'vlan_name':
+      let found = false;
+      let vlan_number = elm.closest("TR").data("row_data")['vlan_number'];
+      elm.closest("TABLE").find("TR.row").each(function() {
+        let row_data = $(this).data("row_data");
+        if(row_data['is_taken'] && String(row_data['vlan_name']).trim() === value &&
+           row_data['vlan_number'] != vlan_number
+        ) {
+          found = true;
+          return false;
+        };
+
+      });
+      if(found) {
+        return false;
+      };
+      break;
+    };
+    return true;
   };
-  error_at();
+  error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
   return false;
 };
 
@@ -693,6 +743,17 @@ $( document ).ready(function() {
       ;
     };
 
+    if(userinfo["has_vlans_access"]) {
+      menu
+       .append( $(SPAN).addClass("bigbutton").text("VLAN")
+         .click( function() {
+           //actionVlanDomains();
+           window.location = "?action=vlan_domains"+(DEBUG?"&debug":"");
+         })
+       )
+      ;
+    };
+
     menu.append( fixed_div )
 
     let action=getUrlParameter("action");
@@ -708,6 +769,12 @@ $( document ).ready(function() {
       break;
     case "view_v4":
       actionView4();
+      break;
+    case "vlan_domains":
+      actionVlanDomains();
+      break;
+    case "view_vlan_domain":
+      actionViewVlanDomain();
       break;
     default:
       window.location = "?action=front"+(DEBUG?"&debug":"");
@@ -796,12 +863,13 @@ function save_all() {
       let qelm = queue_elements[i]['elm'];
       let qval = queue_elements[i]['val'];
       let qdata = queue_elements[i]['data'];
+      let tr;
 
       qelm.data("autosave_saved", qval);
       qelm.data("autosave_changed", false);
       switch(qdata['object']) {
       case "ip_value":
-        let tr = qelm.closest(".row");
+        tr = qelm.closest(".row");
         let ipdata = tr.data("ipdata");
         ipdata['values'][qdata['col_id']]['v'] = qval;
         ipdata['values'][qdata['col_id']]['ts'] = unix_timestamp();
@@ -813,6 +881,15 @@ function save_all() {
         qelm.replaceWith( new_elm );
         if(focus) new_elm.focus();
         highlight = highlight.add(new_elm);
+        break;
+      case "vlan_value":
+        tr = qelm.closest(".row");
+        let row_data = tr.data("row_data");
+        row_data[qdata['prop']] = qval;
+        row_data['ts'] = unix_timestamp();
+        row_data['u_id'] = user_self_id;
+        tr.data("row_data", row_data);
+        highlight = highlight.add(qelm);
         break;
       default:
         highlight = highlight.add(qelm);
@@ -1128,7 +1205,7 @@ function get_group_row(db_row, users) {
        .css({"width": "20em"})
        .addClass("g_name")
        .val( db_row['g_name'] )
-       .saveable({"object": "group", "id": db_row['g_id'], "prop": "g_name"})
+       .saveable({"object": "group", "id": String(db_row['g_id']), "prop": "g_name"})
      )
    )
    .append( $(DIV)
@@ -1137,7 +1214,7 @@ function get_group_row(db_row, users) {
        .css({"width": "50em"})
        .addClass("g_descr")
        .val( db_row['g_descr'] )
-       .saveable({"object": "group", "id": db_row['g_id'], "prop": "g_descr"})
+       .saveable({"object": "group", "id": String(db_row['g_id']), "prop": "g_descr"})
      )
    )
    .append( $(DIV)
@@ -1152,13 +1229,13 @@ function get_group_row(db_row, users) {
          if(id === undefined) error_at();
          let g_name = autosave_normalize(elm.closest(".tr").find(".g_name"));
          show_confirm("Подтвердите удаление группы \""+g_name+"\".\nОТМЕНА ОПЕРАЦИИ БУДЕТ НЕВОЗМОЖНА!", function() {
-           run_query({"action": "del_group", "id": id}, function(res) {
+           run_query({"action": "del_group", "id": String(id)}, function(res) {
            
              if(res['ok']['used'] !== undefined) {
                show_confirm_checkbox("ВНИМАНИЕ! Группа \""+g_name+"\" используется\nв "+res['ok']['used']+
                                      " списках доступа.\nУдаление приведет к удалению группы также из списков"+
                                      " доступа.\nОТМЕНА ОПЕРАЦИИ БУДЕТ НЕВОЗМОЖНА!", function() {
-                 run_query({"action": "del_group", "id": id, "confirmed": 1}, function(_res) {
+                 run_query({"action": "del_group", "id": String(id), "confirmed": 1}, function(_res) {
            
                    if(_res['ok']['done'] === undefined) {
                      error_at();
@@ -1179,6 +1256,19 @@ function get_group_row(db_row, users) {
      )
    )
   ;
+  return ret;
+};
+
+function vrange_title(range) {
+  let ret = "";
+  ret += range['vr_name'];
+  ret += " (id:"+range['vr_id']+")";
+  ret += "\n";
+  ret += range['vr_start']+"-"+range['vr_stop'];
+  ret += "\n";
+  ret += "Rights:" + range['rights'];
+  ret += "\n";
+  ret += range['vr_descr'];
   return ret;
 };
 
@@ -1792,7 +1882,8 @@ function actionView4() {
 
     let back_net = ip4net(net, backlen);
 
-    document.title = "IPDB: "+v4long2ip(net)+"/"+masklen+" "+res['ok']['net_name']
+    document.title = "IPDB: "+v4long2ip(net)+"/"+masklen+" "+res['ok']['net_name'];
+
     fixed_div
      .append( $(DIV)
        .append( $(A)
@@ -1842,7 +1933,7 @@ function actionView4() {
            editable_elm({
              'object': 'net',
              'prop': 'v4net_name',
-             'id': g_data['net_id'],
+             'id': String(g_data['net_id']),
              '_edit_css': { 'width': '50em' },
              '_elm_id': 'net_name_editable',
              '_after_save': function(elm, new_val) {
@@ -1889,6 +1980,7 @@ function actionView4() {
              let backlen = $(this).data("backlen");
              show_confirm_checkbox("Подтвердите удаление сети.\nВнимание: отменить операцию будет невозможно!", function() {
                run_query({"action": "del_net", "v": "4", "net_id": String(g_data['net_id'])}, function(res) {
+                 g_autosave_changes = 0;
                  window.location = "?action=nav_v4&net="+back_net+"&masklen="+backlen+
                                    (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
 
@@ -1899,8 +1991,8 @@ function actionView4() {
        )
       ;
 
-      if(res['ok']['ts'] > 0 && res['ok']['net_u_id'] !== null &&
-         res['ok']['net_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['net_u_id'] ] != undefined
+      if(res['ok']['ts'] > 0 && res['ok']['fk_u_id'] !== null &&
+         res['ok']['fk_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['fk_u_id'] ] != undefined
       ) {
         info_div
          .append( $(DIV)
@@ -1910,8 +2002,8 @@ function actionView4() {
            )
            .append( $(SPAN).text(" Пользователем: ") )
            .append( $(SPAN)
-             .text(g_data['aux_userinfo'][ res['ok']['net_u_id'] ]['u_name']+" ("+
-                   g_data['aux_userinfo'][ res['ok']['net_u_id'] ]['u_login']+")"
+             .text(g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_name']+" ("+
+                   g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_login']+")"
              )
              .prop("id", "net_changed_user")
            )
@@ -1939,7 +2031,7 @@ function actionView4() {
            editable_elm({
              'object': 'net',
              'prop': 'v4net_descr',
-             'id': g_data['net_id'],
+             'id': String(g_data['net_id']),
              '_view_classes': ["wsp"],
              '_view_css': {"display": "inline-block", "border": "2px inset gray", "padding": "2px"},
              '_edit_css': { 'width': '50em', 'min-height': '20em' },
@@ -1960,7 +2052,7 @@ function actionView4() {
          .append( editable_elm({
              "object": "net",
              "prop": "v4net_owner",
-             'id': g_data['net_id'],
+             'id': String(g_data['net_id']),
              '_elm_id': 'net_owner_editable',
              '_after_save': function(elm, new_val) {
                g_data['net_owner'] = new_val;
@@ -2013,6 +2105,10 @@ function actionView4() {
          .text("Права групп")
          .addClass("button")
          .click(function() {
+           if(g_autosave_changes > 0) {
+             show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+             return;
+           };
            edit_rights("v4net_acl", g_data['net_id'], (g_data['net_rights'] & R_MANAGE_NET) > 0,  function() {
              window.location = "?action=view_v4&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
                                (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
@@ -2074,7 +2170,7 @@ function actionView4() {
                save_local("edit_all", state);
 
 
-               $(".ips_table").find("TBODY").find("TR").each(function() {
+               $(".main_table").find("TBODY").find("TR").each(function() {
                  let row = $(this);
                  let row_ipdata = row.data("ipdata");
                  if(row_ipdata['is_taken'] !== undefined) {
@@ -2094,7 +2190,7 @@ function actionView4() {
        )
       ;
 
-      let table = $(TABLE).addClass("ips_table")
+      let table = $(TABLE).addClass("main_table")
       ;
 
       let thead = $(TR)
@@ -2106,8 +2202,26 @@ function actionView4() {
          .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
            .addClass(["button", "ui-icon", "ui-icon-plus"])
            .title("Добавить диапазон")
+           .css({"float": "left"})
+           .click(function() {
+             if(g_autosave_changes > 0) {
+               show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+               return;
+             };
+             edit_net_range("int_v4net_range", undefined);
+           })
+         )
+         .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
+           .addClass(["button", "ui-icon", "ui-icon-bullets"])
+           .title("Назначение полей")
            .css({"float": "right"})
-           .click(function() { edit_net_range("int_v4net_range", undefined); })
+           .click(function() {
+             if(g_autosave_changes > 0) {
+               show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+               return;
+             };
+             net_cols_edit();
+           })
          )
        )
       ;
@@ -2177,6 +2291,10 @@ function actionView4() {
             e.stopPropagation();
             let r_i = $(this).data("r_i");
             if(r_i === undefined) return;
+            if(g_autosave_changes > 0) {
+              show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+              return;
+            };
             edit_net_range("int_v4net_range", g_data['net_ranges'][r_i]['v4r_id']);
           };
         });
@@ -2272,7 +2390,7 @@ function ip_menu(elm) {
   let row = elm.closest(".row");
   let ipdata = row.data("ipdata");
   
-  let menu=$(UL)
+  let menu = $(UL)
    .addClass("popupmenu")
    .css({"background-color": "white", "border": "1px solid black", "display": "inline-block", "z-index": 100})
    .css({"padding": "0.2em"})
@@ -2367,17 +2485,17 @@ function ip_menu(elm) {
                let changed = $(this).data("autosave_changed");
                if(changed) {
                  g_autosave_changes--;
-                 if(g_autosave_changes < 0) {
-                   error_at();
-                   return;
-                 } else if(g_autosave_changes == 0) {
-                   $("#autosave_btn").css({"color": "gray"});
-                 } else {
-                   $("#autosave_btn").css({"color": "yellow"});
-                 };
                };
                $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), false));
              });
+             if(g_autosave_changes < 0) {
+               error_at();
+               return;
+             } else if(g_autosave_changes == 0) {
+               $("#autosave_btn").css({"color": "gray"});
+             } else {
+               $("#autosave_btn").css({"color": "yellow"});
+             };
              $("UL.popupmenu").remove();
            })
          )
@@ -2397,9 +2515,25 @@ function ip_menu(elm) {
            let ipdata = row.data("ipdata");
            if(ipdata === undefined) { error_at(); return; };
            show_confirm("Подтвердите освобождение адреса "+v4long2ip(ipdata['v4ip_addr'])+
-                        "\nВнимание: все данные по этому адресу будут удалены. Отмена будет невозможна", function() {
+                        "\nВнимание: все данные по этому адресу будут удалены.\nОтмена будет невозможна", function() {
              let ip_id = ipdata['v4ip_id'];
-             run_query({"action": "free_ip", "v": "4", "id": ip_id}, function(res) {
+             run_query({"action": "free_ip", "v": "4", "id": String(ip_id)}, function(res) {
+
+               row.find(".ip_edit").each(function() {
+                 let changed = $(this).data("autosave_changed");
+                 if(changed) {
+                   g_autosave_changes--;
+                 };
+               });
+               if(g_autosave_changes < 0) {
+                 error_at();
+                 return;
+               } else if(g_autosave_changes == 0) {
+                 $("#autosave_btn").css({"color": "gray"});
+               } else {
+                 $("#autosave_btn").css({"color": "yellow"});
+               };
+
                $("UL.popupmenu").remove();
                let new_ip_data = {};
                new_ip_data['ranges'] = ipdata['ranges'];
@@ -2432,6 +2566,64 @@ function ip_menu(elm) {
   menu.on("click dblclick", function(e) { e.stopPropagation(); });
 
   $(".tooltip").remove();
+};
+
+function vlan_val_elm(row_data, prop, state) {
+  let ret;
+
+  let can_edit = false;
+  if(row_data['rights'] !== undefined &&
+     (row_data['rights'] & R_EDIT_IP_VLAN) > 0 &&
+     ((row_data['rights'] & R_DENYIP) == 0 ||
+      (row_data['rights'] & R_IGNORE_R_DENY) > 0
+     )
+  ) {
+    can_edit = true;
+  };
+
+  let value = row_data[prop];
+
+  if(state && can_edit) {
+    if(prop == "vlan_descr") {
+      ret = $(TEXTAREA);
+      ret.css({"min-height": "1em", "min-width": "80em"});
+      let lines = String(value).split("\n").length;
+      ret.css({"height": lines+"em"});
+    } else {
+      ret = $(INPUT);
+    };
+    ret.val(value);
+
+    ret.saveable({"object": "vlan_value", "id": String(row_data['vlan_id']), "prop": prop});
+    ret.addClass("vlan_edit");
+
+    ret.keyup(function(e) {
+      if(e.key === "Escape") {
+        e.stopPropagation();
+        let row = $(this).closest(".row");
+        row.find(".vlan_edit").each(function() {
+          if(!$(this).data("autosave_changed")) {
+            $(this).replaceWith( vlan_val_elm(row.data("row_data"), $(this).data("prop"), false ));
+          };
+        });
+      };
+
+    });
+
+  } else {
+    ret = $(SPAN)
+     .addClass("wsp")
+     .addClass("vlan_view")
+     .text(value)
+    ;
+  };
+
+  let css = {};
+  ret.addClass("vlan_value");
+  ret.data("prop", prop);
+  ret.css(css);
+
+  return ret;
 };
 
 function ip_val_elm(ipdata, col_id, state) {
@@ -2480,7 +2672,7 @@ function ip_val_elm(ipdata, col_id, state) {
     };
     ret.val(value);
 
-    ret.saveable({"object": "ip_value", "id": ipdata['v4ip_id'], "col_id": col_id});
+    ret.saveable({"object": "ip_value", "id": String(ipdata['v4ip_id']), "col_id": col_id});
     ret.addClass("ip_edit");
 
     ret.keyup(function(e) {
@@ -2530,12 +2722,18 @@ function editable_elm(data, edit) {
     value = g_data[ 'net_name' ];
   } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
     value = g_data[ 'net_owner' ];
+  } else if(data['object'] == 'vdom' && data['prop'] == 'vd_name') {
+    value = g_data[ 'vd_name' ];
+  } else if(data['object'] == 'vdom' && data['prop'] == 'vd_descr') {
+    value = g_data[ 'vd_descr' ];
   } else {
-    error_at();
+    error_at("Unknown object: "+data['object']+" prop: "+data['prop']);
     return;
   };
   if(edit) {
     if(data['object'] == 'net' && data['prop'] == 'v4net_descr') {
+      ret = $(TEXTAREA);
+    } else if(data['object'] == 'vdom' && data['prop'] == 'vd_descr') {
       ret = $(TEXTAREA);
     } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
       ret = $(SELECT);
@@ -2617,6 +2815,8 @@ function editable_elm(data, edit) {
     let data = $(this).data("editable_data");
     if(data['object'] == 'net') {
       if( (g_data['net_rights'] & R_MANAGE_NET) == 0 ) return;
+    } else if(data['object'] == 'vdom') {
+      if(!userinfo['is_admin']) return;
     };
     let new_state = $(this).hasClass("editable_view");
     if(!new_state && $(this).data("autosave_changed") === true) {
@@ -3334,7 +3534,7 @@ function edit_net_range(object, object_id) {
           let object = dlg.data("object");
 
           show_confirm("Подтвердите удаление диапазона.\nВнимание: отмена операции будет невозможна!", function() {
-            run_query({"action": "del_net_range", "object": dlg.data("object"), "object_id": dlg.data("object_id")}, function(res) {
+            run_query({"action": "del_net_range", "object": dlg.data("object"), "object_id": String(dlg.data("object_id"))}, function(res) {
 
               dlg.dialog( "close" );
 
@@ -3445,8 +3645,8 @@ function edit_net_range(object, object_id) {
           let query = {
             "action": "save_range",
             "object": dlg.data("object"),
-            "object_id": dlg.data("object_id")===undefined?"":dlg.data("object_id"),
-            "net_id": dlg.data("object") === "int_v4net_range"?g_data['net_id']:null,
+            "object_id": dlg.data("object_id")===undefined?"":String(dlg.data("object_id")),
+            "net_id": dlg.data("object") === "int_v4net_range"?String(g_data['net_id']):null,
             "rights": rights,
             "r_start": String(r_start),
             "r_stop": String(r_stop),
@@ -3456,8 +3656,6 @@ function edit_net_range(object, object_id) {
             "r_icon": String($("#r_icon").val()).trim(),
             "r_icon_style": String($("#r_icon_style").val()).trim(),
           };
-          debugLog("Query:");
-          debugLog(jstr(query));
           run_query(query, function(res) {
             dlg.dialog( "close" );
 
@@ -3584,3 +3782,1370 @@ function take_v4net(net, masklen) {
      
   });
 };
+
+function net_cols_edit() {
+  run_query({"action": "get_netcols"}, function(res) {
+
+    let dialog = $(DIV).addClass("dialog_start")
+     .title("Выбор полей для сети "+v4long2ip(g_data['net_addr'])+"/"+g_data['net_masklen'])
+    ;
+
+    let table = $(DIV).addClass("table")
+     .append( $(DIV).addClass("thead")
+       .append( $(SPAN).addClass("th").text("Поле") )
+       .append( $(SPAN).addClass("th").text("Вкл") )
+       .append( $(SPAN).addClass("th").text("Тип") )
+       .append( $(SPAN).addClass("th").text("RegExp") )
+     )
+     .appendTo(dialog)
+    ;
+
+    for(let i in res['ok']['netcols']) {
+      let ic_id = res['ok']['netcols'][i]['ic_id'];
+
+      let tr = $(DIV).addClass("tr")
+       .append( $(SPAN).addClass("td")
+         .append( $(SPAN)
+           .text(res['ok']['netcols'][i]['ic_name'])
+           .title(res['ok']['netcols'][i]['ic_descr']+"\n"+"API name: "+res['ok']['netcols'][i]['ic_api_name'])
+         )
+       )
+       .append( $(SPAN).addClass("td")
+         .append( $(INPUT)
+           .data("ic_id", ic_id)
+           .data("initial", g_data['net_cols'][ic_id] !== undefined)
+           .prop({"type": "checkbox", "checked": g_data['net_cols'][ic_id] !== undefined})
+         )
+       )
+       .append( $(SPAN).addClass("td")
+         .append( $(SPAN)
+           .text(res['ok']['netcols'][i]['ic_type'])
+         )
+       )
+       .append( $(SPAN).addClass("td")
+         .append( $(SPAN)
+           .text(res['ok']['netcols'][i]['ic_regexp'])
+         )
+       )
+       .appendTo(table)
+      ;
+    };
+
+    let buttons = [];
+    buttons.push({
+      'text': 'Сохранить',
+      'click': function() {
+        let dlg = $(this);
+
+        let on=[];
+        let off=[];
+
+        dlg.find("INPUT[type=checkbox]").each(function() {
+          let ic_id = $(this).data("ic_id");
+          let state = $(this).is(":checked");
+          let initial = $(this).data("initial");
+
+          if(state !== initial) {
+            if(state) {
+              on.push(String(ic_id));
+            } else {
+              off.push(String(ic_id));
+            };
+          };
+        });
+
+        if(on.length > 0 || off.length > 0) {
+          show_confirm_checkbox("Внимание!\nОтключение полей приведет к удалению ВСЕХ данных,\nсвязаных с IP адресами и отключаемыми полями!\n"+
+                                "Отмена будет невозможна!", function() {
+            run_query({"action": "net_set_cols", "net_id": String(g_data['net_id']), "v": g_data["v"], "on": on, "off": off}, function(res) {
+              window.location = "?action=view_v"+g_data["v"]+"&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
+                                (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+            });
+          }, {}, off.length == 0);
+        } else {
+          dlg.dialog( "close" );
+        };
+      },
+    });
+
+    buttons.push({
+      'text': 'Отмена',
+      'click': function() {$(this).dialog( "close" );},
+    });
+
+    let dialog_options = {
+      modal:true,
+      //maxHeight:1000,
+      //maxWidth:1800,
+      minWidth: 600,
+      width: 600,
+      height: "auto",
+      buttons: buttons,
+      close: function() {
+        $(this).dialog("destroy");
+        $(this).remove();
+      }
+    };
+
+    dialog.appendTo("BODY");
+    dialog.dialog( dialog_options );
+     
+  });
+};
+
+function actionVlanDomains() {
+  workarea.empty();
+  fixed_div.empty();
+
+  run_query({"action": "list_vlan_domains"}, function(res) {
+    if(res['ok']['aux_userinfo'] !== undefined) {
+      if(g_data['aux_userinfo'] === undefined) g_data['aux_userinfo'] = {};
+      for(let u_id in res['ok']['aux_userinfo']) {
+        g_data['aux_userinfo'][u_id] = res['ok']['aux_userinfo'][u_id];
+      };
+    };
+
+    g_data = res['ok'];
+
+    let table = $(DIV).addClass("table")
+     .css({"font-size": "larger"})
+     .append( $(DIV).addClass("thead")
+       .append( $(SPAN).addClass("th")
+         .text("VLAN домен")
+       )
+       .append( $(SPAN).addClass("th")
+         .text("Занято")
+       )
+     )
+     .appendTo(workarea)
+    ;
+
+    for(let i in res['ok']['vds']) {
+      let vd = res['ok']['vds'][i];
+      let tr = $(DIV).addClass("tr")
+       .data("id", vd['vd_id'])
+      ;
+
+      tr
+       .append( $(SPAN).addClass("td")
+         .append( $(A)
+           .addClass("vd"+vd['vd_id'])
+           .prop("href", "?action=view_vlan_domain&id="+vd['vd_id']+(DEBUG?"&debug":""))
+           .text(vd['vd_name'])
+           .title(vd['vd_descr'])
+         )
+       )
+       .append( $(SPAN).addClass("td")
+         .text(vd['num_taken'])
+       )
+      ;
+
+      tr.appendTo(table);
+    };
+
+    if(userinfo['is_admin']) {
+      let tr = $(DIV).addClass("tr")
+       .append( $(SPAN).addClass("td")
+         .append( $(INPUT).addClass("new_vlan_domain_name")
+           .enterKey(function() {
+             $(".vd_add_btn").trigger("click")
+           })
+         )
+         .append( $(SPAN).addClass("min1em") )
+         .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+           .addClass("vd_add_btn")
+           .title("Добавить")
+           .click(function() {
+             let new_vd_name = $("INPUT.new_vlan_domain_name").val();
+             if(new_vd_name === undefined) { error_at(); return; };
+             new_vd_name = String(new_vd_name).trim();
+             if(!new_vd_name.match(/^[a-zA-Z][a-zA-Z_0-9]*$/)) {
+               $("INPUT.new_vlan_domain_name").animateHighlight("red", 300);
+               return;
+             };
+
+             for(let i in g_data['vds']) {
+               if(String(g_data['vds'][i]['vd_name']).toLowerCase() == new_vd_name.toLowerCase()) {
+                 $(".vd"+g_data['vds'][i]['vd_id']+",INPUT.new_vlan_domain_name").animateHighlight("red", 300);
+                 return;
+               };
+             };
+
+             run_query({"action": "add_vdom", "name": new_vd_name}, function(res) {
+               window.location = "?action=view_vlan_domain&id="+res['ok']['vd_id']+(DEBUG?"&debug":"");
+             });
+           })
+         )
+       )
+       .append( $(SPAN).addClass("td") )
+       .appendTo( table )
+      ;
+    };
+
+  });
+};
+
+function vlan_row(row_data) {
+  let empty_colspan = 2;
+
+  let tr = $(TR).addClass("row")
+   .data("row_data", row_data)
+  ;
+
+  let vlan_td = $(TD).addClass("wsp")
+  ;
+
+  let ranges_span = $(SPAN)
+   .css({"width": (g_range_bar_width+g_range_bar_margin)*g_data["vdom_ranges"].length, "display": "inline-block"})
+  ;
+
+  for(let i in g_data["vdom_ranges"]) {
+    let r_label = $(LABEL).addClass("iprange");
+    r_label.html('&#x200b;');
+    r_label.css({"left": ((g_range_bar_width+g_range_bar_margin)*i)+"px",
+                 "width": g_range_bar_width+"px",
+                 "margin-right": g_range_bar_width+"px",
+    });
+    if(row_data['ranges'][i]['in_range'] !== undefined) {
+      r_label.addClass("vlanrange_shown");
+      if(g_data["vdom_ranges"][i]['vr_style'] != "{}") {
+        try {
+          let r_label_css = JSON.parse(g_data["vdom_ranges"][i]['vr_style']);
+          r_label.css(r_label_css);
+        } catch(e) {
+          r_label.css(g_default_range_style);
+
+        };
+      } else {
+        r_label.css(g_default_range_style);
+      };
+      r_label.title(vrange_title(g_data["vdom_ranges"][i]));
+      r_label.data("r_i", i);
+    };
+    ranges_span.append( r_label );
+  };
+
+  vlan_td.append( ranges_span );
+
+  let can_edit = false;
+  if(row_data['rights'] !== undefined &&
+     (row_data['rights'] & R_EDIT_IP_VLAN) > 0 &&
+     ((row_data['rights'] & R_DENYIP) == 0 ||
+      (row_data['rights'] & R_IGNORE_R_DENY) > 0
+     )
+  ) {
+    can_edit = true;
+  };
+
+
+  if(row_data['is_empty'] !== undefined) {
+    vlan_td.appendTo( tr );
+    let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td");
+    if(can_edit) {
+      empty_td
+       .append( $(SPAN).text("Занять: ") )
+       .append( $(LABEL).text(row_data['start'])
+         .addClass("button")
+         .data("take_type", "vlan")
+         .data("vlan", row_data['start'])
+         .click(function() { take_vlan($(this)); })
+       )
+      ;
+      if((row_data['stop'] - row_data['start']) > 1) {
+        let next_vlan = row_data['start'] + 1;
+        let next_vlan_t = String(next_vlan);
+        let last_vlan_t = String(row_data['stop']);
+
+        let val = "";
+        let i=1;
+
+        while(i < next_vlan_t.length && i < last_vlan_t.length) {
+          if(next_vlan_t.substring(0, i) == last_vlan_t.substring(0, i)) {
+            val = next_vlan_t.substring(0, i);
+            i++;
+          } else {
+            break;
+          };
+        };
+
+        empty_td
+         .append( $(SPAN).text(" - ") )
+         .append( $(INPUT)
+           .css({"width": "8em"})
+           .addClass("any_vlan")
+           .val(val)
+           .data("first", next_vlan)
+           .data("last", row_data['stop']-1)
+           .enterKey(function() { $(this).closest(".row").find(".take_any_btn").click(); })
+         )
+         .append( $(LABEL).text("+")
+           .addClass("button")
+           .addClass("take_any_btn")
+           .data("take_type", "any_vlan")
+           .data("first", next_vlan)
+           .data("last", row_data['stop']-1)
+           .click(function() { take_vlan($(this)); })
+         )
+        ;
+      };
+      if(row_data['start'] !== row_data['stop']) {
+        empty_td
+         .append( $(SPAN).text(" - ") )
+         .append( $(LABEL).text(row_data['stop'])
+           .addClass("button")
+           .data("vlan", row_data['stop'])
+           .data("take_type", "vlan")
+           .click(function() { take_vlan($(this)); })
+         )
+        ;
+      };
+    } else {
+      if(row_data['start'] === row_data['stop']) {
+        empty_td
+         .append( $(SPAN).text("Свободно: ") )
+         .append( $(SPAN).text(row_data['start'])
+         )
+        ;
+      } else {
+        empty_td
+         .append( $(SPAN).text("Свободно: ") )
+         .append( $(SPAN).text(row_data['start'])
+         )
+         .append( $(SPAN).text(" - ") )
+         .append( $(SPAN).text(row_data['stop'])
+         )
+        ;
+      };
+    };
+    empty_td.appendTo( tr );
+  } else {
+    // menu
+    vlan_td
+     .append( $(LABEL)
+       .addClass("button")
+       .addClass("ns")
+       .addClass(["ui-icon", "ui-icon-bars"])
+       .css({"float": "right", "clear": "none"})
+       .click(function(e) {
+         e.stopPropagation();
+         vlan_menu($(this));
+       })
+     )
+    ;
+    //
+    vlan_td.append( $(SPAN).text(row_data['vlan_number']).addClass("vlan_number") );
+
+    vlan_td
+     .append( $(SPAN)
+       .addClass("ns")
+       .css({"display": "inline-block", "min-width": "2em"})
+       //.html('&#x200b;')
+     )
+    ;
+
+    vlan_td.tooltip({
+      classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+      items: "SPAN.vlan_number",
+      content: function() {
+        if( $("UL").length > 0 ) return undefined;
+        let row = $(this).closest(".row");
+        let row_data = row.data("row_data");
+        let lines=[];
+        if(row_data['ts'] > 0) {
+          lines.push("Последнее изменение: "+from_unix_time(row_data['ts'], false, 'н/д'));
+          if(row_data['fk_u_id'] !== null && g_data['aux_userinfo'][row_data['fk_u_id']] != undefined) {
+            let user_row = g_data['aux_userinfo'][row_data['fk_u_id']];
+            lines.push("\t"+user_row['u_name']+" ("+user_row['u_login']+")");
+          };
+        };
+        return lines.join("\n");
+      }
+    });
+
+
+    vlan_td.appendTo( tr );
+
+    tr
+     .append( $(TD)
+       .append( vlan_val_elm(row_data, "vlan_name", g_edit_all) )
+     )
+     .append( $(TD)
+       .append( vlan_val_elm(row_data, "vlan_descr", g_edit_all) )
+     )
+    ;
+
+  };
+
+  if(can_edit) {
+    tr
+     .on("click dblclick", function(e) {
+       if ((e.type == "click" && e.ctrlKey) ||
+           e.type == "dblclick"
+       ) {
+         e.stopPropagation();
+         let row_data = $(this).data("row_data");
+         let td;
+         if(e.target.nodeName == "TD") {
+           td = $(e.target);
+         } else {
+           td = $(e.target).closest("TD");
+         };
+         $(this).find(".vlan_view").each(function() {
+           $(this).replaceWith(vlan_val_elm(row_data, $(this).data('prop'), true));
+         });
+         let focuson = td.find(".vlan_edit");
+
+         if(focuson.length > 0) {
+           focuson.focus();
+         };
+       };
+     })
+    ;
+  };
+
+  return tr;
+};
+
+function actionViewVlanDomain() {
+  workarea.empty();
+  fixed_div.empty();
+
+  let vd_id = getUrlParameter("id", undefined);
+
+  if(vd_id === undefined || !String(vd_id).match(/^\d+$/)) { error_at(); return; };
+
+  run_query({"action": "view_vlan_domain", "id": String(vd_id)}, function(res) {
+    g_data = res['ok'];
+    document.title = "IPDB: VLAN домен "+res['ok']['vd_name'];
+
+    fixed_div
+     .append( $(DIV)
+       .css({"display": "flex", "align-items": "center"})
+       .append( $(LABEL).addClass(["ui-icon", "ui-icon-info", "button"])
+         .css({"margin-left": "0.5em"})
+         .click(function() {
+           g_show_vdom_info = !g_show_vdom_info;
+           $("#vdom_info").toggle(g_show_vdom_info);
+           save_local("show_vdom_info", g_show_vdom_info);
+         })
+       )
+       .append( $(SPAN).addClass("min1em") )
+       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
+         .addClass(["ui-icon", "ui-icon-edit"])
+         .title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+         .click(function() {
+           let elm = $("#vd_name_editable");
+           if(elm.hasClass("editable_edit")) {
+             $(this).title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+           } else {
+             $(this).title("Отменить редактирование. Также можно нажать ESC когда курсор в поле ввода");
+           };
+           elm.trigger("editable_toggle");
+         })
+       )
+       .append( $(SPAN)
+         .css({"font-size": "xx-large"})
+         .append(
+           editable_elm({
+             'object': 'vdom',
+             'prop': 'vd_name',
+             'id': String(g_data['vd_id']),
+             '_edit_css': { 'width': '50em' },
+             '_elm_id': 'vd_name_editable',
+             '_after_save': function(elm, new_val) {
+               g_data['vd_name'] = new_val;
+               $("#vdom_changed_ts").text( from_unix_time( unix_timestamp() ) );
+               $("#vdom_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
+             }
+           })
+         )
+       )
+     )
+    ;
+
+    g_show_vdom_info = get_local("show_vdom_info", g_show_vdom_info);
+
+    var info_div = $(DIV)
+     .prop("id", "vdom_info")
+    ;
+
+    fixed_div
+     .append( info_div.toggle(g_show_vdom_info) )
+    ;
+
+    info_div
+     .append( $(DIV)
+       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
+         .addClass(["button", "ui-icon", "ui-icon-trash"])
+         .title("Удалить домен")
+         .click(function() {
+           show_confirm_checkbox("Подтвердите удаление домена.\nВнимание: отменить операцию будет невозможно!", function() {
+             run_query({"action": "del_vdom", "object_id": String(g_data['vd_id'])}, function(res) {
+               g_autosave_changes = 0;
+               window.location = "?action=vlan_domains"+(DEBUG?"&debug":"");
+             });
+           });
+         })
+       )
+     )
+    ;
+
+    if(res['ok']['ts'] > 0 && res['ok']['fk_u_id'] !== null &&
+       res['ok']['fk_u_id'] !== undefined && g_data['aux_userinfo'][ res['ok']['fk_u_id'] ] != undefined
+    ) {
+      info_div
+       .append( $(DIV)
+         .append( $(SPAN).text("Изменена: ") )
+         .append( $(SPAN).text(from_unix_time(res['ok']['ts']) )
+           .prop("id", "vdom_changed_ts")
+         )
+         .append( $(SPAN).text(" Пользователем: ") )
+         .append( $(SPAN)
+           .text(g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_name']+" ("+
+                 g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_login']+")"
+           )
+           .prop("id", "vdom_changed_user")
+         )
+       )
+      ;
+    };
+
+    info_div
+     .append( $(DIV)
+       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
+         .addClass(["ui-icon", "ui-icon-edit"])
+         .css({"vertical-align": "top"})
+         .title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+         .click(function() {
+           let elm = $("#vd_descr_editable");
+           if(elm.hasClass("editable_edit")) {
+             $(this).title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+           } else {
+             $(this).title("Отменить редактирование. Также можно нажать ESC когда курсор в поле ввода");
+           };
+           elm.trigger("editable_toggle");
+         })
+       )
+       .append(
+         editable_elm({
+           'object': 'vdom',
+           'prop': 'vd_descr',
+           'id': String(g_data['vd_id']),
+           '_view_classes': ["wsp"],
+           '_view_css': {"display": "inline-block", "border": "2px inset gray", "padding": "2px"},
+           '_edit_css': { 'width': '50em', 'min-height': '20em' },
+           '_elm_id': 'vd_descr_editable',
+           '_after_save': function(elm, new_val) {
+             g_data['vd_descr'] = new_val;
+             $("#vdom_changed_ts").text( from_unix_time( unix_timestamp() ) );
+             $("#vdom_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
+           }
+         })
+       )
+     )
+    ;
+
+    g_edit_all = get_local("edit_all", g_edit_all);
+
+    fixed_div
+     .append( $(DIV)
+       .append( $(SPAN)
+         .append( $(LABEL)
+           .text("Редактировать все: ")
+           .prop("for", "edit_all")
+         )
+         .append( $(INPUT)
+           .prop({"id": "edit_all", "type": "checkbox", "checked": g_edit_all})
+           .on("change", function() {
+             let state = $(this).is(":checked");
+             save_local("edit_all", state);
+
+
+             $(".main_table").find("TBODY").find("TR").each(function() {
+               let row = $(this);
+               let row_row_data = row.data("row_data");
+               if(row_row_data['is_taken'] !== undefined) {
+                 row.find(".vlan_value").each(function() {
+                   let prop = $(this).data("prop");
+                   let changed = $(this).data("autosave_changed");
+                   if(changed === undefined || changed === false) {
+                     let new_elm = vlan_val_elm(row_row_data, prop, state);
+                     $(this).replaceWith(new_elm);
+                   };
+                 });
+               };
+             });
+           })
+         )
+       )
+     )
+    ;
+
+    let table = $(TABLE).addClass("main_table")
+    ;
+
+    let thead = $(TR)
+    ;
+
+    thead
+     .append( $(TH)
+       .text("VLAN")
+       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
+         .addClass(["button", "ui-icon", "ui-icon-plus"])
+         .title("Добавить диапазон")
+         .css({"float": "left"})
+         .click(function() {
+           if(g_autosave_changes > 0) {
+             show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+             return;
+           };
+           edit_vdom_range(undefined);
+         })
+       )
+     )
+     .append( $(TH)
+       .text("Имя")
+     )
+     .append( $(TH)
+       .text("Описание")
+     )
+    ;
+
+
+
+    table
+     .append( $(THEAD)
+       .append( thead )
+     )
+    ;
+
+    let tbody = $(TBODY);
+
+
+    for(let vlan_i in res['ok']['vlans']) {
+      let row_data = res['ok']['vlans'][vlan_i];
+      let tr = vlan_row(row_data);
+      tr.appendTo( tbody );
+
+    };
+
+    table.append( tbody );
+    table.appendTo( workarea );
+
+    table.tooltip({
+      classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+      items: ".vlanrange",
+      content: function() {
+        let r_i = $(this).data("r_i");
+        if(r_i === undefined) return;
+        return range_title(g_data['vdom_ranges'][r_i]);
+      }
+    });
+
+    if(userinfo['is_admin']) {
+      table.find(".vlanrange_shown").on("click dblclick", function(e) {
+        if ((e.type == "click" && e.ctrlKey) ||
+            e.type == "dblclick"
+        ) {
+          e.stopPropagation();
+          let r_i = $(this).data("r_i");
+          if(r_i === undefined) return;
+          if(g_autosave_changes > 0) {
+            show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+            return;
+          };
+          edit_vdom_range(g_data['vdom_ranges'][r_i]['vr_id']);
+        };
+      });
+    };
+  });
+};
+
+function take_vlan(elm) {
+  let row = elm.closest(".row");
+  let prev_row_data = row.data("row_data");
+  let take_type = elm.data("take_type");
+  if(take_type == undefined) { error_at(); return; };
+  if(prev_row_data == undefined) { error_at(); return; };
+
+  let take_vlan = undefined;
+  if(take_type === "vlan") {
+    take_vlan = elm.data("vlan");
+  } else if(take_type === "any_vlan") {
+    let v = row.find(".any_vlan").val();
+    take_vlan = v;
+    let first = elm.data("first");
+    let last = elm.data("last");
+    if(take_vlan < first || take_vlan > last) {
+      row.find(".any_vlan").animateHighlight("red", 500);
+      return;
+    };
+  } else {
+    error_at(); return;
+  };
+
+  if(take_vlan === undefined) { error_at(); return; };
+
+  run_query({"action": "take_vlan", "take_vlan": String((take_vlan >>> 0)), "ranges_orig": g_data['ranges_orig'],
+            "vd_id": String(g_data['vd_id'])
+  }, function(res) {
+
+    let new_row_data = res['ok']['row_data'];
+    let new_vlan_row = vlan_row(new_row_data);
+    row.replaceWith( new_vlan_row );
+
+    let prev_start = prev_row_data['start'];
+    let prev_stop = prev_row_data['stop'];
+
+    if(prev_start != prev_stop) {
+      if(take_vlan > prev_start) {
+        let before_data = dup(prev_row_data);
+        before_data['stop'] = Number(take_vlan) - 1;
+        let before_row = vlan_row(before_data);
+        before_row.insertBefore(new_vlan_row);
+      };
+      if(take_vlan < prev_stop) {
+        let after_data = dup(prev_row_data);
+        after_data['start'] = Number(take_vlan) + 1;
+        let after_row = vlan_row(after_data);
+        after_row.insertAfter(new_vlan_row);
+      };
+    };
+  });
+};
+
+function vlan_menu(elm) {
+  $("UL.popupmenu").remove();
+  let row = elm.closest(".row");
+  let row_data = row.data("row_data");
+  
+  let menu = $(UL)
+   .addClass("popupmenu")
+   .css({"background-color": "white", "border": "1px solid black", "display": "inline-block", "z-index": 100})
+   .css({"padding": "0.2em"})
+   .css({"position": "absolute"})
+   .append( $(LI)
+     .title("Закрыть меню")
+     .append( $(DIV)
+       //.css({"display": "inline-block"})
+       .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrowreturn-1-w"]) )
+       .append( $(SPAN).html("&#x200b;") )
+       .click(function(e) {
+         e.stopPropagation();
+         $("UL.popupmenu").remove();
+       })
+     )
+   )
+  ;
+
+
+  if((row_data['rights'] & R_EDIT_IP_VLAN) != 0 &&
+     (row_data['rights'] & R_VIEW_NET_IPS) != 0 &&
+     ((row_data['rights'] & R_DENYIP) == 0 ||
+      (row_data['rights'] & R_IGNORE_R_DENY) != 0
+     )
+  ) {
+
+    if(row.find(".vlan_view").length > 0) {
+      menu
+       .append( $(LI)
+         .append( $(DIV)
+           .title("Также можно сделать CTRL-Click или dbl-Click на строке...")
+           .append( $(LABEL).addClass(["ui-icon", "ui-icon-edit"]) )
+           .append( $(SPAN).html("Редактировать&#x20F0;") )
+           .click(function(e) {
+             e.stopPropagation();
+
+             let row = $(this).closest("TR");
+
+             row.find(".vlan_view").each(function() {
+               $(this).replaceWith(vlan_val_elm(row_data, $(this).data('prop'), true));
+             });
+             $("UL.popupmenu").remove();
+
+             row.find(".vlan_edit").first().focus();
+           })
+         )
+       )
+      ;
+    };
+
+    if(row.find(".vlan_edit").length > 0) {
+      menu
+       .append( $(LI)
+         .append( $(DIV)
+           //.css({"display": "inline-block"})
+           .append( $(LABEL).addClass(["ui-icon", "ui-icon-undo"]) )
+           .append( $(SPAN).text("Перестать редактировать") )
+           .click(function(e) {
+             e.stopPropagation();
+
+             let row = $(this).closest("TR");
+
+             row.find(".vlan_edit").each(function() {
+               let changed = $(this).data("autosave_changed");
+               if(changed) {
+                 g_autosave_changes--;
+               };
+               $(this).replaceWith(vlan_val_elm(row_data, $(this).data('prop'), false));
+             });
+             if(g_autosave_changes < 0) {
+               error_at();
+               return;
+             } else if(g_autosave_changes == 0) {
+               $("#autosave_btn").css({"color": "gray"});
+             } else {
+               $("#autosave_btn").css({"color": "yellow"});
+             };
+             $("UL.popupmenu").remove();
+           })
+         )
+       )
+      ;
+    };
+
+    menu
+     .append( $(LI)
+       .append( $(DIV)
+         //.css({"display": "inline-block"})
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-trash"]) )
+         .append( $(SPAN).text("Освободить") )
+         .click(function(e) {
+           e.stopPropagation();
+           let row = $(this).closest("TR");
+           let row_data = row.data("row_data");
+           if(row_data === undefined) { error_at(); return; };
+           show_confirm("Подтвердите освобождение VLAN "+row_data['vlan_number']+
+                        "\nВнимание: отмена будет невозможна", function() {
+             let vlan_id = row_data['vlan_id'];
+             run_query({"action": "free_vlan", "id": String(vlan_id)}, function(res) {
+
+               row.find(".vlan_edit").each(function() {
+                 let changed = $(this).data("autosave_changed");
+                 if(changed) {
+                   g_autosave_changes--;
+                 };
+               });
+               if(g_autosave_changes < 0) {
+                 error_at();
+                 return;
+               } else if(g_autosave_changes == 0) {
+                 $("#autosave_btn").css({"color": "gray"});
+               } else {
+                 $("#autosave_btn").css({"color": "yellow"});
+               };
+
+               $("UL.popupmenu").remove();
+               let new_vlan_data = {};
+               new_vlan_data['ranges'] = row_data['ranges'];
+               new_vlan_data['rights'] = row_data['rights'];
+               new_vlan_data['is_empty'] = 1;
+               new_vlan_data['start'] = row_data['vlan_number'];
+               new_vlan_data['stop'] = row_data['vlan_number'];
+
+               row.replaceWith( vlan_row(new_vlan_data) );
+             });
+           });
+         })
+       )
+     )
+    ;
+
+  };
+
+  //let elm_offset = elm.offset();
+  //let elm_width = elm.width();
+
+  let td_width = elm.closest("TD").width();
+
+  menu.css({"top": "0px", "left": td_width+10+"px"});
+
+  menu.appendTo(elm.closest("TD"));
+
+  menu.menu();
+
+  menu.on("click dblclick", function(e) { e.stopPropagation(); });
+
+  $(".tooltip").remove();
+};
+
+function edit_vdom_range(object_id) {
+  let allow_edit = false;
+  allow_edit = userinfo["is_admin"];
+
+  let query;
+  if(object_id !== undefined) {
+    query = {"action": "get_vdom_range", "object_id": object_id};
+  } else {
+    query = {"action": "get_groups"};
+  };
+  run_query(query, function(res) {
+
+    if(res['ok']['aux_userinfo'] !== undefined) {
+      if(g_data['aux_userinfo'] === undefined) g_data['aux_userinfo'] = {};
+      for(let u_id in res['ok']['aux_userinfo']) {
+        g_data['aux_userinfo'][u_id] = res['ok']['aux_userinfo'][u_id];
+      };
+    };
+
+    if(object_id === undefined) {
+      let r_start;
+      let r_stop;
+      let style;
+
+      r_start = 1;
+      r_stop = g_data['vd_max_num'];
+      style = JSON.stringify(g_default_range_style);
+
+      let groups = {};
+      for(let i in res["ok"]["gs"]) {
+        let g_id= res["ok"]["gs"][i]["g_id"];
+        groups[g_id] = res["ok"]["gs"][i];
+        groups[g_id]['rights'] = 0;
+        groups[g_id]['ts'] = undefined;
+        groups[g_id]['fk_u_id'] = null;
+      };
+
+      res = {
+        "ok": {
+          "groups": groups,
+          "vr_start": r_start,
+          "vr_stop": r_stop,
+          "vr_name": "",
+          "vr_descr": "",
+          "vr_id": undefined,
+          "vr_style": style,
+          "vr_icon": g_default_range_icon,
+          "vr_icon_style": JSON.stringify(g_default_range_icon_style),
+          "ts": 0,
+          "fk_u_id": null,
+        }
+      };
+    };
+
+    let title = "Диапазон VLAN";
+
+    let dialog = $(DIV).addClass("dialog_start")
+     .title(title)
+     .data('object_id', object_id)
+     .data('groups', res['ok']['groups'])
+     .data('r_data', res['ok'])
+    ;
+
+    $(DIV)
+     .append( $(SPAN).text("Посл. изменение: ") )
+     .append( $(SPAN).text(from_unix_time( res['ok']['ts'], false, 'н.д.' )) )
+     .append( $(SPAN).addClass("min1em") )
+     .append( res['ok']['fk_u_id'] === null?$(SPAN):$(SPAN)
+       .text(
+         g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_name']+" ("+
+         g_data['aux_userinfo'][ res['ok']['fk_u_id'] ]['u_login']+")"
+       )
+     )
+     .appendTo( dialog )
+    ;
+
+    $(DIV)
+     .append( $(SPAN).text("Диапазон: ") )
+     .append( $(INPUT)
+       .prop({"id": "r_start", "placeholder": res['ok']['vr_start'], "readonly": !allow_edit})
+       .val(res['ok']['vr_start'])
+     )
+     .append( $(SPAN).text(" - ") )
+     .append( $(INPUT)
+       .prop({"id": "r_stop", "placeholder": res['ok']['vr_stop'], "readonly": !allow_edit})
+       .val(res['ok']['vr_stop'])
+     )
+     .appendTo( dialog )
+    ;
+
+    $(DIV)
+     .append( $(SPAN).text("Название: ") )
+     .append( $(INPUT)
+       .prop({"id": "r_name", "readonly": !allow_edit})
+       .val(res['ok']['vr_name'])
+     )
+     .appendTo( dialog )
+    ;
+
+    let css;
+    try {
+      css = JSON.parse(res['ok']['vr_style']);
+    } catch(e) {
+      css = g_default_range_style;
+    };
+
+    let sample_label;
+
+    sample_label = $(LABEL).addClass("iprange")
+     .html('&#x200b;')
+     .prop("id", "r_style_sample")
+     .css({"width": g_range_bar_width+"px", "margin-right": g_range_bar_width+"px"})
+    ;
+
+    $(DIV)
+     .append( $(SPAN).html("CSS колонки: ").title("Например: {\"background-color\": \"red\"}") )
+     .append( $(INPUT)
+       .prop({"id": "r_style", "readonly": !allow_edit})
+       .val(res['ok']['vr_style'])
+       .on("input change keyup", function() {
+         let j = $(this).val();
+         try {
+           css = JSON.parse(j);
+           $("#r_style_sample").css(css);
+           $("#r_style_error").hide();
+           $(this).css("background-color", "white");
+         } catch(e) {
+           $("#r_style_error").show();
+           $(this).css("background-color", "lightcoral");
+         };
+       })
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .css({"position": "relative"})
+       .append( sample_label )
+     )
+     .append( $(SPAN)
+       .css({"padding-left": g_range_bar_width+g_range_bar_width+2+"px"})
+       .append( $(LABEL)
+         .prop("id", "r_style_error")
+         .addClass(["ui-icon", "ui-icon-alert"])
+         .css({"color": "red"})
+         .title("Неверный JSON стиля")
+         .hide()
+       )
+     )
+     .appendTo( dialog )
+    ;
+
+    $(DIV)
+     .append( $(A)
+       .prop({"href": "https://mkkeck.github.io/jquery-ui-iconfont/#icons", "target": "_blank"})
+       .dotted("Выбрать можно тут")
+       .text("Значек диапазона ui-icon-*: ")
+     )
+     .append( $(INPUT)
+       .prop({"id": "r_icon", "readonly": !allow_edit})
+       .val(res['ok']['vr_icon'])
+       .on("input change keyup", function() {
+         let v = $(this).val();
+         let j = $("#r_icon_style").val();
+         let css;
+         try {
+           css = JSON.parse(j);
+           $("#r_icon_style").css("background-color", "white");
+           $("#r_icon_style_error").hide();
+         } catch(e) {
+           $("#r_icon_style").css("background-color", "lightcoral");
+           $("#r_icon_style_error").show();
+           css = g_default_range_icon_style;
+         };
+         if(!String(v).match(/^ui-icon-[\-a-z0-9]+$/)) {
+           $("#r_icon").css("background-color", "lightcoral");
+           $("#r_icon_error").show();
+           $("#r_icon_span").empty();
+         } else {
+           $("#r_icon").css("background-color", "white");
+           $("#r_icon_error").hide();
+           $("#r_icon_span")
+            .empty()
+            .append( $(LABEL)
+              .addClass(["ui-icon", v])
+              .css(css)
+            )
+           ;
+         };
+       })
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .prop("id", "r_icon_span")
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .append( $(LABEL)
+         .prop("id", "r_icon_error")
+         .addClass(["ui-icon", "ui-icon-alert"])
+         .css({"color": "red"})
+         .title("Неверный класс значка. Должен начинаться на ui-icon-")
+         .hide()
+       )
+     )
+     .appendTo( dialog )
+    ;
+
+    $(DIV)
+     .append( $(SPAN).text("CSS значка диапазона: ").title("Например: {\"color\": \"red\"}") )
+     .append( $(INPUT)
+       .prop({"id": "r_icon_style", "readonly": !allow_edit})
+       .val(res['ok']['vr_icon_style'])
+       .on("input change keyup", function() {
+         $("#r_icon").trigger("input");
+       })
+     )
+     .append( $(SPAN).addClass("min1em") )
+     .append( $(SPAN)
+       .append( $(LABEL)
+         .prop("id", "r_icon_style_error")
+         .addClass(["ui-icon", "ui-icon-alert"])
+         .css({"color": "red"})
+         .title("Неверный JSON значка")
+         .hide()
+       )
+     )
+     .appendTo( dialog )
+    ;
+
+    $(DIV)
+     .append( $(SPAN).text("Описание: ").css("vertical-align", "top") )
+     .append( $(TEXTAREA)
+       .prop({"id": "r_descr", "readonly": !allow_edit})
+       .val(res['ok']['vr_descr'])
+     )
+     .appendTo( dialog )
+    ;
+
+    $(DIV).text("Права доступа:")
+     .css({"margin-top": "0.5em", "margin-bottom": "0.5em"})
+     .appendTo( dialog )
+    ;
+
+    let table = $(DIV).addClass("table")
+     .appendTo(dialog)
+    ;
+
+    let not_in_list = [];
+
+    let k_a = keys(res['ok']['groups']);
+    sort_by_string_key(k_a, res['ok']['groups'], 'g_name');
+
+    for(let i in k_a) {
+      let g_id = k_a[i];
+      if(res['ok']['groups'][g_id]['rights'] == 0) {
+        not_in_list.push(g_id);
+        continue;
+      };
+      table.append( rights_row("vlan_range", object_id, res['ok']['groups'][g_id], allow_edit) );
+    };
+
+    if(allow_edit) {
+      let last_row = $(DIV).addClass("tr");
+
+      let select = $(SELECT)
+       .append( $(OPTION).text("Выберете группу...").val(0) )
+       .val(0)
+       .tooltip({
+         classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+         items: "SELECT",
+         content: function() {
+           return $(this).find("OPTION:selected").prop("title");
+         }
+       })
+      ;
+
+      for(let i in not_in_list) {
+        let g_id = not_in_list[i];
+        select
+         .append( $(OPTION)
+           .text(res['ok']['groups'][g_id]['g_name'])
+           .title(res['ok']['groups'][g_id]['g_descr'])
+           .val(g_id)
+         )
+        ;
+      };
+
+      last_row
+       .append( $(SPAN).addClass("td")
+         .append( select )
+       )
+      ;
+
+      last_row
+       .append( rights_tds("vlan_range", 0, true) )
+      ;
+
+      last_row
+       .append( $(SPAN).addClass("td")
+         .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+           .click(function() {
+             let dialog = $(this).closest(".dialog_start");
+             let select = dialog.find("SELECT");
+             let option = select.find(":selected");
+             let tr = $(this).closest(".tr");
+             let g_id = select.val();
+             if(g_id == 0) return;
+
+             let this_rights = 0;
+
+             tr.find(".right").each(function() {
+               if( $(this).hasClass("right_on") ) {
+                 this_rights = this_rights | $(this).data("right");
+                 $(this).removeClass("right_on").addClass("right_off");
+               };
+             });
+
+             if(this_rights == 0) return;
+
+             let new_g_data = dialog.data("groups")[g_id];
+             new_g_data['_new'] = true;
+             new_g_data['rights'] = this_rights;
+             let new_row = rights_row("vlan_range", dialog.data("object_id"),
+               new_g_data, true
+             );
+             new_row.insertBefore(tr);
+             option.remove();
+           })
+         )
+       )
+      ;
+
+      table.append( last_row );
+    };
+
+    let buttons = [];
+
+    if(allow_edit && object_id !== undefined) {
+      buttons.push({
+        'class': 'left_dlg_button',
+        'text': 'Удалить',
+        'click': function() {
+          let dlg = $(this);
+
+          show_confirm("Подтвердите удаление диапазона.\nВнимание: отмена операции будет невозможна!", function() {
+            run_query({"action": "del_vdom_range", "object_id": String(dlg.data("object_id"))}, function(res) {
+
+              dlg.dialog( "close" );
+
+              window.location = "?action=view_vlan_domain&id="+g_data['vd_id']+(DEBUG?"&debug":"");
+              return;
+            });
+          });
+        },
+      });
+    };
+
+    if(allow_edit) {
+      buttons.push({
+        'text': object_id===undefined?'Создать':'Сохранить',
+        'click': function() {
+          let dlg = $(this);
+
+          let rights = {};
+
+          if(dlg.find("SELECT").val() != 0 &&
+            dlg.find("SELECT").closest(".tr").find(".right_on").length > 0
+          ) {
+            dlg.find("SELECT").closest(".tr").animateHighlight("lightcoral", 200);
+            return;
+          };
+
+          dlg.find(".rights_row").each(function() {
+            let this_rights = 0;
+            $(this).find(".right").each(function() {
+              if($(this).hasClass("right_on")) {
+                let right = $(this).data("right");
+                this_rights |= right;
+              };
+            });
+            if(this_rights > 0) {
+              let group = $(this).data("group");
+              rights[ group['g_id'] ] = String(this_rights);
+            };
+          });
+
+          let r_start = $("#r_start").val();
+          if(!String(r_start).match(/^\d+$/)) {
+            $("#r_start").animateHighlight("red", 300);
+            return;
+          };
+
+          let r_stop = $("#r_stop").val();
+          if(!String(r_stop).match(/^\d+$/)) {
+            $("#r_stop").animateHighlight("red", 300);
+            return;
+          };
+
+          if(Number(r_stop) < Number(r_start)) {
+            $("#r_start,#r_stop").animateHighlight("red", 300);
+            return;
+          };
+
+          if(Number(r_start) < 1) {
+            $("#r_start").animateHighlight("red", 300);
+            return;
+          };
+          if(Number(r_stop) > Number(g_data['vd_max_num'])) {
+            $("#r_stop").animateHighlight("red", 300);
+            return;
+          };
+
+          try {
+            JSON.parse(String($("#r_style").val()).trim());
+          } catch(e) {
+            $("#r_style").animateHighlight("red", 300);
+            return;
+          };
+
+          try {
+            JSON.parse(String($("#r_icon_style").val()).trim());
+          } catch(e) {
+            $("#r_icon_style").animateHighlight("red", 300);
+            return;
+          };
+
+          if(!String($("#r_icon").val()).trim().match(/^ui-icon-[\-a-z0-9]+$/)) {
+            $("#r_icon").animateHighlight("red", 300);
+            return;
+          };
+
+          let query = {
+            "action": "save_vdom_range",
+            "object_id": dlg.data("object_id")===undefined?"":dlg.data("object_id"),
+            "vd_id": String(g_data['vd_id']),
+            "rights": rights,
+            "r_start": String(r_start),
+            "r_stop": String(r_stop),
+            "r_name": String($("#r_name").val()).trim(),
+            "r_descr": String($("#r_descr").val()).trim(),
+            "r_style": String($("#r_style").val()).trim(),
+            "r_icon": String($("#r_icon").val()).trim(),
+            "r_icon_style": String($("#r_icon_style").val()).trim(),
+          };
+          run_query(query, function(res) {
+            dlg.dialog( "close" );
+
+            window.location = "?action=view_vlan_domain&id="+g_data['vd_id']+(DEBUG?"&debug":"");
+            return;
+          });
+        },
+      });
+    };
+
+    buttons.push({
+      'text': allow_edit?'Отмена':'Закрыть',
+      'click': function() {$(this).dialog( "close" );},
+    });
+
+    let dialog_options = {
+      modal:true,
+      maxHeight:1000,
+      maxWidth:1800,
+      minWidth:1200,
+      width: "auto",
+      height: "auto",
+      buttons: buttons,
+      close: function() {
+        $(this).dialog("destroy");
+        $(this).remove();
+      }
+    };
+
+    dialog.appendTo("BODY");
+    dialog.dialog( dialog_options );
+
+    $("#r_style").trigger("input");
+    $("#r_icon").trigger("input");
+  });
+};
+

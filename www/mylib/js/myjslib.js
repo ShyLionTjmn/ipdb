@@ -315,7 +315,12 @@ function show_confirm(message,func, opts, cancelfunc) {
   };
   dialog.dialog(d);
 };
-function show_confirm_checkbox(message,func, opts) {
+function show_confirm_checkbox(message,func, opts, skip = false) {
+  if(skip) {
+    func();
+    return;
+  };
+
   let dialog=$(DIV)
    .prop("title", "Подтвердите действие")
    .css("white-space", "pre")

@@ -7,6 +7,11 @@ import (
 
 type M map[string]interface{}
 
+func (m M) Has(k string) (bool) {
+  _, ex := m[k]
+  return ex
+}
+
 func (m M) Uint64(k string) (uint64, bool) {
   var v interface{}
   var ok bool
