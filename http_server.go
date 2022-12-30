@@ -943,6 +943,122 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         if prop != "g_name" && prop != "g_descr" { panic(fmt.Sprint("Bad property in queue item #", i)) }
         //-------group-------
+      case "ip":
+        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+
+        if prop != "vlan" &&
+        true { panic(fmt.Sprint("Bad property in queue item #", i)) }
+
+        query = "SELECT v4ip_addr, v4ip_fk_v4net_id FROM v4ips WHERE v4ip_id=?"
+        if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
+
+        if len(rows) != 1 {
+          panic("Адрес не существует, возможно был удален другим пользователем. Перезагрузите страницу")
+        }
+
+        if u64, var_ok = rows[0].Uint64("v4ip_addr"); !var_ok { panic(PE) }
+        if u64 > math.MaxUint32 { panic(PE) }
+        ip_addr := uint32(u64)
+
+        var ip_addr_net_id string
+        if ip_addr_net_id, var_ok = rows[0].UintString("v4ip_fk_v4net_id"); !var_ok { panic(PE) }
+
+
+        if dbnet == nil {
+          query = "SELECT"+
+                  " v4nets.*"+
+                  ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
+                             " FROM gn4rs WHERE"+
+                             " gn4r_fk_v4net_id=v4net_id"+
+                             " AND gn4r_fk_g_id IN("+user_groups_in+")"+
+                             "),0) as rights"+
+                  ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
+                             " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
+                             " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
+                             " AND v4r_fk_v4net_id IS NULL"+
+                             " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
+                             "), 0) AS r_rights"+
+                  " FROM v4nets INNER JOIN v4ips ON v4ip_fk_v4net_id = v4net_id WHERE v4ip_id = ?"
+          if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
+          if len(rows) != 1 { panic("No such IP") }
+
+          dbnet = rows[0]
+
+          if net_id, var_ok = dbnet.UintString("v4net_id"); !var_ok { panic(PE) }
+
+          if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
+
+          if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
+
+          dbnet_rights |= dbnet_r_rights
+
+          dbnet_owner, _ = dbnet.AnyString("v4net_owner")
+
+          if dbnet_owner == user_id {
+            dbnet_rights = dbnet_rights | OWNER_RIGHTS
+          }
+
+          if user_is_admin {
+            dbnet_rights = dbnet_rights | ADMIN_RIGHTS
+          }
+
+          query = "SELECT v4rs.*"+
+                  ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
+                            " FROM gr4rs WHERE"+
+                            " gr4r_fk_g_id IN("+user_groups_in+")"+
+                            " AND gr4r_fk_v4r_id=v4r_id"+
+                            "), 0) AS rights"+
+                  " FROM v4rs WHERE v4r_fk_v4net_id = ? ORDER BY v4r_start, v4r_id"
+          if dbnet_ranges_a, err = return_query_A(db, query, dbnet["v4net_id"]);
+          err != nil { panic(err) }
+
+          query = "SELECT ic_type, ic_regexp, ic_id FROM ics INNER JOIN n4cs ON nc_fk_ic_id=ic_id WHERE nc_fk_v4net_id=?"
+          if net_cols, err = return_query_M(db, query, "ic_id", dbnet["v4net_id"]); err != nil { panic(err) }
+        }
+
+        if ip_addr_net_id != net_id {
+          panic(fmt.Sprintf("Адрес из другой сети: %s != %s", ip_addr_net_id, net_id))
+        }
+
+        var ip_rights uint64
+        ip_rights |= dbnet_rights
+
+        for i, _ := range dbnet_ranges_a {
+
+          var range_rights uint64
+          if range_rights, var_ok = dbnet_ranges_a[i].Uint64("rights"); !var_ok { panic(PE) }
+
+          range_rights |= dbnet_rights
+          dbnet_ranges_a[i]["rights"] = range_rights
+
+          var range_start uint32
+          var range_stop uint32
+
+          if u64, var_ok = dbnet_ranges_a[i].Uint64("v4r_start"); !var_ok { panic(PE) }
+          if u64 > math.MaxUint32 { panic(PE) }
+          range_start = uint32(u64)
+
+          if u64, var_ok = dbnet_ranges_a[i].Uint64("v4r_stop"); !var_ok { panic(PE) }
+          if u64 > math.MaxUint32 { panic(PE) }
+          range_stop = uint32(u64)
+
+          if range_start > range_stop { panic(PE) }
+
+          if ip_addr >= range_start && ip_addr <= range_stop {
+            ip_rights |= range_rights
+            dbnet_ranges_a[i]["in_range"] = 1
+          }
+        }
+
+        if (ip_rights & R_EDIT_IP_VLAN) == 0 ||
+           (ip_rights & R_VIEW_NET_IPS) == 0 ||
+           ((ip_rights & R_DENYIP) > 0 &&
+            (ip_rights & R_IGNORE_R_DENY) == 0) ||
+        false {
+          panic(NoAccess())
+        }
+
       case "ip_value":
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
 
@@ -1082,7 +1198,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         _ = obj_id
 
         if prop != "v4net_name" && prop != "v4net_descr" &&
-           prop != "v4net_owner" &&
+           prop != "v4net_owner" && prop != "vlan" &&
         true { panic(fmt.Sprint("Bad property in queue item #", i)) }
 
         query = "SELECT"+
@@ -1231,6 +1347,21 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         query = "UPDATE vds SET "+prop+"=?, ts=?, fk_u_id=? WHERE vd_id=?"
         _, err = tx.Exec(query, value, ts, user_id, obj_id)
         if err != nil { panic(err) }
+      case "ip":
+        if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+
+        if prop == "vlan" {
+          prop = "v4ip_fk_vlan_id"
+          if value.(string) == "" {
+            value = nil
+          }
+        }
+
+        query = "UPDATE v4ips SET "+prop+"=?, ts=?, fk_u_id=? WHERE v4ip_id=?"
+        _, err = tx.Exec(query, value, ts, user_id, obj_id)
+        if err != nil { panic(err) }
+
       case "ip_value":
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
         var col_id string
@@ -1248,6 +1379,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
                 ",fk_u_id=VALUES(fk_u_id)"
         _, err = tx.Exec(query, col_id, obj_id, value, ts, user_id)
         if err != nil { panic(err) }
+
       case "net":
 
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
@@ -1255,6 +1387,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         if prop == "v4net_owner" && value.(string) == "0" {
           value = nil
+        }
+
+        if prop == "vlan" {
+          prop = "v4net_fk_vlan_id"
+          if value.(string) == "" {
+            value = nil
+          }
         }
 
         query = "UPDATE v4nets SET "+prop+"=?, ts=?, fk_u_id=? WHERE v4net_id=?"
@@ -1551,6 +1690,38 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         netrows[dbnet_octet - first_octet]["net_rights"] = dbnet_rights
         netrows[dbnet_octet - first_octet]["cols"].([]M)[dbnet_masklen - masklen - 1]["net_rights"] = dbnet_rights
 
+        var vlan_id string
+        if vlan_id, var_ok = dbnet.UintString("v4net_fk_vlan_id"); var_ok {
+          query = "SELECT vlans.*"+
+                  ", vds.vd_id, vds.vd_name"+
+                  ", IFNULL((SELECT BIT_OR(gvrr_rmask) FROM"+
+                             " gvrrs INNER JOIN vrs ON vr_id=gvrr_fk_vr_id WHERE"+
+                             " gvrr_fk_g_id IN("+user_groups_in+")"+
+                             " AND vr_fk_vd_id=vd_id"+
+                             " AND vr_start <= vlan_number AND vr_stop >= vlan_number"+
+                             "), 0) as rights"+
+                  " FROM vlans INNER JOIN vds ON vd_id=vlan_fk_vd_id"+
+                  " WHERE vlan_id=?"
+          var vlan_data M
+          if vlan_data, err = must_return_one_M(db, query, vlan_id); err != nil { panic(err) }
+
+          var vlan_rights uint64
+          if vlan_rights, var_ok = vlan_data.Uint64("rights"); !var_ok { panic(PE) }
+
+          if user_is_admin {
+            vlan_rights |= ADMIN_VLAN_RIGHTS
+          }
+
+          if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+            vlan_data["vd_name"] = "HIDDEN"
+            vlan_data["vd_descr"] = "HIDDEN"
+            vlan_data["vlan_name"] = "HIDDEN"
+            vlan_data["vlan_descr"] = "HIDDEN"
+          }
+
+          netrows[dbnet_octet - first_octet]["vlan_data"] = vlan_data
+        }
+
         for dbnet_net_octet_i := dbnet_octet; dbnet_net_octet_i <= dbnet_last_octet; dbnet_net_octet_i++ {
           if netrows[dbnet_net_octet_i - first_octet] == nil { panic(PE) }
           if dbnet_net_octet_i != dbnet_octet {
@@ -1699,7 +1870,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if (dbnet_rights & R_VIEW_NET_INFO) > 0 {
       u64, _ = dbnet.Uint64("v4net_fk_vlan_id")
       if u64 > 0 {
-        query = "SELECT vlan_number, vlan_name, vlan_descr, vd_name, vd_descr, vd_id"+
+        query = "SELECT vlan_number, vlan_name, vlan_descr, vd_name, vd_descr, vd_id, vlan_id, vlan_fk_vd_id"+
                 ", (SELECT BIT_OR(gvrr_rmask)"+
                   " FROM gvrrs INNER JOIN vrs ON gvrr_fk_vr_id=vr_id"+
                   " WHERE gvrr_fk_g_id IN("+user_groups_in+")"+
@@ -1716,20 +1887,17 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         var vlan_rights uint64
         if vlan_rights, var_ok = dbnet_vlan_info_a[0].Uint64("rights"); !var_ok { panic(PE) }
 
-        if user_is_admin { vlan_rights |= ADMIN_RIGHTS }
+        if user_is_admin { vlan_rights |= ADMIN_VLAN_RIGHTS }
 
-        if (vlan_rights & R_NAME) > 0 {
-          if (vlan_rights & R_VIEW_NET_INFO) == 0 {
-            dbnet_vlan_info_a[0]["vlan_name"] = "HIDDEN"
-            dbnet_vlan_info_a[0]["vlan_descr"] = "HIDDEN"
-            dbnet_vlan_info_a[0]["vd_name"] = "HIDDEN"
-            dbnet_vlan_info_a[0]["vd_descr"] = "HIDDEN"
-          } else if (vlan_rights & R_VIEW_NET_IPS) == 0 {
-            dbnet_vlan_info_a[0]["vlan_name"] = "HIDDEN"
-            dbnet_vlan_info_a[0]["vlan_descr"] = "HIDDEN"
-          }
-          out["vlan_info"] = dbnet_vlan_info_a[0]
+        if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+          dbnet_vlan_info_a[0]["vlan_name"] = "HIDDEN"
+          dbnet_vlan_info_a[0]["vlan_descr"] = "HIDDEN"
+          dbnet_vlan_info_a[0]["vd_name"] = "HIDDEN"
+          dbnet_vlan_info_a[0]["vd_descr"] = "HIDDEN"
+          dbnet_vlan_info_a[0]["vlan_name"] = "HIDDEN"
+          dbnet_vlan_info_a[0]["vlan_descr"] = "HIDDEN"
         }
+        out["vlan_data"] = dbnet_vlan_info_a[0]
       }
 
       u64, _ = dbnet.Uint64("fk_u_id")
@@ -1799,6 +1967,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       out["net_cols"] = net_cols
 
+      vlan_cache := make(M)
+
       query = "SELECT * FROM v4ips WHERE v4ip_fk_v4net_id=? ORDER BY v4ip_addr ASC"
       var ips_a []M
       if ips_a, err = return_query_A(db, query, dbnet["v4net_id"]); err != nil { panic(err) }
@@ -1816,6 +1986,38 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if u64, var_ok = ip.Uint64("v4ip_addr"); !var_ok { panic(PE) }
         if u64 > math.MaxUint32 { panic(PE) }
         addr_index[uint32(u64)] = i
+
+        var vlan_id string
+        if vlan_id, var_ok = ip.UintString("v4ip_fk_vlan_id"); var_ok {
+          if _, ex := vlan_cache[vlan_id]; !ex {
+            query = "SELECT vlan_number, vlan_name, vlan_descr, vd_name, vd_descr, vd_id, vlan_id, vlan_fk_vd_id"+
+                    ", (SELECT BIT_OR(gvrr_rmask)"+
+                      " FROM gvrrs INNER JOIN vrs ON gvrr_fk_vr_id=vr_id"+
+                      " WHERE gvrr_fk_g_id IN("+user_groups_in+")"+
+                      " AND vr_fk_vd_id=vd_id"+
+                      " AND vr_start <= vlan_number"+
+                      " AND vr_stop >= vlan_number"+
+                    " ) as rights"+
+                    " FROM vlans INNER JOIN vds ON vd_id=vlan_fk_vd_id"+
+                    " WHERE vlan_id=?"
+            if vlan_cache[vlan_id], err = must_return_one_M(db, query, vlan_id); err != nil { panic(err) }
+
+            var vlan_rights uint64
+            if vlan_rights, var_ok = vlan_cache[vlan_id].(M).Uint64("rights"); !var_ok { panic(PE) }
+
+            if user_is_admin { vlan_rights |= ADMIN_VLAN_RIGHTS }
+
+            if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+              vlan_cache[vlan_id].(M)["vlan_name"] = "HIDDEN"
+              vlan_cache[vlan_id].(M)["vlan_descr"] = "HIDDEN"
+              vlan_cache[vlan_id].(M)["vd_name"] = "HIDDEN"
+              vlan_cache[vlan_id].(M)["vd_descr"] = "HIDDEN"
+              vlan_cache[vlan_id].(M)["vlan_name"] = "HIDDEN"
+              vlan_cache[vlan_id].(M)["vlan_descr"] = "HIDDEN"
+            }
+          }
+          ips_a[i]["vlan_data"] = vlan_cache[vlan_id]
+        }
       }
 
       query = "SELECT i4vs.iv_value, i4vs.iv_fk_ic_id, i4vs.ts, i4vs.fk_u_id, v4ips.v4ip_id"+
@@ -3259,6 +3461,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     query = "SELECT vds.*"+
             ", (SELECT COUNT(*) FROM vlans WHERE vlan_fk_vd_id=vd_id) AS num_taken"+
+            ", (SELECT COUNT(*) FROM v4nets INNER JOIN vlans ON v4net_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v4nets"+
+            ", (SELECT COUNT(*) FROM v6nets INNER JOIN vlans ON v6net_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v6nets"+
+            ", (SELECT COUNT(*) FROM v4ips INNER JOIN vlans ON v4ip_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v4ips"+
+            ", (SELECT COUNT(*) FROM v6ips INNER JOIN vlans ON v6ip_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v6ips"+
             ", IFNULL((SELECT BIT_OR(gvrr_rmask)"+
                        " FROM gvrrs INNER JOIN vrs ON vr_id=gvrr_fk_vr_id"+
                        " WHERE gvrr_fk_g_id IN("+user_groups_in+")"+
@@ -3293,6 +3499,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if vd_id, err = get_p_string(q, "id", g_num_reg); err != nil { panic(err) }
 
     query = "SELECT vds.*"+
+            ", (SELECT COUNT(*) FROM v4nets INNER JOIN vlans ON v4net_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v4nets"+
+            ", (SELECT COUNT(*) FROM v6nets INNER JOIN vlans ON v6net_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v6nets"+
+            ", (SELECT COUNT(*) FROM v4ips INNER JOIN vlans ON v4ip_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v4ips"+
+            ", (SELECT COUNT(*) FROM v6ips INNER JOIN vlans ON v6ip_fk_vlan_id=vlan_id WHERE vlan_fk_vd_id=vd_id) AS v6ips"+
             ", IFNULL((SELECT BIT_OR(gvrr_rmask)"+
                        " FROM gvrrs INNER JOIN vrs ON vr_id=gvrr_fk_vr_id"+
                        " WHERE gvrr_fk_g_id IN("+user_groups_in+")"+
@@ -3316,6 +3526,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var dbvlans M
     query = "SELECT vlans.*"+
+            ", (SELECT COUNT(*) FROM v4nets WHERE v4net_fk_vlan_id=vlan_id) AS v4nets"+
+            ", (SELECT COUNT(*) FROM v6nets WHERE v6net_fk_vlan_id=vlan_id) AS v6nets"+
+            ", (SELECT COUNT(*) FROM v4ips WHERE v4ip_fk_vlan_id=vlan_id) AS v4ips"+
+            ", (SELECT COUNT(*) FROM v6ips WHERE v6ip_fk_vlan_id=vlan_id) AS v6ips"+
             " FROM vlans WHERE vlan_fk_vd_id=?"
 
     if dbvlans, err = return_query_M(db, query, "vlan_number", vd_id); err != nil { panic(err) }

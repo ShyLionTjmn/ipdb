@@ -225,11 +225,13 @@ CREATE TABLE v4ips(
   v4ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v4ip_addr	INTEGER UNSIGNED NOT NULL,
   v4ip_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
+  v4ip_fk_vlan_id	BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
   PRIMARY KEY (v4ip_id),
   UNIQUE KEY (v4ip_addr),
   KEY k_net(v4ip_fk_v4net_id),
+  FOREIGN KEY (v4ip_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL,
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   FOREIGN KEY (v4ip_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
@@ -275,11 +277,13 @@ CREATE TABLE v6ips(
   v6ip_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking and column values',
   v6ip_addr     VARBINARY(16) NOT NULL,
   v6ip_fk_v6net_id    BIGINT UNSIGNED NOT NULL,
+  v6ip_fk_vlan_id	BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id    BIGINT UNSIGNED,
   PRIMARY KEY (v6ip_id),
   UNIQUE KEY (v6ip_addr),
   KEY k_net(v6ip_fk_v6net_id),
+  FOREIGN KEY (v6ip_fk_vlan_id) REFERENCES vlans(vlan_id) ON DELETE SET NULL,
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   FOREIGN KEY (v6ip_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
