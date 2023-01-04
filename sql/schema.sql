@@ -134,22 +134,38 @@ CREATE TABLE gvrrs (
   tc		TINYINT COMMENT 'VLANs or Bridge range group access'
 );
 
-CREATE TABLE sites (
-  site_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  site_name	VARCHAR(190) NOT NULL DEFAULT '',
-  site_address	VARCHAR(512) NOT NULL DEFAULT '',
-  site_descr	VARCHAR(1024) NOT NULL DEFAULT '',
-  site_lat	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
-  site_lon	DECIMAL(10,7) NOT NULL DEFAULT 0.0,
-  site_parent_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'used for unique keys checks, must be the same as site_fk_site_id, 0 if null',
-  site_fk_site_id BIGINT UNSIGNED DEFAULT NULL,
+CREATE TABLE tags (
+  tag_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tag_name	VARCHAR(190) NOT NULL DEFAULT '',
+  tag_api_name	VARCHAR(256),
+  tag_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  tag_sort	BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  tag_flags BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '',
+  tag_parent_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'used for unique keys checks, must be the same as tag_fk_tag_id, 0 if null',
+  tag_fk_tag_id BIGINT UNSIGNED DEFAULT NULL,
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
-  PRIMARY KEY (site_id),
-  UNIQUE KEY uk_site_name(site_name,site_parent_id),
-  FOREIGN KEY (site_fk_site_id) REFERENCES sites(site_id),
+  PRIMARY KEY (tag_id),
+  UNIQUE KEY uk_tag_name(tag_name,tag_parent_id),
+  UNIQUE KEY uk_tag_api_name(tag_api_name),
+  FOREIGN KEY (tag_fk_tag_id) REFERENCES tags(tag_id),
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
-  tc		TINYINT COMMENT 'Sites, could be tree organized, like Country->City->District->Building, etc.'
+  tc		TINYINT COMMENT 'Tags, could be tree organized, like Country->City->District->Building, etc.'
+);
+
+CREATE TABLE tgrs (
+  tgr_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tgr_fk_tag_id	BIGINT UNSIGNED NOT NULL,
+  tgr_fk_g_id	BIGINT UNSIGNED NOT NULL,
+  tgr_rmask	INTEGER UNSIGNED NOT NULL COMMENT 'bitmask: view http_server.go for details',
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_u_id	BIGINT UNSIGNED,
+  PRIMARY KEY (tgr_id),
+  UNIQUE KEY uk_tgr(tgr_fk_tag_id,tgr_fk_g_id),
+  FOREIGN KEY (tgr_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (tgr_fk_g_id) REFERENCES gs(g_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
+  tc		TINYINT COMMENT 'tags group access'
 );
 
 -- ip columns
@@ -160,16 +176,17 @@ CREATE TABLE ics(
   ic_type	VARCHAR(128) NOT NULL DEFAULT 'text',
   ic_api_name	VARCHAR(128) NOT NULL DEFAULT '',
   ic_regexp	VARCHAR(256) NOT NULL DEFAULT '',
-  ic_icon	VARCHAR(1024) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
+  ic_icon	VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'jquery ui icon class',
   ic_icon_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css icon style JSON, passed as $("SPAN").css( ic_icon_style )',
   ic_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  ic_options VARCHAR(1024) NOT NULL DEFAULT '',
   ic_sort	INTEGER NOT NULL DEFAULT 0,
   ic_view_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as $("SPAN").css( ic_style )',
   ic_style	VARCHAR(1024) NOT NULL DEFAULT '{}' COMMENT 'css style JSON, passed as $("INPUT").css( ic_style )',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id    BIGINT UNSIGNED,
   PRIMARY KEY (ic_id),
-  UNIQUE KEY uk_ic_name(ic_name),
+  UNIQUE KEY uk_ic_name(ic_name, ic_icon),
   UNIQUE KEY uk_api_name(ic_api_name),
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   tc		TINYINT COMMENT 'IP columns, linked to nets via templates'
@@ -194,7 +211,7 @@ CREATE TABLE tcs(
   fk_u_id	BIGINT UNSIGNED,
   UNIQUE KEY uk_ids(tc_fk_ic_id,tc_fk_tp_id),
   KEY k_tp_id(tc_fk_tp_id),
-  FOREIGN KEY (tc_fk_ic_id) REFERENCES ics(ic_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (tc_fk_ic_id) REFERENCES ics(ic_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   FOREIGN KEY (tc_fk_tp_id) REFERENCES tps(tp_id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   tc		TINYINT COMMENT 'template columns'
@@ -236,20 +253,12 @@ CREATE TABLE v4ips(
   FOREIGN KEY (v4ip_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE TABLE v4nsites (
-  v4nsite_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
-  v4nsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
-  UNIQUE KEY (v4nsite_fk_v4net_id, v4nsite_fk_site_id),
-  FOREIGN KEY (v4nsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v4nsite_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
-);
-
-CREATE TABLE v4ipsites (
-  v4ipsite_fk_v4ip_id	BIGINT UNSIGNED NOT NULL,
-  v4ipsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
-  UNIQUE KEY (v4ipsite_fk_v4ip_id, v4ipsite_fk_site_id),
-  FOREIGN KEY (v4ipsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v4ipsite_fk_v4ip_id) REFERENCES v4ips(v4ip_id) ON UPDATE CASCADE ON DELETE CASCADE
+CREATE TABLE v4ntags (
+  v4ntag_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
+  v4ntag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v4ntag_fk_v4net_id, v4ntag_fk_tag_id),
+  FOREIGN KEY (v4ntag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v4ntag_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 CREATE TABLE v6nets (
@@ -288,22 +297,13 @@ CREATE TABLE v6ips(
   FOREIGN KEY (v6ip_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE TABLE v6nsites (
-  v6nsite_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
-  v6nsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
-  UNIQUE KEY (v6nsite_fk_v6net_id, v6nsite_fk_site_id),
-  FOREIGN KEY (v6nsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v6nsite_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
+CREATE TABLE v6ntags (
+  v6ntag_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
+  v6ntag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v6ntag_fk_v6net_id, v6ntag_fk_tag_id),
+  FOREIGN KEY (v6ntag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v6ntag_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
-
-CREATE TABLE v6ipsites (
-  v6ipsite_fk_v6ip_id	BIGINT UNSIGNED NOT NULL,
-  v6ipsite_fk_site_id	BIGINT UNSIGNED DEFAULT NULL,
-  UNIQUE KEY (v6ipsite_fk_v6ip_id, v6ipsite_fk_site_id),
-  FOREIGN KEY (v6ipsite_fk_site_id) REFERENCES sites(site_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v6ipsite_fk_v6ip_id) REFERENCES v6ips(v6ip_id) ON UPDATE CASCADE ON DELETE CASCADE
-);
-
 
 CREATE TABLE i4vs(
   iv_fk_ic_id	BIGINT UNSIGNED NOT NULL,
@@ -314,7 +314,7 @@ CREATE TABLE i4vs(
   UNIQUE KEY uk_ids(iv_fk_ic_id,iv_fk_v4ip_id),
   KEY k_v4ip_id(iv_fk_v4ip_id),
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
-  FOREIGN KEY (iv_fk_ic_id) REFERENCES ics(ic_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (iv_fk_ic_id) REFERENCES ics(ic_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   FOREIGN KEY (iv_fk_v4ip_id) REFERENCES v4ips(v4ip_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc		TINYINT COMMENT 'ipv4 column values'
 );
@@ -328,7 +328,7 @@ CREATE TABLE i6vs(
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   UNIQUE KEY uk_ids(iv_fk_ic_id,iv_fk_v6ip_id),
   KEY k_v6ip_id(iv_fk_v6ip_id),
-  FOREIGN KEY (iv_fk_ic_id) REFERENCES ics(ic_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (iv_fk_ic_id) REFERENCES ics(ic_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   FOREIGN KEY (iv_fk_v6ip_id) REFERENCES v6ips(v6ip_id) ON DELETE CASCADE ON UPDATE CASCADE,
   tc		TINYINT COMMENT 'ipv6 column values'
 );
@@ -507,7 +507,7 @@ CREATE TABLE checks(
 );
 
 CREATE TABLE v4oobs (
-  v4oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
+  v4oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for tag linking',
   v4oob_addr	INTEGER UNSIGNED NOT NULL,
   v4oob_mask	TINYINT UNSIGNED NOT NULL,
   v4oob_descr	VARCHAR(256) NOT NULL DEFAULT '',
@@ -519,9 +519,18 @@ CREATE TABLE v4oobs (
   tc            TINYINT COMMENT 'v4 out of band nets for router_groups, etc...'
 );
 
+CREATE TABLE v4otags (
+  v4otag_fk_v4oob_id	BIGINT UNSIGNED NOT NULL,
+  v4otag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v4otag_fk_v4oob_id, v4otag_fk_tag_id),
+  FOREIGN KEY (v4otag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v4otag_fk_v4oob_id) REFERENCES v4oobs(v4oob_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+
 CREATE TABLE v6oobs (
-  v6oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
-  v6oob_addr	INTEGER UNSIGNED NOT NULL,
+  v6oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for tag linking',
+  v6oob_addr	VARBINARY(16) NOT NULL,
   v6oob_mask	TINYINT UNSIGNED NOT NULL,
   v6oob_descr	VARCHAR(256) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
@@ -532,3 +541,10 @@ CREATE TABLE v6oobs (
   tc            TINYINT COMMENT 'v6 out of band nets for router_groups, etc...'
 );
 
+CREATE TABLE v6otags (
+  v6otag_fk_v6oob_id	BIGINT UNSIGNED NOT NULL,
+  v6otag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  UNIQUE KEY (v6otag_fk_v6oob_id, v6otag_fk_tag_id),
+  FOREIGN KEY (v6otag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (v6otag_fk_v6oob_id) REFERENCES v6oobs(v6oob_id) ON UPDATE CASCADE ON DELETE CASCADE
+);

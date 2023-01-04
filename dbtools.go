@@ -119,7 +119,7 @@ func return_query(db interface{}, query string, index string, args ...interface{
   case *sql.Tx:
     rows, err = db.(*sql.Tx).Query(query, args...)
   default:
-    return nil, errors.New("Bad db handle type")
+    return nil, errors.New("Bad db handle type:"+reflect.TypeOf(db).String())
   }
 
   if err != nil { return nil, err }
@@ -203,6 +203,17 @@ func return_query_A(db interface{}, query string, args ...interface{}) ([]M, err
   return ret, nil
 }
 
+func db_exec(db interface{}, query string, args ...interface{}) (sql.Result, error) {
+  switch db.(type) {
+  case *sql.DB:
+    return db.(*sql.DB).Exec(query, args...)
+  case *sql.Tx:
+    return db.(*sql.Tx).Exec(query, args...)
+  default:
+    return nil, errors.New("Bad db handle type:"+reflect.TypeOf(db).String())
+  }
+}
+
 func return_arrays(db interface{}, query string, args ...interface{}) ([][]interface{}, error) {
   ret := make([][]interface{}, 0)
 
@@ -215,7 +226,7 @@ func return_arrays(db interface{}, query string, args ...interface{}) ([][]inter
   case *sql.Tx:
     rows, err = db.(*sql.Tx).Query(query, args...)
   default:
-    return nil, errors.New("Bad db handle type")
+    return nil, errors.New("Bad db handle type:"+reflect.TypeOf(db).String())
   }
 
   if err != nil { return nil, err }

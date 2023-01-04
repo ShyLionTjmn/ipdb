@@ -1,5 +1,7 @@
 #!/bin/sh
 
+cd /devel/go/src/github.com/ShyLionTjmn/ipdb/sql
+
 DB_USER=`cat .mysql_user`
 DB_PASS=`cat .mysql_password`
 MYSQL="mysql -u $DB_USER --password=$DB_PASS -D ipdb"
@@ -13,18 +15,13 @@ on_error() {
   exit 1
 }
 
-echo "backing up whole database to $BACKUP_FILE"
+echo "Backing up whole database to $BACKUP_FILE"
 mysqldump -u $DB_USER --password=$DB_PASS --skip-extended-insert --order-by-primary ipdb > $BACKUP_FILE || exit 1
 
-if [ "$1" != "nosave" ]
-then
-  ./save_local_data.sh auto
-fi
-
-echo "deleting all tables"
+echo "Deleting all tables"
 $MYSQL -B -N -e 'SHOW TABLES' | sed 's/.*/DROP TABLE &;/' | $MYSQL --init-command="SET FOREIGN_KEY_CHECKS=0;" || on_error
 
-for f in schema.sql schema_populate_ru.sql local_data.sql test_nets.sql test_ranges.sql
+for f in schema.sql schema_populate_ru.sql local_data.sql test_*.sql
 do
   if [ -f "$f" ]
   then
@@ -33,16 +30,5 @@ do
   fi
 done
 
-if [ "$1" != "nosave" ]
-then
-  for f in `ls .0*.auto.sql`
-  do
-    echo "Importing $f"
-    $MYSQL < $f || on_error
-  done
-fi
-
-if [ "$1" != "nosave" ]
-then
-  find ./ -mount -type f -name ".backup_*.sql" -mtime +1 -ls -exec rm {} \;
-fi
+echo "Importing OLD IPDB"
+/devel/go/src/github.com/ShyLionTjmn/import_ipdb/import_ipdb
