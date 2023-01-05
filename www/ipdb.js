@@ -6328,878 +6328,6 @@ function select_net_cols(presel, donefunc) {
   });
 };
 
-function actionTags() {
-  workarea.empty();
-  fixed_div.empty();
-
-  run_query({"action": "get_tags"}, function(res) {
-    g_data = res['ok'];
-
-    for(let i in g_data['tags']['children']) {
-      g_data['tags']['children'][i]['type'] = "root";
-    };
-
-    fixed_div
-     .append( $(DIV)
-       .css({"font-size": "larger"})
-       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
-       .append( $(SPAN).addClass("tag_info")
-         .append( $(SPAN).text("Тег: ") )
-         .append( $(SPAN).addClass("tag_name") )
-         .append( $(SPAN).text(" API имя: ")
-           .title("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
-         )
-         .append( $(SPAN).addClass("tag_api_name")
-           .title("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
-         )
-         .hide()
-       )
-     )
-     .append( $(DIV)
-       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
-       .append( $(SPAN).addClass("tag_info")
-         .css({"font-size": "x-small"})
-         .text("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
-         .hide()
-       )
-     )
-     .append( $(DIV)
-       .css({"margin-top": "0.5em", "min-height": "1.8em"})
-       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
-       .append( $(SPAN).addClass("tag_info")
-         .append( $(SPAN).text("Описание: ") )
-         .append( $(INPUT).addClass("tag_descr").css({"width": "80em"})
-           .enterKey(function() { $(".save_descr_btn").trigger("click"); })
-         )
-         .append( $(LABEL)
-           .addClass(["button", "ui-icon", "ui-icon-save save_descr_btn"])
-           .click(function() {
-             let instance = $(".tree").jstree(true);
-             let nodes = instance.get_selected(true);
-             if(nodes.length != 1) return;
-             let node_data = nodes[0];
-
-             if(node_data['parent'] == "#" && !userinfo['is_admin']) return;
-             let root_id;
-             if(node_data['parent'] == "#") {
-               root_id = node_data['id'];
-             } else {
-               root_id = node_data['parents'][ node_data['parents'].length - 2 ];
-             };
-
-             let rights = instance.get_node(root_id)['data']['rights'];
-
-             if(rights === undefined) {
-               error_at();
-               return;
-             };  
-                
-             if((rights & R_EDIT_IP_VLAN) == 0) return;
-
-             let new_descr = String($(".tag_descr").val()).trim();
-             node_data['data']['descr'] = new_descr;
-             if(new_descr === node_data['data']['orig_descr']) return;
-
-             run_query({"action": "set_tag_descr", "id": String(node_data['id']), "descr": new_descr}, function(res) {
-               node_data['data']['orig_descr'] = new_descr;
-             });
-
-           })
-         )
-       )
-     )
-     .append( $(DIV)
-       .css({"margin-top": "0.5em", "min-height": "1.8em"})
-       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
-       .append( $(SPAN).addClass("tag_info")
-         .append( $(SPAN).text("Флаги: ") )
-         .append( $(SPAN).addClass("tag_flags") )
-         .append( $(SPAN).text(" Права доступа: ") )
-         .append( $(SPAN).addClass("tag_rights") )
-         .append( $(SPAN).addClass("min1em") )
-         .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
-           .addClass("button")
-           .addClass("rights_btn")
-           .text("Права групп")
-           .click(function() {
-             let instance = $(".tree").jstree(true);
-             let nodes = instance.get_selected(true);
-             if(nodes.length != 1) return;
-             if(nodes[0]['parent'] != "#") return;
-
-             select_rights('tag', nodes[0]['data']['groups_rights'], true, function(new_rights) {
-
-               let rights_index = {};
-               for(let i in new_rights) {
-                 rights_index[ String(new_rights[i]['g_id']) ] = String(new_rights[i]['rights']);
-               };
-
-               var has_changes = false;
-               let prev_rights_index = {};
-               for(let i in nodes[0]['data']['groups_rights']) {
-                 let g_id = String(nodes[0]['data']['groups_rights'][i]['g_id']);
-                 let rights = String(nodes[0]['data']['groups_rights'][i]['rights']);
-                 if(rights_index[ g_id ] !== rights) {
-                   has_changes = true;
-                   break;
-                 };
-                 prev_rights_index[ g_id ] = rights;
-               };
-
-               if(!has_changes) {
-                 for(let i in rights_index) {
-                   let g_id = i;
-                   let rights = rights_index[i];
-                   if(prev_rights_index[g_id] !== rights) {
-                     has_changes = true;
-                     break;
-                   };
-                 };
-               };
-
-               if(has_changes) {
-                 nodes[0]['data']['groups_rights'] = new_rights;
-
-                 run_query({"action": "set_tag_rights", "rights": rights_index, "id": String(nodes[0]['id'])}, function(res) {
-                   nodes[0]['data']['orig_groups_rights'] = new_rights;
-                 });
-               };
- 
-             });
-           })
-         )
-         .hide()
-       )
-     )
-     .append( $(DIV)
-       .css({"margin-top": "0.5em"})
-       .append( $(SPAN).text("Поиск: ") )
-       .append( $(INPUT).prop("type", "search")
-         .inputStop(500)
-         .on("input_stop", function() {
-           $(".tree").jstree(true).search($(this).val());
-         })
-       )
-     )
-     .append( $(DIV)
-       .css({"margin-top": "0.5em", "min-height": "1.6em"})
-       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
-         .addClass(["button"])
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-folder"]) )
-         .title("Добавить коллекцию")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-
-           let parent_node = instance.get_node("#");
-           let new_name = "Новая коллекция";
-
-           let counter = 1;
-           let found = false;
-           do {
-             found = false;
-             for(let i in parent_node['children']) {
-               let child = instance.get_node(parent_node['children'][i]);
-               if(child['data']['name'] === new_name) {
-                 found = true;
-                 break;
-               };
-             };
-             if(found) {
-               new_name = "Новая коллекция #"+counter;
-               counter++;
-             };
-           } while(found);
-
-           let flags = undefined;
-           for(let i in parent_node['children']) {
-             let child = instance.get_node(parent_node['children'][i]);
-
-             if(flags === undefined) {
-               flags = child['data']['flags'];
-             } else if(flags !== child['data']['flags']) {
-               flags = undefined;
-               break;
-             };
-           };
-
-           if(flags === undefined) flags = 0;
-
-           let new_data = {"text": new_name,
-                           "type": "root",
-                           "children": [],
-                           "data": { "rights": (R_VIEW_NET_IPS | R_EDIT_IP_VLAN), "flags": flags,
-                                     "api_name": null, "is_new": "1", "descr": "",
-                                     "used": 0, "used_children": 0, "name": new_name,
-                                     "orig_name": new_name, "orig_api_name": null, "orig_flags": flags,
-                                     "groups_rights": [],
-                           },
-           };
-           instance.create_node("#", new_data, "last");
-         })
-       )
-       .append( $(LABEL)
-         .addClass("add_sibling_btn")
-         .addClass(["button"])
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrow-1-s"]) )
-         .title("Добавить следующий тег (можно также нажать + или Ins)")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-
-           let nodes = instance.get_selected(true);
-           if(nodes.length != 1) return;
-           let node = nodes[0];
-
-
-           if(node['parent'] == "#") return;
-           if(node['parents'].length < 2) return;
-
-           let parent_children = instance.get_node(node['parent'])['children'];
-           let new_name = "Новый тег";
-
-           let counter = 1;
-           let found = false;
-           do {
-             found = false;
-             for(let i in parent_children) {
-               let child = instance.get_node(parent_children[i]);
-               if(child['data']['name'] === new_name) {
-                 found = true;
-                 break;
-               };
-             };
-             if(found) {
-               new_name = "Новый тег #"+counter;
-               counter++;
-             };
-           } while(found);
-
-           let node_index = undefined;
-
-           for(let i in parent_children) {
-             if(parent_children[i] == node['id']) {
-               node_index = i;
-               break;
-             };
-           };
-
-           let flags = undefined;
-           let parent_node = instance.get_node(node['parent']);
-           for(let i in parent_node['children']) {
-             let child =  instance.get_node(parent_node['children'][i]);
-             if(flags === undefined) {
-               flags = child['data']['flags'];
-             } else if(flags !== child['data']['flags']) {
-               flags = undefined;
-               break;
-             };
-           };
-
-           if(flags === undefined) flags = 0;
-
-           let new_data = {"text": new_name,
-                           "children": [],
-                           "data": { "flags": flags, "api_name": null, "is_new": "1", "descr": "",
-                                     "used": 0, "used_children": 0, "name": new_name,
-                                     "orig_name": new_name, "orig_api_name": null, "orig_flags": flags,
-                                   },
-           };
-           instance.create_node(node['parent'], new_data, Number(node_index)+1);
-         })
-         .hide()
-       )
-       .append( $(LABEL)
-         .addClass("add_child_btn")
-         .addClass(["button"])
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrow-1-se"]) )
-         .title("Добавить дочерний тег")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-
-           let nodes = instance.get_selected(true);
-           if(nodes.length != 1) return;
-           let node = nodes[0];
-
-           let new_name = "Новый тег";
-
-           let counter = 1;
-           let found = false;
-           do {
-             found = false;
-             for(let i in node['children']) {
-               let child = instance.get_node(node['children'][i]);
-               if(child['data']['name'] === new_name) {
-                 found = true;
-                 break;
-               };
-             };
-             if(found) {
-               new_name = "Новый тег #"+counter;
-               counter++;
-             };
-           } while(found);
-
-           if((node['data']['flags'] & F_ALLOW_LEAFS) == 0) return;
-
-           let flags = undefined;
-           for(let i in node['children']) {
-             let child =  instance.get_node(node['children'][i]);
-             if(flags === undefined) {
-               flags = child['data']['flags'];
-             } else if(flags !== child['data']['flags']) {
-               flags = undefined;
-               break;
-             };
-           };
-
-           if(flags === undefined) flags = 0;
-
-
-           let new_data = {"text": new_name,
-                           "children": [],
-                           "data": {"flags": flags, "api_name": null, "is_new": "1", "descr": "",
-                                     "used": 0, "used_children": 0, "name": new_name,
-                                     "orig_name": new_name, "orig_api_name": null, "orig_flags": flags,
-                                   },
-           };
-           instance.create_node(node['id'], new_data, "last");
-         })
-         .hide()
-       )
-       .append( $(LABEL)
-         .addClass("del_tag_btn")
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-trash"]) )
-         .addClass(["button", "min2em"])
-         .css({"text-align": "center"})
-         .title("Удалить тег (можно также нажать - или Del")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-
-           let nodes = instance.get_selected(true);
-           if(nodes.length != 1) return;
-           let node = nodes[0];
-
-
-           if(node['parent'] == "#" && !userinfo['is_admin']) return;
-
-           let root_id;
-           if(node['parent'] == "#") {
-             root_id = node['id'];
-           } else {
-             root_id = node['parents'][ node['parents'].length - 2 ];
-           };
-
-           let rights = instance.get_node(root_id)['data']['rights'];
-           if(rights === undefined) {
-             error_at();
-             return;
-           };
-
-           if((rights & R_EDIT_IP_VLAN) == 0) return;
-
-           let warn_message = "Подтвердите удаление тега.\n";
-           if(node['data']['used'] > 0) {
-             warn_message += "Он используется в "+node['data']['used']+" объектах.\n";
-           };
-           if(node['data']['used_children'] > 0) {
-             warn_message += "В "+node['data']['used_children']+
-                             " объектах используются дочерние теги.\n";
-           };
-           if(node['children'].length > 0 ) {
-             warn_message += "У него "+node['children'].length+
-                             " дочерних тегов.\n";
-           };
-           if(g_autosave) {
-             warn_message += "Внимание! Отмена будет невозможна!";
-           } else {
-             warn_message += "Внимание! После сохранения отмена будет невозможна!";
-           };
-           show_confirm_checkbox(warn_message, function() {
-             instance.delete_node(node);
-           }, {}, (Number(node['data']['used']) + Number(node['data']['used_children']) + node['children'].length) == 0);
-         })
-         .hide()
-       )
-       .append( $(LABEL)
-         .addClass("edit_tag_btn")
-         .append( $(LABEL).addClass(["ui-icon", "ui-icon-edit"]) )
-         .addClass(["button", "min2em"])
-         .css({"text-align": "center"})
-         .title("Редактировать (можно также нажать F2")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-
-           let nodes = instance.get_selected(true);
-           if(nodes.length != 1) return;
-           let node = nodes[0];
-
-           instance.edit(node);
-         })
-         .hide()
-       )
-     )
-     .append( $(DIV)
-       .css({"margin-top": "0.5em"})
-       .append( $(LABEL)
-         .addClass(["button"])
-         .text("calc []")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-           debugLog(jstr(instance.get_json("#", {"no_state": true,
-                                                 "no_a_attr": true, "no_li_attr": true, "flat": true,
-                                                 "no_icon": true,
-                                                }
-           )));
-         })
-       )
-       .append( $(LABEL)
-         .addClass(["button"])
-         .text("calc {}")
-         .click(function() {
-           let instance = $(".tree").jstree(true);
-           debugLog(jstr(instance.get_json("#", {"no_state": true,
-                                                 "no_a_attr": true, "no_li_attr": true, "flat": false,
-                                                 "no_icon": true,
-                                                }
-           )));
-         })
-       )
-     )
-    ;
-
-    let tree = $(DIV).addClass("tree")
-     .appendTo( workarea )
-    ;
-
-    let tree_plugins = [ "state", "search", "dnd", "types", "unique" ];
-
-    tree.jstree({
-      "core": {
-        "multiple" : false,
-        "animation" : 0,
-        "data": g_data["tags"]["children"],
-        "themes" : {
-          "variant" : "large"
-        },
-        "dblclick_toggle": false,
-        "force_text": true,
-        "check_callback" : function (operation, node, target_node, node_position, more) {
-          let node_data = this.get_node(node);
-          let target_data = this.get_node(target_node);
-
-          if(operation === "move_node") {
-            if(node_data['parent'] == "#" && target_data['id'] == "#") {
-              return userinfo['is_admin'];
-            };
-            if(target_data['id'] == "#") return false;
-            if(node_data['parents'].length < 2) return false;
-
-            if((target_data['data']['flags'] & F_ALLOW_LEAFS) == 0 &&
-              node_data['parent'] !== target_data['id']
-            ) return false;
-
-            let node_root = node_data['parents'][ node_data['parents'].length - 2];
-
-            let rights = this.get_node(node_root)['data']['rights'];
-            if(rights === undefined) {
-              error_at();
-              return;
-            };
-
-            if((rights & R_EDIT_IP_VLAN) == 0) return false;
-
-            let target_node_root = target_data['parents'][ target_data['parents'].length - 2];
-            if(node_root == target_data['id'] || node_root == target_node_root) return true;
-
-            return false;
-          } else if(operation === "create_node") {
-            if(target_data['id'] == "#") return userinfo['is_admin'];
-            if((target_data['data']['flags'] & F_ALLOW_LEAFS) == 0) return false;
-
-            let root_id;
-            if(target_data['parents'].length < 1) { error_at(); return false; };
-            if(target_data['parent'] == "#") {
-              root_id = target_data['id'];
-            } else {
-              root_id = target_data['parents'][ target_data['parents'].length - 2 ];
-            };
-
-            let rights = this.get_node(root_id)['data']['rights'];
-            if(rights === undefined) {
-              error_at();
-              return;
-            };
-
-            if((rights & R_EDIT_IP_VLAN) == 0) return false;
-
-            return ((target_data['data']['flags'] & F_ALLOW_LEAFS) > 0);
-          } else if(operation === "rename_node" || operation === "edit" || operation === "delete_node") {
-            if(operation === "rename_node") {
-              let matches = String(node_position).match(g_node_name_reg);
-              if(matches === null) {
-                //this.get_node(node, true).find("a").first().find("i").animateHighlight("red", 300);
-                return false;
-              };
-              let new_name = String(matches[1]).trim();
-              let new_api_name = null;
-
-              if(matches[2] !== undefined) {
-                let trimmed = String(matches[2]).trim().toLowerCase();
-                if(trimmed != "") new_api_name = trimmed;
-              };
-
-
-              let found = false;
-              let found_node;
-              let parent_data = this.get_node(node['parent']);
-              for(let i in parent_data['children']) {
-                let child_node = this.get_node(parent_data['children'][i]);
-                if(child_node['id'] != node_data['id']) {
-                  if(String(child_node['data']['name']).trim() == new_name ||
-                     (new_api_name !== null &&
-                      child_node['data']['api_name'] !== null &&
-                      String(child_node['data']['api_name']).trim().toLowerCase() === new_api_name
-                     )
-                  ) {
-                    found = true;
-                    found_node = this.get_node(child_node['id']);
-                    break;
-                  };
-                };
-              };
-
-              if(!found && new_api_name !== null) {
-                found = false;
-                let full_list = this.get_json("#", {"no_state": true,
-                                                    "no_a_attr": true,
-                                                    "no_li_attr": true,
-                                                    "flat": true,
-                                                    "no_icon": true,
-                                                   }
-                );
-                for(let i in full_list) {
-                  if(full_list[i]['id'] != node_data['id']) {
-                    if(full_list[i]['data']['api_name'] !== null &&
-                       String(full_list[i]['data']['api_name']).trim().toLowerCase() === new_api_name
-                    ) {
-                      found = true;
-                      found_node = this.get_node(full_list[i]['id']);
-                      break;
-                    };
-                  };
-                };
-              };
-              if(found) {
-                for(let i in found_node['parents']) {
-                  if(found_node['parents'][i]['id'] != "#") {
-                    this.open_node(found_node['parents'][i]);
-                  };
-                };
-                this.get_node(found_node, true).find("a").first().find("i").animateHighlight("red", 300);
-                return false;
-              };
-            };
-            if(node_data['parent'] == "#") return userinfo['is_admin'];
-            let root_id;
-            if(node_data['parents'].length < 2) { error_at(); return false; };
-            root_id = node_data['parents'][ node_data['parents'].length - 2 ];
-
-            let rights = this.get_node(root_id)['data']['rights'];
-            if(rights === undefined) {
-              error_at();
-              return;
-            };
-
-            return ((rights & R_EDIT_IP_VLAN) > 0);
-          } else {
-            debugLog(operation);
-            return false;
-          };
-        },
-      },
-      "state" : { "key" : "jstree"+user_self_sub },
-      "types": {
-        "default": {
-          "icon": "ui-icon ui-icon-tag tag-color"
-        },
-        "root": {
-          "icon": true
-        }
-      },
-      "unique": {
-        "trim_whitespace": true,
-      },
-      "dnd": {
-        "copy": false,
-        "is_draggable": function(data) {
-          if(data.length == 0)  return false;
-
-          if( data[0].parent == "#") return userinfo['is_admin'];
-
-          return true;
-        },
-      },
-      "plugins" : tree_plugins,
-    });
-
-    tree
-     .on("deselect_node.jstree", function(e, data) {
-       $(".add_sibling_btn,.add_child_btn,.del_tag_btn").hide();
-       $(".tag_info").hide();
-     })
-     .on("select_node.jstree", function(e, data) {
-       let instance = $(".tree").jstree(true);
-       let nodes = instance.get_selected(true);
-       if(nodes.length == 0) {
-         $(".tag_info").hide();
-         return;
-       };
-       let node = nodes[0];
-
-       $(".rights_btn").toggle(userinfo['is_admin'] && node['parent'] == '#');
-
-       let root_id;
-       if(node['parent'] == '#') {
-         root_id = node['id'];
-       } else {
-         root_id = node['parents'][ node['parents'].length - 2 ];
-       };
-
-       let root_node = instance.get_node(root_id);
-       let rights = root_node['data']['rights'];
-
-       let rights_elms = rights_tds("tag", rights, false, "tag_right", "tag_rights");
-       $(".tag_rights").empty().append(rights_elms);
-
-       $(".tag_name").text(node['data']['name']);
-       $(".tag_api_name").text(node['data']['api_name'] !== null?node['data']['api_name']:'не задан.');
-       $(".tag_descr").val(node['data']['descr']);
-
-       let flags_elms = $([]);
-       let flags = (node['data']['flags'] !== undefined)?node['data']['flags']:0;
-
-       let flags_keys = keys(g_tag_flags);
-       flags_keys.sort(function(a, b) { return Number(a) - Number(b); });
-
-       let can_edit = (rights & R_EDIT_IP_VLAN) > 0;
-
-       $(".edit_tag_btn").toggle(userinfo['is_admin'] || (node['parent'] != "#" && can_edit));
-
-       $(".tag_descr").prop("readonly", !userinfo['is_admin'] && (node['parent'] == "#" || !can_edit));
-
-       for(let i in flags_keys) {
-         let flag = flags_keys[i];
-         let elm = $(LABEL)
-          .addClass(["flag", "flag_"+flag, ((flags & flag) > 0)?"flag_on":"flag_off", "ns",
-                     can_edit?"can_edit":"cannot_edit"
-                    ]
-          )
-          .text(g_tag_flags[flag]['label'])
-          .title(g_tag_flags[flag]['descr'])
-         ;
-
-         if(can_edit) {
-           elm
-            .data("flag", flag)
-            .data("node", node['id'])
-            .click(function() {
-              let row = $(this).closest(".tag_flags");
-              let node_id = $(this).data("node");
-              let flag = $(this).data("flag");
-              if($(this).hasClass("flag_on")) {
-                $(this).removeClass("flag_on").addClass("flag_off");
-
-                for(let i in g_tag_flags[flag]['required_by']) {
-                  let rr = g_tag_flags[flag]['required_by'][i];
-                  row.find(".flag_"+rr).removeClass("flag_on").addClass("flag_off");
-                };
-              } else {
-                $(this).removeClass("flag_off").addClass("flag_on");
-                for(let i in g_tag_flags) {
-                  if(in_array(g_tag_flags[i]['required_by'], flag)) {
-                    row.find(".flag_"+i).removeClass("flag_off").addClass("flag_on");
-                  };
-                };
-                for(let i in g_tag_flags[flag]['conflict_with']) {
-                  let rr = g_tag_flags[flag]['conflict_with'][i];
-                  row.find(".flag_"+rr).removeClass("flag_on").addClass("flag_off");
-                };
-              };
-
-              let flags = 0;
-              row.find(".flag").each(function() {
-                if($(this).hasClass("flag_on")) flags |= Number($(this).data("flag"));
-              });
-              let instance = $(".tree").jstree(true);
-              let node = instance.get_node(node_id);
-              node['data']['flags'] = flags;
-              instance.trigger("select_node.jstree");
-
-              if(node['data']['orig_flags'] != flags) {
-                run_query({"action": "set_tag_flags", "id": String(node['id']), "flags": String(flags)}, function(res) {
-                  node['data']['orig_flags'] = flags;
-                });
-              };
-            })
-           ;
-         };
-
-         flags_elms = flags_elms.add(elm);
-       };
-
-       $(".tag_flags").empty().append(flags_elms);
-
-       $(".tag_info").show();
-       if(!can_edit) {
-         $(".add_sibling_btn,.add_child_btn,.del_tag_btn").hide();
-         return;
-       };
-
-       let allow_delete = userinfo['is_admin'] || node['parent'] != "#";
-       $(".del_tag_btn").toggle(allow_delete);
-
-       let parent_node = instance.get_node(node['parent']);
-       let allow_sibling = node['parent'] != "#" && (parent_node['data']['flags'] & F_ALLOW_LEAFS) > 0;
-       $(".add_sibling_btn").toggle(allow_sibling);
-
-       let allow_child = (node['data']['flags'] & F_ALLOW_LEAFS) > 0;
-       $(".add_child_btn").toggle(allow_child);
-       
-     })
-     .on("dblclick.jstree", function (e) {
-       let instance = $.jstree.reference(this);
-       let node = instance.get_node(e.target);
-       instance.edit(node);
-     })
-     .on("move_node.jstree", function (e, data) {
-       let instance = data.instance;
-       let node = data['node'];
-
-       for(let i in node['parents']) {
-         if(node['parents'][i] != "#") {
-           let pn = instance.get_node(node['parents'][i]);
-           pn['data']['used_children'] += (Number(node['data']['used']) + Number(node['data']['used_children']));
-         };
-       };
-
-       if(data['old_parent'] != "#") {
-         let old_parent = instance.get_node(data['old_parent']);
-         old_parent['data']['used_children'] -= (Number(node['data']['used']) + Number(node['data']['used_children']));
-         for(let i in old_parent['parents']) {
-           if(old_parent['parents'][i] != "#") {
-             let pn = instance.get_node(old_parent['parents'][i]);
-             pn['data']['used_children'] -= (Number(node['data']['used']) + Number(node['data']['used_children']));
-           };
-         };
-       };
-
-       let parent_node = instance.get_node(node['parent']);
-       let nodes_index = {};
-
-       for(let i in parent_node["children"]) {
-         nodes_index[ String(parent_node["children"][i]) ] = String(i);
-       };
-
-       run_query({"action": "move_tag", "id": String(node['id']),
-                  "new_parent": String(node['parent']), "sort": nodes_index,
-                 }, function(res) {
-       });
-     })
-     .on("rename_node.jstree", function (e, data) {
-       let instance = data.instance;
-       let node = data['node'];
-
-       let matches = String(data.text).match(g_node_name_reg);
-       if(matches === null) {
-         error_at();
-         return;
-       };
-       let new_name = String(matches[1]).trim();
-       let new_api_name = null;
-       if(matches[2] !== undefined) {
-         let trimmed = String(matches[2]).trim().toLowerCase();
-         if(trimmed != "") new_api_name = trimmed;
-       };
-
-       node['data']['name'] = new_name;
-       node['data']['api_name'] = new_api_name;
-
-       node['text'] = new_name;
-       if(new_api_name !== null) node['text'] += " ("+new_api_name+")"
-
-       instance.get_node(node, true).find("a").first().contents().last().replaceWith(node['text']);
-       instance.trigger("select_node.jstree");
-
-       if(node['data']['name'] != node['data']['orig_name'] || node['data']['api_name'] != node['data']['orig_api_name']) {
-         run_query({"action": "rename_tag", "id": String(node['id']), "name": node['data']['name'],
-                    "api_name": node['data']['api_name']}, function(res) {
-
-           node['data']['orig_name'] = node['data']['name'];
-           node['data']['orig_api_name'] = node['data']['api_name'];
-
-           instance.get_node(node, true).find("a").first().contents().last().replaceWith(node['text']);
-           instance.trigger("select_node.jstree");
-
-         });
-       };
-     })
-     .on("create_node.jstree", function (e, data) {
-       let instance = data.instance;
-       let node = data['node'];
-
-       let parent_node = instance.get_node(node['parent']);
-       let nodes_index = {};
-
-       for(let i in parent_node["children"]) {
-         nodes_index[ String(parent_node["children"][i]) ] = String(i);
-       };
-
-       run_query({"action": "add_tag", "parent_id": String(node['parent']), "name": node['data']['name'],
-                  "api_name": node['data']['api_name'], "flags": String(node['data']['flags']),
-                  "descr": "", "temp_id": String(node['id']), "sort": nodes_index,
-       }, function(res) {
-         instance.set_id(node['id'], res['ok']['new_id']);
-         node = instance.get_node(res['ok']['new_id']);
-         node['data']['orig_name'] = node['data']['name'];
-         node['data']['orig_descr'] = node['data']['descr'];
-         node['data']['orig_api_name'] = node['data']['api_name'];
-         node['data']['orig_flags'] = node['data']['flags'];
-
-         instance.deselect_all(true);
-         instance.select_node(res['ok']['new_id']);
-         instance.edit(res['ok']['new_id']);
-       })
-     })
-     .on("delete_node.jstree", function (e, data) {
-       let instance = data.instance;
-       let node = data['node'];
-
-       run_query({"action": "del_tag", "id": String(node['id'])}, function(res) {
-         for(let i in node['parents']) {
-           if(node['parents'][i] != "#") {
-             let pn = instance.get_node(node['parents'][i]);
-             pn['data']['used_children'] -= (Number(node['data']['used']) + Number(node['data']['used_children']));
-           };
-         };
-
-         $(".tree").trigger("select_node.jstree");
-
-       });
-     })
-     .on("keyup", function(e) {
-       if($(e.originalEvent.target).is("INPUT")) return;
-       if (e.key === "+" || e.key === "Insert") {
-         $(".add_sibling_btn").trigger("click");
-       } else if(e.key === "-" || e.key === "Delete") {
-         $(".del_tag_btn").trigger("click");
-       };
-     })
-    ;
-  });
-};
-
 function select_rights_row(object, group_data, allow_edit) {
   let ret = $(DIV).addClass("tr").addClass("rights_row")
    .data("object", object)
@@ -7466,3 +6594,821 @@ function select_rights(object, current, allow_edit, on_done) {
   });
 };
 
+function actionTags() {
+  workarea.empty();
+  fixed_div.empty();
+
+  run_query({"action": "get_tags"}, function(res) {
+    g_data = res['ok'];
+
+    for(let i in g_data['tags']['children']) {
+      g_data['tags']['children'][i]['type'] = "root";
+    };
+
+    fixed_div
+     .append( $(DIV)
+       .css({"font-size": "larger"})
+       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
+       .append( $(SPAN).addClass("tag_info")
+         .append( $(SPAN).text("Тег: ") )
+         .append( $(SPAN).addClass("tag_name") )
+         .append( $(SPAN).text(" API имя: ")
+           .title("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
+         )
+         .append( $(SPAN).addClass("tag_api_name")
+           .title("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
+         )
+         .hide()
+       )
+     )
+     .append( $(DIV)
+       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
+       .append( $(SPAN).addClass("tag_info")
+         .css({"font-size": "x-small"})
+         .text("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
+         .hide()
+       )
+     )
+     .append( $(DIV)
+       .css({"margin-top": "0.5em", "min-height": "1.8em"})
+       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
+       .append( $(SPAN).addClass("tag_info")
+         .append( $(SPAN).text("Описание: ") )
+         .append( $(INPUT).addClass("tag_descr").css({"width": "80em"})
+           .enterKey(function() { $(".save_descr_btn").trigger("click"); })
+         )
+         .append( $(LABEL)
+           .addClass(["button", "ui-icon", "ui-icon-save save_descr_btn"])
+           .click(function() {
+             let instance = $(".tree").jstree(true);
+             let nodes = instance.get_selected(true);
+             if(nodes.length != 1) return;
+             let node = nodes[0];
+
+             let parent_node = instance.get_node(node['parent']);
+
+             if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+
+             let new_descr = String($(".tag_descr").val()).trim();
+             node['data']['descr'] = new_descr;
+             if(new_descr === node['data']['orig_descr']) return;
+
+             run_query({"action": "set_tag_descr", "id": String(node['id']), "descr": new_descr}, function(res) {
+               node['data']['orig_descr'] = new_descr;
+             });
+
+           })
+         )
+       )
+     )
+     .append( $(DIV)
+       .css({"margin-top": "0.5em", "min-height": "1.8em"})
+       .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
+       .append( $(SPAN).addClass("tag_info")
+         .append( $(SPAN).text("Флаги: ") )
+         .append( $(SPAN).addClass("tag_flags") )
+         .append( $(SPAN).text(" Права доступа: ") )
+         .append( $(SPAN).addClass("tag_rights") )
+         .append( $(SPAN).addClass("min1em") )
+         .append( $(LABEL)
+           .addClass("button")
+           .addClass("rights_btn")
+           .text("Права групп")
+           .click(function() {
+             let instance = $(".tree").jstree(true);
+             let nodes = instance.get_selected(true);
+             if(nodes.length != 1) return;
+
+             let node = nodes[0];
+             if((node['data']['rights'] & R_MANAGE_NET) == 0) return;
+
+             select_rights('tag', node['data']['groups_rights'], true, function(new_rights) {
+
+               let rights_index = {};
+               for(let i in new_rights) {
+                 rights_index[ String(new_rights[i]['g_id']) ] = String(new_rights[i]['rights']);
+               };
+
+               var has_changes = false;
+               let prev_rights_index = {};
+               for(let i in node['data']['groups_rights']) {
+                 let g_id = String(node['data']['groups_rights'][i]['g_id']);
+                 let rights = String(node['data']['groups_rights'][i]['rights']);
+                 if(rights_index[ g_id ] !== rights) {
+                   has_changes = true;
+                   break;
+                 };
+                 prev_rights_index[ g_id ] = rights;
+               };
+
+               if(!has_changes) {
+                 for(let i in rights_index) {
+                   let g_id = i;
+                   let rights = rights_index[i];
+                   if(prev_rights_index[g_id] !== rights) {
+                     has_changes = true;
+                     break;
+                   };
+                 };
+               };
+
+               if(has_changes) {
+                 node['data']['groups_rights'] = new_rights;
+
+                 run_query({"action": "set_tag_rights", "rights": rights_index, "id": String(node['id'])}, function(res) {
+                   node['data']['orig_groups_rights'] = new_rights;
+                 });
+               };
+ 
+             });
+           })
+         )
+         .hide()
+       )
+     )
+     .append( $(DIV)
+       .css({"margin-top": "0.5em"})
+       .append( $(SPAN).text("Поиск: ") )
+       .append( $(INPUT).prop("type", "search")
+         .inputStop(500)
+         .on("input_stop", function() {
+           $(".tree").jstree(true).search($(this).val());
+         })
+       )
+     )
+     .append( $(DIV)
+       .css({"margin-top": "0.5em", "min-height": "1.6em"})
+       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
+         .addClass(["button", "add_collection_btn"])
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-folder"]) )
+         .title("Добавить коллекцию")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+
+           let parent_node = instance.get_node("#");
+
+           if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+
+           let new_name = "Новая коллекция";
+
+           let counter = 1;
+           let found = false;
+           do {
+             found = false;
+             for(let i in parent_node['children']) {
+               let child = instance.get_node(parent_node['children'][i]);
+               if(child['data']['name'] === new_name) {
+                 found = true;
+                 break;
+               };
+             };
+             if(found) {
+               new_name = "Новая коллекция #"+counter;
+               counter++;
+             };
+           } while(found);
+
+           let new_data = {"text": new_name,
+                           "type": "root",
+                           "children": [],
+                           "data": { "rights": parent_node['data']['rights'], "flags": 0,
+                                     "api_name": null, "descr": "",
+                                     "used": 0, "used_children": 0, "name": new_name,
+                                     "orig_name": new_name, "orig_api_name": null, "orig_flags": 0,
+                                     "groups_rights": [], "orig_groups_rights": [],
+                           },
+           };
+           instance.create_node("#", new_data, "last");
+         })
+       )
+       .append( $(LABEL)
+         .addClass("add_sibling_btn")
+         .addClass(["button"])
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrow-1-s"]) )
+         .title("Добавить следующий тег (можно также нажать + или Ins)")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+
+           let nodes = instance.get_selected(true);
+           if(nodes.length != 1) return;
+           let node = nodes[0];
+
+           let parent_node = instance.get_node(node['parent']);
+
+           if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+
+           let parent_children = parent_node['children'];
+           let new_name = "Новый тег";
+
+           let counter = 1;
+           let found = false;
+           do {
+             found = false;
+             for(let i in parent_children) {
+               let child = instance.get_node(parent_children[i]);
+               if(child['data']['name'] === new_name) {
+                 found = true;
+                 break;
+               };
+             };
+             if(found) {
+               new_name = "Новый тег #"+counter;
+               counter++;
+             };
+           } while(found);
+
+           let node_index = undefined;
+
+           for(let i in parent_children) {
+             if(parent_children[i] == node['id']) {
+               node_index = i;
+               break;
+             };
+           };
+
+
+           let new_data = {"text": new_name,
+                           "children": [],
+                           "data": { "flags": 0, "api_name": null, "descr": "",
+                                     "used": 0, "used_children": 0, "name": new_name,
+                                     "orig_name": new_name, "orig_api_name": null, "orig_flags": 0,
+                                     "rights": parent_node['data']['rights'],
+                                     "groups_rights": [], "orig_groups_rights": [],
+                                   },
+           };
+           instance.create_node(node['parent'], new_data, Number(node_index)+1);
+         })
+         .hide()
+       )
+       .append( $(LABEL)
+         .addClass("add_child_btn")
+         .addClass(["button"])
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrow-1-se"]) )
+         .title("Добавить дочерний тег")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+
+           let nodes = instance.get_selected(true);
+           if(nodes.length != 1) return;
+           let node = nodes[0];
+
+           if((node['data']['flags'] & F_ALLOW_LEAFS) == 0) return;
+           if((node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+
+           let new_name = "Новый тег";
+
+           let counter = 1;
+           let found = false;
+           do {
+             found = false;
+             for(let i in node['children']) {
+               let child = instance.get_node(node['children'][i]);
+               if(child['data']['name'] === new_name) {
+                 found = true;
+                 break;
+               };
+             };
+             if(found) {
+               new_name = "Новый тег #"+counter;
+               counter++;
+             };
+           } while(found);
+
+
+           let new_data = {"text": new_name,
+                           "children": [],
+                           "data": {"flags": 0, "api_name": null, "descr": "",
+                                     "used": 0, "used_children": 0, "name": new_name,
+                                     "orig_name": new_name, "orig_api_name": null, "orig_flags": 0,
+                                     "rights": node['data']['rights'],
+                                     "groups_rights": [], "orig_groups_rights": [],
+                                   },
+           };
+           instance.create_node(node['id'], new_data, "last");
+         })
+         .hide()
+       )
+       .append( $(LABEL)
+         .addClass("del_tag_btn")
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-trash"]) )
+         .addClass(["button", "min2em"])
+         .css({"text-align": "center"})
+         .title("Удалить тег (можно также нажать - или Del")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+
+           let nodes = instance.get_selected(true);
+           if(nodes.length != 1) return;
+           let node = nodes[0];
+
+           let parent_node = instance.get_node(node['parent']);
+
+           if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+
+           if((node['data']['used'] > 0 || node['data']['used_children'] > 0) &&
+              (node['data']['rights'] & R_MANAGE_NET) == 0
+           ) {
+             return;
+           };
+
+
+           let warn_message = "Подтвердите удаление тега.\n";
+           if(node['data']['used'] > 0) {
+             warn_message += "Он используется в "+node['data']['used']+" объектах.\n";
+           };
+           if(node['data']['used_children'] > 0) {
+             warn_message += "В "+node['data']['used_children']+
+                             " объектах используются дочерние теги.\n";
+           };
+           if(node['children'].length > 0 ) {
+             warn_message += "У него "+node['children'].length+
+                             " дочерних тегов.\n";
+           };
+           if(g_autosave) {
+             warn_message += "Внимание! Отмена будет невозможна!";
+           } else {
+             warn_message += "Внимание! После сохранения отмена будет невозможна!";
+           };
+           show_confirm_checkbox(warn_message, function() {
+             instance.delete_node(node);
+           }, {}, (Number(node['data']['used']) + Number(node['data']['used_children']) + node['children'].length) == 0);
+         })
+         .hide()
+       )
+       .append( $(LABEL)
+         .addClass("edit_tag_btn")
+         .append( $(LABEL).addClass(["ui-icon", "ui-icon-edit"]) )
+         .addClass(["button", "min2em"])
+         .css({"text-align": "center"})
+         .title("Редактировать (можно также нажать F2")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+
+           let nodes = instance.get_selected(true);
+           if(nodes.length != 1) return;
+           let node = nodes[0];
+
+           instance.edit(node);
+         })
+         .hide()
+       )
+     )
+     .append( $(DIV)
+       .css({"margin-top": "0.5em"})
+       .append( $(LABEL)
+         .addClass(["button"])
+         .text("calc []")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+           debugLog(jstr(instance.get_json("#", {"no_state": true,
+                                                 "no_a_attr": true, "no_li_attr": true, "flat": true,
+                                                 "no_icon": true,
+                                                }
+           )));
+         })
+       )
+       .append( $(LABEL)
+         .addClass(["button"])
+         .text("calc {}")
+         .click(function() {
+           let instance = $(".tree").jstree(true);
+           debugLog(jstr(instance.get_json("#", {"no_state": true,
+                                                 "no_a_attr": true, "no_li_attr": true, "flat": false,
+                                                 "no_icon": true,
+                                                }
+           )));
+         })
+       )
+     )
+    ;
+
+    let tree = $(DIV).addClass("tree")
+     .appendTo( workarea )
+    ;
+
+    let tree_plugins = [ "state", "search", "dnd", "types", "unique" ];
+
+    tree.jstree({
+      "core": {
+        "multiple" : false,
+        "animation" : 0,
+        "data": g_data["tags"]["children"],
+        "themes" : {
+          "variant" : "large"
+        },
+        "dblclick_toggle": false,
+        "force_text": true,
+        "check_callback" : function (operation, node, parent_node, node_position, more) {
+          let instance = this;
+
+          if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return false;
+
+          if(operation === "move_node") {
+            let current_parent = instance.get_node(node['parent']);
+            if((current_parent['data']['rights'] & R_EDIT_IP_VLAN) == 0) return false;
+
+            if((node['parent'] == '#' && parent_node['id'] != '#') ||
+               (node['parent'] != '#' && parent_node['id'] == '#')
+            ) {
+              return false;
+            };
+
+            if(node['parent'] != parent_node['id']) {
+              if((current_parent['data']['rights'] & R_MANAGE_NET) == 0) return false;
+              if((parent_node['data']['rights'] & R_MANAGE_NET) == 0) return false;
+
+              if((parent_node['data']['flags'] & F_ALLOW_LEAFS) == 0) return false;
+
+              let node_root = node['id'];
+              if(node['parents'].length > 1) {
+                node_root = node['parents'][ node['parents'].length - 2];
+              };
+
+              let parent_root = parent_node['id'];
+              if(parent_node['parents'].length > 1) {
+                parent_root = parent_node['parents'][ parent_node['parents'].length - 2 ];
+              };
+
+              if(node_root != parent_root) return false;
+
+            };
+
+            return true;
+          } else if(operation === "create_node") {
+
+            return ((parent_node['data']['flags'] & F_ALLOW_LEAFS) > 0);
+          } else if(operation === "rename_node" || operation === "edit" || operation === "delete_node") {
+            if((Number(node['data']['used']) + Number(node['data']['used_children'])) > 0 &&
+               (node['data']['rights'] & R_MANAGE_NET) == 0
+            ) {
+              return false;
+            };
+
+            if(operation === "rename_node") {
+
+              let matches = String(node_position).match(g_node_name_reg);
+              if(matches === null) {
+                //this.get_node(node, true).find("a").first().find("i").animateHighlight("red", 300);
+                return false;
+              };
+              let new_name = String(matches[1]).trim();
+              let new_api_name = null;
+
+              if(matches[2] !== undefined) {
+                let trimmed = String(matches[2]).trim().toLowerCase();
+                if(trimmed != "") new_api_name = trimmed;
+              };
+
+              if(node['data']['api_name'] !== new_api_name &&
+                 (node['data']['rights'] & R_MANAGE_NET) == 0
+              ) {
+                show_dialog("Для изменения API имени нужны права \""+g_rights[R_MANAGE_NET]['label']+"\"");
+                return false;
+              };
+
+              let found = false;
+              let found_node;
+              for(let i in parent_node['children']) {
+                let child_node = this.get_node(parent_node['children'][i]);
+                if(child_node['id'] != node['id']) {
+                  if(String(child_node['data']['name']).trim() == new_name ||
+                     (new_api_name !== null &&
+                      child_node['data']['api_name'] !== null &&
+                      String(child_node['data']['api_name']).trim().toLowerCase() === new_api_name
+                     )
+                  ) {
+                    found = true;
+                    found_node = this.get_node(child_node['id']);
+                    break;
+                  };
+                };
+              };
+
+              if(!found && new_api_name !== null) {
+                found = false;
+                let full_list = this.get_json("#", {"no_state": true,
+                                                    "no_a_attr": true,
+                                                    "no_li_attr": true,
+                                                    "flat": true,
+                                                    "no_icon": true,
+                                                   }
+                );
+                for(let i in full_list) {
+                  if(full_list[i]['id'] != node['id']) {
+                    if(full_list[i]['data']['api_name'] !== null &&
+                       String(full_list[i]['data']['api_name']).trim().toLowerCase() === new_api_name
+                    ) {
+                      found = true;
+                      found_node = this.get_node(full_list[i]['id']);
+                      break;
+                    };
+                  };
+                };
+              };
+              if(found) {
+                for(let i in found_node['parents']) {
+                  if(found_node['parents'][i]['id'] != "#") {
+                    this.open_node(found_node['parents'][i]);
+                  };
+                };
+                this.get_node(found_node, true).find("a").first().find("i").animateHighlight("red", 300);
+                return false;
+              };
+            };
+
+            return true;
+          } else {
+            debugLog(operation);
+            return false;
+          };
+        },
+      },
+      "state" : { "key" : "jstree"+user_self_sub },
+      "types": {
+        "default": {
+          "icon": "ui-icon ui-icon-tag tag-color"
+        },
+        "root": {
+          "icon": true
+        }
+      },
+      "unique": {
+        "trim_whitespace": true,
+      },
+      "dnd": {
+        "copy": false,
+        "is_draggable": function(data) {
+          if(data.length == 0)  return false;
+
+          let parent_node = this.get_node(data[0]['parent']);
+
+          return (parent_node['data']['rights'] & R_EDIT_IP_VLAN) > 0;
+        },
+      },
+      "plugins" : tree_plugins,
+    });
+
+    tree
+     .on("deselect_node.jstree", function(e, data) {
+       $(".add_sibling_btn,.add_child_btn,.del_tag_btn").hide();
+       $(".tag_info").hide();
+     })
+     .on("select_node.jstree", function(e, data) {
+       let instance = $(".tree").jstree(true);
+       let nodes = instance.get_selected(true);
+       if(nodes.length == 0) {
+         $(".tag_info").hide();
+         return;
+       };
+       let node = nodes[0];
+       let parent_node = instance.get_node(node['parent']);
+
+       if(parent_node['id'] === "#" && parent_node['data'] === undefined) parent_node['data'] = g_data['tags']['data'];
+
+       $(".rights_btn").toggle((node['data']['rights'] & R_MANAGE_NET) > 0);
+
+       let rights_elms = rights_tds("tag", node['data']['rights'], false, "tag_right", "tag_rights");
+       $(".tag_rights").empty().append(rights_elms);
+
+       $(".tag_name").text(node['data']['name']);
+       $(".tag_api_name").text(node['data']['api_name'] !== null?node['data']['api_name']:'не задан.');
+       $(".tag_descr").val(node['data']['descr']);
+
+       let flags_elms = $([]);
+       let flags = (node['data']['flags'] !== undefined)?node['data']['flags']:0;
+
+       let flags_keys = keys(g_tag_flags);
+       flags_keys.sort(function(a, b) { return Number(a) - Number(b); });
+
+       let can_edit = ((node['data']['rights'] & R_MANAGE_NET) > 0 ||
+                       ((Number(node['data']['used']) + Number(node['data']['used_children'])) == 0 &&
+                        (parent_node['data']['rights'] & R_EDIT_IP_VLAN) > 0
+                       )
+       );
+
+       let can_manage = ((node['data']['rights'] & R_MANAGE_NET) > 0);
+
+       $(".edit_tag_btn").toggle(can_edit);
+
+       $(".tag_descr").prop("readonly", !can_edit);
+
+       for(let i in flags_keys) {
+         let flag = flags_keys[i];
+         let elm = $(LABEL)
+          .addClass(["flag", "flag_"+flag, ((flags & flag) > 0)?"flag_on":"flag_off", "ns",
+                     can_manage?"can_edit":"cannot_edit"
+                    ]
+          )
+          .text(g_tag_flags[flag]['label'])
+          .title(g_tag_flags[flag]['descr'])
+         ;
+
+         if(can_manage) {
+           elm
+            .data("flag", flag)
+            .data("node", node['id'])
+            .click(function() {
+              let row = $(this).closest(".tag_flags");
+              let node_id = $(this).data("node");
+              let flag = $(this).data("flag");
+              if($(this).hasClass("flag_on")) {
+                $(this).removeClass("flag_on").addClass("flag_off");
+
+                for(let i in g_tag_flags[flag]['required_by']) {
+                  let rr = g_tag_flags[flag]['required_by'][i];
+                  row.find(".flag_"+rr).removeClass("flag_on").addClass("flag_off");
+                };
+              } else {
+                $(this).removeClass("flag_off").addClass("flag_on");
+                for(let i in g_tag_flags) {
+                  if(in_array(g_tag_flags[i]['required_by'], flag)) {
+                    row.find(".flag_"+i).removeClass("flag_off").addClass("flag_on");
+                  };
+                };
+                for(let i in g_tag_flags[flag]['conflict_with']) {
+                  let rr = g_tag_flags[flag]['conflict_with'][i];
+                  row.find(".flag_"+rr).removeClass("flag_on").addClass("flag_off");
+                };
+              };
+
+              let flags = 0;
+              row.find(".flag").each(function() {
+                if($(this).hasClass("flag_on")) flags |= Number($(this).data("flag"));
+              });
+              let instance = $(".tree").jstree(true);
+              let node = instance.get_node(node_id);
+              node['data']['flags'] = flags;
+              instance.trigger("select_node.jstree");
+
+              if(node['data']['orig_flags'] != flags) {
+                run_query({"action": "set_tag_flags", "id": String(node['id']), "flags": String(flags)}, function(res) {
+                  node['data']['orig_flags'] = flags;
+                });
+              };
+            })
+           ;
+         };
+
+         flags_elms = flags_elms.add(elm);
+       };
+
+       $(".tag_flags").empty().append(flags_elms);
+
+       $(".tag_info").show();
+
+       $(".del_tag_btn").toggle(can_edit);
+
+       let allow_sibling = node['parent'] != "#" && (parent_node['data']['flags'] & F_ALLOW_LEAFS) > 0 &&
+                           (parent_node['data']['rights'] & R_EDIT_IP_VLAN) > 0;
+       $(".add_sibling_btn").toggle(allow_sibling);
+
+       let allow_child = (node['data']['flags'] & F_ALLOW_LEAFS) > 0 && (node['data']['rights'] & R_EDIT_IP_VLAN) > 0;
+       $(".add_child_btn").toggle(allow_child);
+       
+     })
+     /*.on("dblclick.jstree", function (e) {
+       let instance = $.jstree.reference(this);
+       let node = instance.get_node(e.target);
+       instance.edit(node);
+     })*/
+     .on("move_node.jstree", function (e, data) {
+       let instance = data.instance;
+       let node = data['node'];
+
+       for(let i in node['parents']) {
+         if(node['parents'][i] != "#") {
+           let pn = instance.get_node(node['parents'][i]);
+           pn['data']['used_children'] += (Number(node['data']['used']) + Number(node['data']['used_children']));
+         };
+       };
+
+       if(data['old_parent'] != "#") {
+         let old_parent = instance.get_node(data['old_parent']);
+         old_parent['data']['used_children'] -= (Number(node['data']['used']) + Number(node['data']['used_children']));
+         for(let i in old_parent['parents']) {
+           if(old_parent['parents'][i] != "#") {
+             let pn = instance.get_node(old_parent['parents'][i]);
+             pn['data']['used_children'] -= (Number(node['data']['used']) + Number(node['data']['used_children']));
+           };
+         };
+       };
+
+       let parent_node = instance.get_node(node['parent']);
+       let nodes_index = {};
+
+       for(let i in parent_node["children"]) {
+         nodes_index[ String(parent_node["children"][i]) ] = String(i);
+       };
+
+       run_query({"action": "move_tag", "id": String(node['id']),
+                  "new_parent": String(node['parent']), "sort": nodes_index,
+                 }, function(res) {
+       });
+     })
+     .on("rename_node.jstree", function (e, data) {
+       let instance = data.instance;
+       let node = data['node'];
+
+       let matches = String(data.text).match(g_node_name_reg);
+       if(matches === null) {
+         error_at();
+         return;
+       };
+       let new_name = String(matches[1]).trim();
+       let new_api_name = null;
+       if(matches[2] !== undefined) {
+         let trimmed = String(matches[2]).trim().toLowerCase();
+         if(trimmed != "") new_api_name = trimmed;
+       };
+
+       node['data']['name'] = new_name;
+       node['data']['api_name'] = new_api_name;
+
+       node['text'] = new_name;
+       if(new_api_name !== null) node['text'] += " ("+new_api_name+")"
+
+       instance.get_node(node, true).find("a").first().contents().last().replaceWith(node['text']);
+       instance.trigger("select_node.jstree");
+
+       if(node['data']['name'] != node['data']['orig_name'] || node['data']['api_name'] != node['data']['orig_api_name']) {
+         run_query({"action": "rename_tag", "id": String(node['id']), "name": node['data']['name'],
+                    "api_name": node['data']['api_name']}, function(res) {
+
+           node['data']['orig_name'] = node['data']['name'];
+           node['data']['orig_api_name'] = node['data']['api_name'];
+
+           instance.get_node(node, true).find("a").first().contents().last().replaceWith(node['text']);
+           instance.trigger("select_node.jstree");
+
+         });
+       };
+     })
+     .on("create_node.jstree", function (e, data) {
+       let instance = data.instance;
+       let node = data['node'];
+
+       let parent_node = instance.get_node(node['parent']);
+       let nodes_index = {};
+
+       for(let i in parent_node["children"]) {
+         nodes_index[ String(parent_node["children"][i]) ] = String(i);
+       };
+
+       run_query({"action": "add_tag", "parent_id": String(node['parent']), "name": node['data']['name'],
+                  "api_name": node['data']['api_name'],
+                  "descr": "", "temp_id": String(node['id']), "sort": nodes_index,
+       }, function(res) {
+         instance.set_id(node['id'], res['ok']['new_id']);
+         node = instance.get_node(res['ok']['new_id']);
+         node['data']['flags'] = res['ok']['flags'];
+         node['data']['orig_flags'] = res['ok']['flags'];
+         node['data']['orig_name'] = node['data']['name'];
+         node['data']['orig_descr'] = node['data']['descr'];
+         node['data']['orig_api_name'] = node['data']['api_name'];
+         node['data']['orig_flags'] = node['data']['flags'];
+
+         instance.deselect_all(true);
+         instance.select_node(res['ok']['new_id']);
+         instance.trigger("select_node.jstree");
+         instance.edit(res['ok']['new_id']);
+       })
+     })
+     .on("delete_node.jstree", function (e, data) {
+       let instance = data.instance;
+       let node = data['node'];
+
+       run_query({"action": "del_tag", "id": String(node['id'])}, function(res) {
+         for(let i in node['parents']) {
+           if(node['parents'][i] != "#") {
+             let pn = instance.get_node(node['parents'][i]);
+             pn['data']['used_children'] -= (Number(node['data']['used']) + Number(node['data']['used_children']));
+           };
+         };
+
+         $(".tree").trigger("select_node.jstree");
+
+       });
+     })
+     .on("keyup", function(e) {
+       if($(e.originalEvent.target).is("INPUT")) return;
+       if (e.key === "+" || e.key === "Insert") {
+         $(".add_sibling_btn").trigger("click");
+       } else if(e.key === "-" || e.key === "Delete") {
+         $(".del_tag_btn").trigger("click");
+       };
+     })
+     .on("ready.jstree", function(e, data) {
+       let instance = data.instance;
+       let root = instance.get_node("#");
+       root['data'] = {};
+       root['data']['rights'] = g_data['tags']['data']['rights'];
+       root['data']['flags'] = g_data['tags']['data']['flags'];
+     })
+    ;
+  });
+};
+
+var g_counter = 0;

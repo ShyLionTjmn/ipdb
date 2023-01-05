@@ -813,9 +813,21 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     switch v := _tag_id.(type) {
     case string:
       tag_id = v
-    case uint8,uint16,uint32,uint64:
+    case uint8:
       tag_id = strconv.FormatUint(uint64(v), 10)
-    case int8,int16,int32,int64:
+    case uint16:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case uint32:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case uint64:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case int8:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    case int16:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    case int32:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    case int64:
       tag_id = strconv.FormatInt(int64(v), 10)
     default:
       return nil, errors.New("Unsupported tag_id type in get_tag")
@@ -857,7 +869,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if used, var_ok = tag.Uint64("used"); !var_ok { return 0, fmt.Errorf("No used in tag %v", tag_id) }
 
     query = "SELECT tag_id FROM tags WHERE tag_fk_tag_id=?"
-    if rows, err := return_query_A(query, tag_id); err != nil {
+    if rows, err := return_query_A(db, query, tag_id); err != nil {
       return 0, err
     } else {
       for _, row := range rows {
@@ -892,8 +904,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     return get_root_tag(db, parent_id, counter + 1)
   }
 
-  var get_tag_rights func(interface{}, interface{}, int) (uint64, error) {
-  var get_tag_rights = func(db interface{}, tag_id interface{}, counter int) (uint64, error) {
+  var get_tag_rights func(interface{}, interface{}, int) (uint64, error)
+  get_tag_rights = func(db interface{}, tag_id interface{}, counter int) (uint64, error) {
     if counter > MAX_TREE_LEN { return 0, errors.New("Tags loop detected") }
 
     if tag, err := get_tag(db, tag_id); err != nil {
@@ -4616,6 +4628,14 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     tags := make(M)
     tags["children"] = make([]M, 0)
 
+    tags["data"] = make(M)
+    tags["data"].(M)["rights"] = uint64(0)
+    if user_is_admin {
+      tags["data"].(M)["rights"] = uint64(ADMIN_TAG_RIGHTS)
+    }
+
+    tags["data"].(M)["flags"] = F_ALLOW_LEAFS | F_DENY_SELECT
+
     for _, root_tag_index := range root_tags {
       tags["children"] = append(tags["children"].([]M), tags_list[root_tag_index])
       if _, err = traverse_tree(tags_list[root_tag_index], 0, 0); err != nil { panic(err) }
@@ -4652,12 +4672,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if tag, err = get_tag(db, tag_id); err != nil { panic(err) }
 
     var tag_rights uint64
-    if tag_rights, err = get_tag_rights(db, tag_id); err != nil { return false, err }
+    if tag_rights, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
 
     var parent_rights uint64 = 0
     if tag["tag_fk_tag_id"] != nil {
       parent_id, _ := tag.UintString("tag_fk_tag_id")
-      if parent_rights, err = get_tag_rights(db, parent_id); err != nil { return false, err }
+      if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
     }
 
     if user_is_admin {
@@ -4666,7 +4686,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
 
-    can_manage := (tag_rights & R_MANAGE_NET) == 0
+    can_manage := (tag_rights & R_MANAGE_NET) > 0
 
     update_fields := make(M)
 
@@ -4680,7 +4700,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       var used uint64
       if used, err = tag_usage(db, tag_id, 0); err != nil { panic(PE) }
 
-      if used > 0 && !can_mange { panic("Только менеджер может переименовывать используемые теги") }
+      if used > 0 && !can_manage { panic("Только менеджер может переименовывать используемые теги") }
 
       var tag_value interface{}
       if tag_value, err = get_p_string(q, "name", "^\\S"); err != nil { panic(err) }
@@ -4690,6 +4710,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       tag_value = nil
       if q["api_name"] != nil {
         if tag_value, err = get_p_string(q, "api_name", g_api_name_reg); err != nil { panic(err) }
+      }
+
+      if tag["tag_api_name"] != tag_value && !can_manage {
+        panic("API имя может менять только менеджер")
       }
 
       update_fields["tag_api_name"] = tag_value
@@ -4717,12 +4741,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if tag, err = get_tag(db, tag_id); err != nil { panic(err) }
 
     var tag_rights uint64
-    if tag_rights, err = get_tag_rights(db, tag_id); err != nil { return false, err }
+    if tag_rights, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
 
     var parent_rights uint64 = 0
     if tag["tag_fk_tag_id"] != nil {
       parent_id, _ := tag.UintString("tag_fk_tag_id")
-      if parent_rights, err = get_tag_rights(db, parent_id); err != nil { return false, err }
+      if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
     }
 
     if user_is_admin {
@@ -4731,7 +4755,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
 
-    can_manage := (tag_rights & R_MANAGE_NET) == 0
+    can_manage := (tag_rights & R_MANAGE_NET) > 0
 
     var used uint64
     if used, err = tag_usage(db, tag_id, 0); err != nil { panic(PE) }
@@ -4780,11 +4804,15 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if sort, err = get_p_map(q, "sort", g_num_reg); err != nil { panic(err) }
 
     var p_id interface{}
+    var tag_parent_id string
 
     if parent_id == "#" {
+      tag_parent_id = "0"
       p_id = nil
       if !user_is_admin { panic(NoAccess()) }
+
     } else {
+      tag_parent_id = parent_id
       p_id = parent_id
 
       var parent_node M
@@ -4796,9 +4824,28 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if (parent_flags & F_ALLOW_LEAFS) == 0 { panic("Родительский тег не допускает создание потомков. Проверьте флаги") }
 
       var parent_rights uint64
-      if parent_rights, err = get_tag_rights(db, parent_id); err != nil { return false, err }
+      if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
       if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
+
     }
+
+    var flags interface {}
+
+    var rows []M
+
+    query = "SELECT tag_flags FROM tags WHERE tag_parent_id=?"
+    if rows, err = return_query_A(db, query, tag_parent_id); err != nil { panic(err) }
+
+    for _, row := range rows {
+      if u64, var_ok = row.Uint64("tag_flags"); !var_ok { panic(PE) }
+      if flags == nil {
+        flags = u64
+      } else {
+        flags = flags.(uint64) & u64
+      }
+    }
+
+    if flags == nil { flags = uint64(0) }
 
     query = "INSERT INTO tags SET"+
             " tag_name=?"+
@@ -4806,10 +4853,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ",tag_api_name=?"+
             ",tag_flags=?"+
             ",tag_fk_tag_id=?"+
-            ",tag_parent_id=IFNULL(?, 0)"+
+            ",tag_parent_id=?"+
             ",ts=?"+
             ",fk_u_id=?"
-    if dbres, err = db.Exec(query, tag_name, tag_descr, tag_api_name, 0, p_id, p_id, ts, user_id); err != nil { panic(err) }
+    if dbres, err = db.Exec(query, tag_name, tag_descr, tag_api_name, flags, p_id, tag_parent_id, ts, user_id); err != nil { panic(err) }
 
     var lid int64
 
@@ -4831,6 +4878,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     out["done"] = 1
     out["new_id"] = new_tag_id
+    out["flags"] = flags
 
   } else if action == "move_tag" {
     var tag_id string
@@ -4856,9 +4904,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var old_parent_rights uint64
 
     if tag["tag_fk_tag_id"] != nil {
-      if old_parent_rights, err = get_tag_rights(db, tag["tag_fk_tag_id"]); err != nil { return false, err }
+      if old_parent_rights, err = get_tag_rights(db, tag["tag_fk_tag_id"], 0); err != nil { panic(err) }
     } else {
-      if user_is_admin { old_parent_rights |= ADMIN_TAG_RIGHTS
+      if user_is_admin { old_parent_rights |= ADMIN_TAG_RIGHTS }
     }
 
     if (old_parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
@@ -4866,14 +4914,28 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var new_parent_rights uint64
 
     if new_parent_id != nil {
-      if new_parent_rights, err = get_tag_rights(db, new_parent_id); err != nil { return false, err }
+      if new_parent_rights, err = get_tag_rights(db, new_parent_id, 0); err != nil { panic(err) }
     } else {
-      if user_is_admin { new_parent_rights |= ADMIN_TAG_RIGHTS
+      if user_is_admin { new_parent_rights |= ADMIN_TAG_RIGHTS }
     }
 
     if (new_parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
 
-    if tag["tag_fk_tag_id"] != new_parent_id {
+    var old_parent_id interface{}
+    if tag["tag_fk_tag_id"] != nil {
+      old_parent_id, _ = tag.UintString("tag_fk_tag_id")
+    } else {
+      old_parent_id = nil
+    }
+
+    if old_parent_id != new_parent_id {
+      if (new_parent_rights & R_MANAGE_NET) == 0 {
+        panic(fmt.Errorf("Переносить между ветками может только менеджер (%v,%v)", tag["tag_fk_tag_id"], new_parent_id))
+      }
+      if (old_parent_rights & R_MANAGE_NET) == 0 {
+        panic(fmt.Errorf("Переносить между ветками может только менеджер (%v,%v)", tag["tag_fk_tag_id"], new_parent_id))
+      }
+
       var new_parent_tag M
       if new_parent_tag, err = get_tag(db, new_parent_id); err != nil { panic(err) }
 
@@ -4911,9 +4973,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var new_rights map[string]string
     if new_rights, err = get_p_map(q, "rights", g_num_reg); err != nil { panic(err) }
-
-    var tag M
-    if tag, err = get_tag(db, tag_id); err != nil { panic(err) }
 
     var tag_rights uint64
     if tag_rights, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
