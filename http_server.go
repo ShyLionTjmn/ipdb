@@ -587,7 +587,6 @@ func handle_error(r interface{}, w http.ResponseWriter, req *http.Request) {
   return
 }
 
-
 func handleAjax(w http.ResponseWriter, req *http.Request) {
 
   if req.Method == "OPTIONS" {
@@ -796,15 +795,23 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
   action := q["action"].(string)
   _ = action
 
-
-  // do something here to fill out with values
-
   if opt_d {
     dj, _ := json.MarshalIndent(q, "", "  ")
     fmt.Println(string(dj))
   }
 
   var var_ok bool
+
+  var g_nets_rights uint64
+  var g_vlans_rights uint64
+  var g_tags_rights uint64
+
+  query = "SELECT IFNULL(BIT_OR(glr_rmask), CAST(0 AS UNSIGNED)) FROM glrs WHERE glr_object=?"+
+          " AND glr_fk_g_id IN("+user_groups_in+")"
+
+  if g_nets_rights, err = must_return_one_uint(db, query, "nets"); err != nil { panic(err) }
+  if g_vlans_rights, err = must_return_one_uint(db, query, "vlans"); err != nil { panic(err) }
+  if g_tags_rights, err = must_return_one_uint(db, query, "tags"); err != nil { panic(err) }
 
   var tags_cache M
 
@@ -928,6 +935,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if user_is_admin {
           tag_rights |= ADMIN_TAG_RIGHTS
         }
+        tag_rights |= g_tags_rights
         return tag_rights, nil
       }
     }
@@ -970,6 +978,167 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     return err
   }
 
+  get_net_rights := func(db interface{}, net_id interface{}, v string, netrow M) (uint64, M, error) {
+    var net M
+    if netrow != nil {
+      net = netrow
+    } else {
+      query = "SELECT"+
+              " v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets WHERE v"+v+"net_id=?"
+      if net, err = must_return_one_M(db, query, net_id); err != nil { return 0, nil, err }
+    }
+
+    var ret uint64
+    if ret, var_ok = net.Uint64("rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+    if u64, var_ok = net.Uint64("r_rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+
+    owner, _ := net.AnyString("v"+v+"net_owner")
+
+    ret |= u64
+
+    if owner == user_id {
+      ret |= OWNER_RIGHTS
+    }
+
+    if user_is_admin {
+      ret |= ADMIN_RIGHTS
+    }
+
+    ret |= g_nets_rights
+
+    return ret, net, nil
+  }
+
+  get_addr_rights := func(db interface{}, ip_addr interface{}, v string, netrow M) (uint64, M, error) {
+    var net M
+    if netrow != nil {
+      net = netrow
+    } else {
+      query = "SELECT"+
+              " v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets WHERE v"+v+"net_addr <=? AND v"+v+"net_last >=?"
+      if net, err = must_return_one_M(db, query, ip_addr, ip_addr); err != nil { return 0, nil, err }
+    }
+
+    var ret uint64
+    if ret, var_ok = net.Uint64("rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+    if u64, var_ok = net.Uint64("r_rights"); !var_ok { return 0, nil, errors.New("No r_rights in get_net_rights call") }
+    ret |= u64
+
+    owner, _ := net.AnyString("v"+v+"net_owner")
+
+    if owner == user_id {
+      ret |= OWNER_RIGHTS
+    }
+
+    if user_is_admin {
+      ret |= ADMIN_RIGHTS
+    }
+
+    ret |= g_nets_rights
+
+    query = "SELECT IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND v"+v+"r_start <= ? AND v"+v+"r_stop >= ?"+
+                         "), CAST(0 AS UNSIGNED)) as ip_rights "+
+            " FROM v"+v+"nets WHERE v"+v+"net_id=?"
+
+    if u64, err = must_return_one_uint(db, query, ip_addr, ip_addr, net["v"+v+"net_id"]); err != nil { return 0, nil, err }
+
+    ret |= u64
+
+    return ret, net, nil
+  }
+
+  get_ip_rights := func(db interface{}, ip_id interface{}, v string, netrow M) (uint64, M, error) {
+    var net M
+    if netrow != nil {
+      net = netrow
+    } else {
+      query = "SELECT"+
+              " v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets INNER JOIN v"+v+"ips ON v"+v+"ip_fk_v"+v+"net_id=v"+v+"net_id WHERE v"+v+"ip_id=?"
+      if net, err = must_return_one_M(db, query, ip_id); err != nil { return 0, nil, err }
+    }
+
+    var ret uint64
+    if ret, var_ok = net.Uint64("rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+    if u64, var_ok = net.Uint64("r_rights"); !var_ok { return 0, nil, errors.New("No r_rights in get_net_rights call") }
+    ret |= u64
+
+    owner, _ := net.AnyString("v"+v+"net_owner")
+
+    if owner == user_id {
+      ret |= OWNER_RIGHTS
+    }
+
+    if user_is_admin {
+      ret |= ADMIN_RIGHTS
+    }
+
+    ret |= g_nets_rights
+
+    var ip_rows []M
+    query = "SELECT v"+v+"net_id"+
+            ",IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND v"+v+"r_start <= v"+v+"ip_addr AND v"+v+"r_stop >= v"+v+"ip_addr"+
+                         "), 0) as ip_rights "+
+            " FROM v"+v+"nets INNER JOIN v"+v+"ips ON v"+v+"ip_fk_v"+v+"net_id=v"+v+"net_id WHERE v"+v+"ip_id=?"
+
+    if ip_rows, err = return_query_A(db, query, ip_id); err != nil { return 0, nil, err }
+
+    if len(ip_rows) != 1 { return 0, nil, errors.New("Адреса не существует. Вероятно он был удален другим пользователем.\nОбновите страницу") }
+
+    if ip_rows[0]["v"+v+"net_id"] != net["v"+v+"net_id"] {
+      return 0, nil, errors.New("Адрес из другой сети")
+    }
+
+    if u64, var_ok = ip_rows[0].Uint64("ip_rights"); !var_ok { return 0, nil, errors.New("No ip_rights") }
+
+    ret |= u64
+
+    return ret, net, nil
+  }
+
   if action == "userinfo" {
     out["id"] = user_id
     out["sub"] = user_sub
@@ -1000,6 +1169,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       vlans_rights |= ADMIN_VLAN_RIGHTS
     }
 
+    vlans_rights |= g_vlans_rights
     if (vlans_rights & R_VIEW_NET_IPS) > 0 {
       has_vlans_access = true
     }
@@ -1091,6 +1261,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if unum, err = must_return_one_uint(db, query, id); err != nil { panic(err) }
     g_used += unum
 
+    //check global rights
+    query = "SELECT COUNT(*) as c FROM glrs WHERE glr_fk_g_id=?"
+    if unum, err = must_return_one_uint(db, query, id); err != nil { panic(err) }
+    g_used += unum
+
     if g_used > 0 && confirmed == "" {
       out["used"] = g_used
       goto OUT
@@ -1113,12 +1288,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var net_cols M
     var dbnet M
-    var rows []M
-    var dbnet_ranges_a []M
     var dbnet_rights uint64
-    var dbnet_r_rights uint64
-    var dbnet_owner string
-    var net_id string
 
     var vdom M
     var vd_id string
@@ -1138,7 +1308,26 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       var prop string
       var obj_id string
 
+      var ip_rights uint64
+
       if object, var_ok = data.String("object"); !var_ok { panic(fmt.Sprint("No object in queue item #", i)) }
+
+      switch(object) {
+      case "ip", "ip_value":
+        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        if ip_rights, dbnet, err = get_ip_rights(db, obj_id, "4", dbnet); err != nil { panic(err) }
+      case "net":
+        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        if dbnet_rights, dbnet, err = get_net_rights(db, obj_id, "4", dbnet); err != nil { panic(err) }
+      }
+
+      switch(object) {
+      case "ip_value":
+        if net_cols == nil {
+          query = "SELECT ic_type, ic_regexp, ic_id FROM ics INNER JOIN n4cs ON nc_fk_ic_id=ic_id WHERE nc_fk_v4net_id=?"
+          if net_cols, err = return_query_M(db, query, "ic_id", dbnet["v4net_id"]); err != nil { panic(err) }
+        }
+      }
 
       switch(object) {
       case "group":
@@ -1151,112 +1340,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if prop != "g_name" && prop != "g_descr" { panic(fmt.Sprint("Bad property in queue item #", i)) }
         //-------group-------
       case "ip":
-        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
 
         if prop != "vlan" &&
         true { panic(fmt.Sprint("Bad property in queue item #", i)) }
-
-        query = "SELECT v4ip_addr, v4ip_fk_v4net_id FROM v4ips WHERE v4ip_id=?"
-        if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
-
-        if len(rows) != 1 {
-          panic("Адрес не существует, возможно был удален другим пользователем. Перезагрузите страницу")
-        }
-
-        if u64, var_ok = rows[0].Uint64("v4ip_addr"); !var_ok { panic(PE) }
-        if u64 > math.MaxUint32 { panic(PE) }
-        ip_addr := uint32(u64)
-
-        var ip_addr_net_id string
-        if ip_addr_net_id, var_ok = rows[0].UintString("v4ip_fk_v4net_id"); !var_ok { panic(PE) }
-
-
-        if dbnet == nil {
-          query = "SELECT"+
-                  " v4nets.*"+
-                  ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                             " FROM gn4rs WHERE"+
-                             " gn4r_fk_v4net_id=v4net_id"+
-                             " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                             "),0) as rights"+
-                  ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                             " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                             " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                             " AND v4r_fk_v4net_id IS NULL"+
-                             " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                             "), 0) AS r_rights"+
-                  " FROM v4nets INNER JOIN v4ips ON v4ip_fk_v4net_id = v4net_id WHERE v4ip_id = ?"
-          if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
-          if len(rows) != 1 { panic("No such IP") }
-
-          dbnet = rows[0]
-
-          if net_id, var_ok = dbnet.UintString("v4net_id"); !var_ok { panic(PE) }
-
-          if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-          if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-          dbnet_rights |= dbnet_r_rights
-
-          dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-          if dbnet_owner == user_id {
-            dbnet_rights = dbnet_rights | OWNER_RIGHTS
-          }
-
-          if user_is_admin {
-            dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-          }
-
-          query = "SELECT v4rs.*"+
-                  ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                            " FROM gr4rs WHERE"+
-                            " gr4r_fk_g_id IN("+user_groups_in+")"+
-                            " AND gr4r_fk_v4r_id=v4r_id"+
-                            "), 0) AS rights"+
-                  " FROM v4rs WHERE v4r_fk_v4net_id = ? ORDER BY v4r_start, v4r_id"
-          if dbnet_ranges_a, err = return_query_A(db, query, dbnet["v4net_id"]);
-          err != nil { panic(err) }
-
-          query = "SELECT ic_type, ic_regexp, ic_id FROM ics INNER JOIN n4cs ON nc_fk_ic_id=ic_id WHERE nc_fk_v4net_id=?"
-          if net_cols, err = return_query_M(db, query, "ic_id", dbnet["v4net_id"]); err != nil { panic(err) }
-        }
-
-        if ip_addr_net_id != net_id {
-          panic(fmt.Sprintf("Адрес из другой сети: %s != %s", ip_addr_net_id, net_id))
-        }
-
-        var ip_rights uint64
-        ip_rights |= dbnet_rights
-
-        for i, _ := range dbnet_ranges_a {
-
-          var range_rights uint64
-          if range_rights, var_ok = dbnet_ranges_a[i].Uint64("rights"); !var_ok { panic(PE) }
-
-          range_rights |= dbnet_rights
-          dbnet_ranges_a[i]["rights"] = range_rights
-
-          var range_start uint32
-          var range_stop uint32
-
-          if u64, var_ok = dbnet_ranges_a[i].Uint64("v4r_start"); !var_ok { panic(PE) }
-          if u64 > math.MaxUint32 { panic(PE) }
-          range_start = uint32(u64)
-
-          if u64, var_ok = dbnet_ranges_a[i].Uint64("v4r_stop"); !var_ok { panic(PE) }
-          if u64 > math.MaxUint32 { panic(PE) }
-          range_stop = uint32(u64)
-
-          if range_start > range_stop { panic(PE) }
-
-          if ip_addr >= range_start && ip_addr <= range_stop {
-            ip_rights |= range_rights
-            dbnet_ranges_a[i]["in_range"] = 1
-          }
-        }
 
         if (ip_rights & R_EDIT_IP_VLAN) == 0 ||
            (ip_rights & R_VIEW_NET_IPS) == 0 ||
@@ -1267,114 +1354,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         }
 
       case "ip_value":
-        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
-
         var col_id string
         if col_id, var_ok = data.UintString("col_id"); !var_ok { panic(fmt.Sprint("No col_id in queue item #", i)) }
 
-        query = "SELECT v4ip_addr, v4ip_fk_v4net_id FROM v4ips WHERE v4ip_id=?"
-        if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
-
-        if len(rows) != 1 {
-          panic("Адрес не существует, возможно был удален другим пользователем. Перезагрузите страницу")
-        }
-
-        if u64, var_ok = rows[0].Uint64("v4ip_addr"); !var_ok { panic(PE) }
-        if u64 > math.MaxUint32 { panic(PE) }
-        ip_addr := uint32(u64)
-
-        var ip_addr_net_id string
-        if ip_addr_net_id, var_ok = rows[0].UintString("v4ip_fk_v4net_id"); !var_ok { panic(PE) }
-
-
-        if dbnet == nil {
-          query = "SELECT"+
-                  " v4nets.*"+
-                  ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                             " FROM gn4rs WHERE"+
-                             " gn4r_fk_v4net_id=v4net_id"+
-                             " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                             "),0) as rights"+
-                  ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                             " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                             " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                             " AND v4r_fk_v4net_id IS NULL"+
-                             " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                             "), 0) AS r_rights"+
-                  " FROM v4nets INNER JOIN v4ips ON v4ip_fk_v4net_id = v4net_id WHERE v4ip_id = ?"
-          if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
-          if len(rows) != 1 { panic("No such IP") }
-
-          dbnet = rows[0]
-
-          if net_id, var_ok = dbnet.UintString("v4net_id"); !var_ok { panic(PE) }
-
-          if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-          if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-          dbnet_rights |= dbnet_r_rights
-
-          dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-          if dbnet_owner == user_id {
-            dbnet_rights = dbnet_rights | OWNER_RIGHTS
-          }
-
-          if user_is_admin {
-            dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-          }
-
-          query = "SELECT v4rs.*"+
-                  ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                            " FROM gr4rs WHERE"+
-                            " gr4r_fk_g_id IN("+user_groups_in+")"+
-                            " AND gr4r_fk_v4r_id=v4r_id"+
-                            "), 0) AS rights"+
-                  " FROM v4rs WHERE v4r_fk_v4net_id = ? ORDER BY v4r_start, v4r_id"
-          if dbnet_ranges_a, err = return_query_A(db, query, dbnet["v4net_id"]);
-          err != nil { panic(err) }
-
-          query = "SELECT ic_type, ic_regexp, ic_id FROM ics INNER JOIN n4cs ON nc_fk_ic_id=ic_id WHERE nc_fk_v4net_id=?"
-          if net_cols, err = return_query_M(db, query, "ic_id", dbnet["v4net_id"]); err != nil { panic(err) }
-        }
-
-        if ip_addr_net_id != net_id {
-          panic(fmt.Sprintf("Адрес из другой сети: %s != %s", ip_addr_net_id, net_id))
-        }
-
         if _, var_ok = net_cols[col_id]; !var_ok {
           panic("У сети нет такого поля, возможно оно было удалено другим пользователем. Перезагрузите страницу")
-        }
-
-        var ip_rights uint64
-        ip_rights |= dbnet_rights
-
-        for i, _ := range dbnet_ranges_a {
-
-          var range_rights uint64
-          if range_rights, var_ok = dbnet_ranges_a[i].Uint64("rights"); !var_ok { panic(PE) }
-
-          range_rights |= dbnet_rights
-          dbnet_ranges_a[i]["rights"] = range_rights
-
-          var range_start uint32
-          var range_stop uint32
-
-          if u64, var_ok = dbnet_ranges_a[i].Uint64("v4r_start"); !var_ok { panic(PE) }
-          if u64 > math.MaxUint32 { panic(PE) }
-          range_start = uint32(u64)
-
-          if u64, var_ok = dbnet_ranges_a[i].Uint64("v4r_stop"); !var_ok { panic(PE) }
-          if u64 > math.MaxUint32 { panic(PE) }
-          range_stop = uint32(u64)
-
-          if range_start > range_stop { panic(PE) }
-
-          if ip_addr >= range_start && ip_addr <= range_stop {
-            ip_rights |= range_rights
-            dbnet_ranges_a[i]["in_range"] = 1
-          }
         }
 
         if (ip_rights & R_EDIT_IP_VLAN) == 0 ||
@@ -1401,49 +1385,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       case "net":
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
         _ = prop
-        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
-        _ = obj_id
 
         if prop != "v4net_name" && prop != "v4net_descr" &&
            prop != "v4net_owner" && prop != "vlan" &&
         true { panic(fmt.Sprint("Bad property in queue item #", i)) }
 
-        query = "SELECT"+
-                " v4nets.*"+
-                ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                           " FROM gn4rs WHERE"+
-                           " gn4r_fk_v4net_id=v4net_id"+
-                           " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                           "),0) as rights"+
-                ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                           " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                           " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                           " AND v4r_fk_v4net_id IS NULL"+
-                           " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                           "), 0) AS r_rights"+
-                " FROM v4nets WHERE v4net_id=?"
-        if rows, err = return_query_A(db, query, obj_id); err != nil { panic(err) }
-        if len(rows) != 1 { panic("No such network") }
-
-        var _dbnet_rights uint64
-        var _dbnet_r_rights uint64
-        if _dbnet_rights, var_ok = rows[0].Uint64("rights"); !var_ok { panic(PE) }
-
-        if _dbnet_r_rights, var_ok = rows[0].Uint64("r_rights"); !var_ok { panic(PE) }
-
-        _dbnet_rights |= _dbnet_r_rights
-
-        _dbnet_owner, _ := rows[0].AnyString("v4net_owner")
-
-        if _dbnet_owner == user_id {
-          _dbnet_rights = _dbnet_rights | OWNER_RIGHTS
-        }
-
-        if user_is_admin {
-          _dbnet_rights = _dbnet_rights | ADMIN_RIGHTS
-        }
-
-        if (_dbnet_rights & R_MANAGE_NET) == 0 { panic(NoAccess()) }
+        if (dbnet_rights & R_MANAGE_NET) == 0 { panic(NoAccess()) }
 
       case "vdom":
         if !user_is_admin { panic(NoAccess()) }
@@ -1482,7 +1429,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           if vlan_fk_vd_id != vd_id { panic("Cannot update different vdoms at the same time") }
         }
 
-        vlan_rights := uint64(0)
+        vlan_rights := g_vlans_rights
 
         for _, r := range vd_ranges {
           var r_start uint64
@@ -1883,7 +1830,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           netrows[octet - first_octet]["cols"].([]M)[col_idx]["is_net"] = 1
 
           cell_net_last_addr := uint32(row_net | (0xFFFFFFFF >> m))
-          var net_rights uint64 = 0
+          var net_rights uint64 = g_nets_rights
           if user_is_admin {
             net_rights = net_rights | ADMIN_RIGHTS
           }
@@ -1938,6 +1885,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if dbnet_owner == user_id {
         dbnet_rights = dbnet_rights | OWNER_RIGHTS
       }
+
+      dbnet_rights |= g_nets_rights
 
       for i, _ := range ranges {
         range_rights := ranges[i]["_rights"].(uint64)
@@ -2009,6 +1958,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           if user_is_admin {
             vlan_rights |= ADMIN_VLAN_RIGHTS
           }
+
+          vlan_rights |= g_vlans_rights
 
           if (vlan_rights & R_VIEW_NET_IPS) == 0 {
             vlan_data["vd_name"] = "HIDDEN"
@@ -2108,23 +2059,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if dbnet_masklen != masklen { panic(PE) }
 
     var dbnet_rights uint64
-    if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-    var dbnet_r_rights uint64
-    if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-    dbnet_rights |= dbnet_r_rights
-
-    var dbnet_owner string
-    dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-    if dbnet_owner == user_id {
-      dbnet_rights = dbnet_rights | OWNER_RIGHTS
-    }
-
-    if user_is_admin {
-      dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-    }
+    if dbnet_rights, _, err = get_net_rights(nil, nil, "v", dbnet); err != nil { panic(err) }
 
     if (dbnet_rights & R_NAME) == 0 { panic(NoAccess()) }
     if (dbnet_rights & (R_VIEW_NET_INFO | R_VIEW_NET_IPS)) == 0 { panic(NoAccess()) }
@@ -2187,6 +2122,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         if user_is_admin { vlan_rights |= ADMIN_VLAN_RIGHTS }
 
+        vlan_rights |= g_vlans_rights
+
         if (vlan_rights & R_VIEW_NET_IPS) == 0 {
           dbnet_vlan_info_a[0]["vlan_name"] = "HIDDEN"
           dbnet_vlan_info_a[0]["vlan_descr"] = "HIDDEN"
@@ -2206,6 +2143,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           aux_userinfo[strconv.FormatUint(u64, 10)] = dbnet_userinfo_a[0]
         }
       }
+
+      dbnet_owner, _ := dbnet.AnyString("v4net_owner")
 
       if dbnet_owner != "" {
         var dbnet_ownerinfo_a []M
@@ -2304,6 +2243,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             if vlan_rights, var_ok = vlan_cache[vlan_id].(M).Uint64("rights"); !var_ok { panic(PE) }
 
             if user_is_admin { vlan_rights |= ADMIN_VLAN_RIGHTS }
+            vlan_rights |= g_vlans_rights
 
             if (vlan_rights & R_VIEW_NET_IPS) == 0 {
               vlan_cache[vlan_id].(M)["vlan_name"] = "HIDDEN"
@@ -2364,7 +2304,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       for ip_addr := nav_net; ip_addr <= dbnet_last_addr; ip_addr++ {
         addr_idx, addr_taken := addr_index[ip_addr]
-        var addr_rights uint64 = dbnet_rights
+        addr_rights := dbnet_rights
         addr_ranges := make([]M, len(dbnet_ranges_a))
 
         for i, _ := range dbnet_ranges_a {
@@ -2489,32 +2429,17 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if u64 != 0 { panic(PE) }
 
-    var rows []M
-    query = "SELECT"+
-            " v4nets.*"+
-            ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                       " FROM gn4rs WHERE"+
-                       " gn4r_fk_v4net_id=v4net_id"+
-                       " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                       "),0) as rights"+
-            ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                       " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                       " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                       " AND v4r_fk_v4net_id IS NULL"+
-                       " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                       "), 0) AS r_rights"+
-            " FROM v4nets WHERE v4net_addr <=? AND v4net_last >= ?"
-    if rows, err = return_query_A(tx, query, take_ip, take_ip); err != nil { panic(err) }
-    if len(rows) != 1 {
-      out["gone"] = 1
-      goto OUT
-    }
+    var dbnet_rights uint64
+    var ip_rights uint64
+
+    var dbnet M
+
+    if ip_rights, dbnet, err = get_addr_rights(tx, take_ip, "4", nil); err != nil { panic(err) }
+    if dbnet_rights, _, err = get_net_rights(nil, nil, "4", dbnet); err != nil { panic(err) }
 
     var dbnet_addr uint32
     var dbnet_last_addr uint32
     var masklen uint32
-
-    dbnet := rows[0]
 
     if u64, var_ok = dbnet.Uint64("v4net_addr"); !var_ok { panic(PE) }
     if u64 > math.MaxUint32 { panic(PE) }
@@ -2531,25 +2456,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if masklen <= 30 && take_ip == dbnet_addr { panic(PE) }
     if masklen <= 30 && take_ip == dbnet_last_addr { panic(PE) }
 
-    var dbnet_rights uint64
-    if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-    var dbnet_r_rights uint64
-    if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-    dbnet_rights |= dbnet_r_rights
-
-    var dbnet_owner string
-    dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-    if dbnet_owner == user_id {
-      dbnet_rights = dbnet_rights | OWNER_RIGHTS
-    }
-
-    if user_is_admin {
-      dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-    }
-
     if (dbnet_rights & R_NAME) == 0 { panic(NoAccess()) }
     if (dbnet_rights & (R_VIEW_NET_INFO | R_VIEW_NET_IPS)) == 0 { panic(NoAccess()) }
 
@@ -2564,10 +2470,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             " FROM v4rs WHERE v4r_fk_v4net_id = ? ORDER BY v4r_start, v4r_id"
     if dbnet_ranges_a, err = return_query_A(db, query, dbnet["v4net_id"]);
     err != nil { panic(err) }
-
-    var ip_rights uint64
-
-    ip_rights |= dbnet_rights
 
     var ranges_check string
 
@@ -2594,7 +2496,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if range_start > range_stop { panic(PE) }
 
       if take_ip >= range_start && take_ip <= range_stop {
-        ip_rights |= range_rights
         dbnet_ranges_a[i]["in_range"] = 1
       }
     }
@@ -2617,6 +2518,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ",ts=?"+
             ",fk_u_id=?"
     if dbres, err = tx.Exec(query, take_ip, dbnet["v4net_id"], ts, user_id); err != nil { panic(err) }
+
+    var rows []M
 
     query = "SELECT * from v4ips WHERE v4ip_addr=?"
     if rows, err = return_query_A(tx, query, take_ip); err != nil { panic(err) }
@@ -2668,7 +2571,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if object, err = get_p_string(q, "object", "^(?:v4net_acl)$"); err != nil { panic(err) }
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
 
-    var dbnet M
     var dbnet_rights uint64
 
     var rquery string
@@ -2680,44 +2582,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     switch object {
     case "v4net_acl":
-      var rows []M
-      query = "SELECT"+
-              " v4nets.*"+
-              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                         " FROM gn4rs WHERE"+
-                         " gn4r_fk_v4net_id=v4net_id"+
-                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                         "),0) as rights"+
-              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                         " AND v4r_fk_v4net_id IS NULL"+
-                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                         "), 0) AS r_rights"+
-              " FROM v4nets WHERE v4net_id=?"
-      if rows, err = return_query_A(db, query, object_id); err != nil { panic(err) }
-      if len(rows) != 1 {
-        panic("Сеть не существует. Обновите страницу.")
-      }
-      dbnet = rows[0]
 
-      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-      var dbnet_r_rights uint64
-      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-      dbnet_rights |= dbnet_r_rights
-
-      var dbnet_owner string
-      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-      if dbnet_owner == user_id {
-        dbnet_rights = dbnet_rights | OWNER_RIGHTS
-      }
-
-      if user_is_admin {
-        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-      }
+      if dbnet_rights, _, err = get_net_rights(db, object_id, "4", nil); err != nil { panic(err) }
 
       if (dbnet_rights & R_NAME) == 0 { panic(NoAccess()) }
       if (dbnet_rights & R_VIEW_NET_INFO) == 0 { panic(NoAccess()) }
@@ -2780,7 +2646,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
     } ()
 
-    var dbnet M
     var dbnet_rights uint64
 
     var rquery string
@@ -2797,44 +2662,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       object_key = "gn4r_fk_v4net_id"
       right_mask_field = "gn4r_rmask"
 
-      var rows []M
-      query = "SELECT"+
-              " v4nets.*"+
-              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                         " FROM gn4rs WHERE"+
-                         " gn4r_fk_v4net_id=v4net_id"+
-                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                         "),0) as rights"+
-              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                         " AND v4r_fk_v4net_id IS NULL"+
-                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                         "), 0) AS r_rights"+
-              " FROM v4nets WHERE v4net_id=?"
-      if rows, err = return_query_A(tx, query, object_id); err != nil { panic(err) }
-      if len(rows) != 1 {
-        panic("Сеть не существует. Обновите страницу.")
-      }
-      dbnet = rows[0]
-
-      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-      var dbnet_r_rights uint64
-      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-      dbnet_rights |= dbnet_r_rights
-
-      var dbnet_owner string
-      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-      if dbnet_owner == user_id {
-        dbnet_rights = dbnet_rights | OWNER_RIGHTS
-      }
-
-      if user_is_admin {
-        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-      }
+      if dbnet_rights, _, err = get_net_rights(tx, object_id, "4", nil); err != nil { panic(err) }
 
       for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
         if (dbnet_rights & r) == 0 { panic(NoAccess()) }
@@ -2945,26 +2773,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       object_key = "gr4r_fk_v4r_id"
       right_mask_field = "gr4r_rmask"
 
-      var rows []M
-      query = "SELECT"+
-              " v4nets.*"+
-              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                         " FROM gn4rs WHERE"+
-                         " gn4r_fk_v4net_id=v4net_id"+
-                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                         "),0) as rights"+
-              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                         " AND v4r_fk_v4net_id IS NULL"+
-                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                         "), 0) AS r_rights"+
-              " FROM v4nets WHERE v4net_id=?"
-      if rows, err = return_query_A(tx, query, net_id); err != nil { panic(err) }
-      if len(rows) != 1 {
-        panic("Сеть не существует. Обновите страницу.")
-      }
-      dbnet = rows[0]
+      if dbnet_rights, dbnet, err = get_net_rights(tx, object_id, "4", nil); err != nil { panic(err) }
 
       var dbnet_addr uint64
       var dbnet_last_addr uint64
@@ -2973,24 +2782,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if dbnet_last_addr, var_ok = dbnet.Uint64("v4net_last"); !var_ok { panic(PE) }
 
       if uint64(r_start.(uint32)) < dbnet_addr || uint64(r_stop.(uint32)) > dbnet_last_addr { panic("Range is out of network bounds") }
-
-      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-      var dbnet_r_rights uint64
-      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-      dbnet_rights |= dbnet_r_rights
-
-      var dbnet_owner string
-      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-      if dbnet_owner == user_id {
-        dbnet_rights = dbnet_rights | OWNER_RIGHTS
-      }
-
-      if user_is_admin {
-        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-      }
 
       for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
         if (dbnet_rights & r) == 0 { panic(NoAccess()) }
@@ -3135,7 +2926,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
 
     var net_id string
-    var dbnet M
     var dbnet_rights uint64
 
     var rquery string
@@ -3170,43 +2960,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       if net_id, var_ok = rows[0].UintString("v4r_fk_v4net_id"); !var_ok { panic(PE) }
 
-      query = "SELECT"+
-              " v4nets.*"+
-              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                         " FROM gn4rs WHERE"+
-                         " gn4r_fk_v4net_id=v4net_id"+
-                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                         "),0) as rights"+
-              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                         " AND v4r_fk_v4net_id IS NULL"+
-                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                         "), 0) AS r_rights"+
-              " FROM v4nets WHERE v4net_id=?"
-      if rows, err = return_query_A(db, query, net_id); err != nil { panic(err) }
-      if len(rows) != 1 {
-        panic("Сеть не существует. Обновите страницу.")
-      }
-      dbnet = rows[0]
-
-      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-      var dbnet_r_rights uint64
-      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-      dbnet_rights |= dbnet_r_rights
-
-      var dbnet_owner string
-      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-      if dbnet_owner == user_id {
-        dbnet_rights = dbnet_rights | OWNER_RIGHTS
-      }
-
-      if user_is_admin {
-        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-      }
+      if dbnet_rights, _, err = get_net_rights(db, net_id, "4", nil); err != nil { panic(err) }
 
       for _, r := range [...]uint64{R_NAME, R_VIEW_NET_IPS} {
         if (dbnet_rights & r) == 0 { panic(NoAccess()) }
@@ -3286,7 +3040,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
 
     var net_id string
-    var dbnet M
     var dbnet_rights uint64
 
 
@@ -3308,43 +3061,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       if net_id, var_ok = rows[0].UintString("v4r_fk_v4net_id"); !var_ok { panic(PE) }
 
-      query = "SELECT"+
-              " v4nets.*"+
-              ", IFNULL((SELECT BIT_OR(gn4r_rmask)"+
-                         " FROM gn4rs WHERE"+
-                         " gn4r_fk_v4net_id=v4net_id"+
-                         " AND gn4r_fk_g_id IN("+user_groups_in+")"+
-                         "),0) as rights"+
-              ", IFNULL((SELECT BIT_OR(gr4r_rmask)"+
-                         " FROM gr4rs INNER JOIN v4rs ON gr4r_fk_v4r_id=v4r_id"+
-                         " WHERE gr4r_fk_g_id IN("+user_groups_in+")"+
-                         " AND v4r_fk_v4net_id IS NULL"+
-                         " AND v4r_start <= v4net_addr AND v4r_stop >= v4net_last"+
-                         "), 0) AS r_rights"+
-              " FROM v4nets WHERE v4net_id=?"
-      if rows, err = return_query_A(db, query, net_id); err != nil { panic(err) }
-      if len(rows) != 1 {
-        panic("Сеть не существует. Обновите страницу.")
-      }
-      dbnet = rows[0]
-
-      if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-      var dbnet_r_rights uint64
-      if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-      dbnet_rights |= dbnet_r_rights
-
-      var dbnet_owner string
-      dbnet_owner, _ = dbnet.AnyString("v4net_owner")
-
-      if dbnet_owner == user_id {
-        dbnet_rights = dbnet_rights | OWNER_RIGHTS
-      }
-
-      if user_is_admin {
-        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-      }
+      if dbnet_rights, _, err = get_net_rights(db, net_id, "4", nil); err != nil { panic(err) }
 
       for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
         if (dbnet_rights & r) == 0 { panic(NoAccess()) }
@@ -3383,7 +3100,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var v string
     if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
 
-    var dbnet M
     var dbnet_rights uint64
 
 
@@ -3396,45 +3112,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
     } ()
 
-    var rows []M
-
-    query = "SELECT"+
-            " v"+v+"nets.*"+
-            ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
-                       " FROM gn"+v+"rs WHERE"+
-                       " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
-                       " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
-                       "),0) as rights"+
-            ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
-                       " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
-                       " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
-                       " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
-                       " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
-                       "), 0) AS r_rights"+
-            " FROM v"+v+"nets WHERE v"+v+"net_id=?"
-    if rows, err = return_query_A(tx, query, net_id); err != nil { panic(err) }
-    if len(rows) != 1 {
-      panic("Сеть не существует. Обновите страницу.")
-    }
-    dbnet = rows[0]
-
-    if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-    var dbnet_r_rights uint64
-    if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-    dbnet_rights |= dbnet_r_rights
-
-    var dbnet_owner string
-    dbnet_owner, _ = dbnet.AnyString("v"+v+"net_owner")
-
-    if dbnet_owner == user_id {
-      dbnet_rights = dbnet_rights | OWNER_RIGHTS
-    }
-
-    if user_is_admin {
-      dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-    }
+    if dbnet_rights, _, err = get_net_rights(tx, net_id, v, nil); err != nil { panic(err) }
 
     for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
       if (dbnet_rights & r) == 0 { panic(NoAccess()) }
@@ -3471,69 +3149,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
     } ()
 
-    query = "SELECT"+
-            " v"+v+"nets.*"+
-            ", v"+v+"ip_addr as ip_addr"+
-            ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
-                       " FROM gn"+v+"rs WHERE"+
-                       " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
-                       " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
-                       "),0) as rights"+
-            ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
-                       " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
-                       " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
-                       " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
-                       " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
-                       "), 0) AS r_rights"+
-            " FROM v"+v+"nets INNER JOIN v"+v+"ips ON v"+v+"net_id=v"+v+"ip_fk_v"+v+"net_id WHERE v"+v+"ip_id=?"
-    var rows []M
-    if rows, err = return_query_A(db, query, ip_id); err != nil { panic(err) }
-    if len(rows) != 1 {
-      panic("Адрес или сеть уже были удалены. Обновите страницу!")
-    }
+    var ip_rights uint64
+    if ip_rights, _, err = get_ip_rights(tx, ip_id, v, nil); err != nil { panic(err) }
 
-    dbnet := rows[0]
-
-    var net_id uint64
-    if net_id, var_ok = dbnet.Uint64("v"+v+"net_id"); !var_ok { panic(PE) }
-
-    var ip_rights uint64 = 0
-
-    if ip_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-    var dbnet_r_rights uint64
-    if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-    ip_rights |= dbnet_r_rights
-
-    var dbnet_owner string
-    dbnet_owner, _ = dbnet.AnyString("v"+v+"net_owner")
-
-    if dbnet_owner == user_id {
-      ip_rights |= OWNER_RIGHTS
-    }
-
-    if user_is_admin {
-      ip_rights |= ADMIN_RIGHTS
-    }
-
-    for _, r := range [...]uint64{R_NAME, R_VIEW_NET_IPS} {
-      if (ip_rights & r) == 0 { panic(NoAccess()) }
-    }
-
-    query = "SELECT IFNULL(BIT_OR(gr"+v+"r_rmask), CAST(0 AS UNSIGNED)) as rights"+
-            " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
-            " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
-            " AND v"+v+"r_fk_v"+v+"net_id=?"+
-            " AND v"+v+"r_start <= ? AND v"+v+"r_stop >= ?"
-    if u64, err = must_return_one_uint(tx, query, net_id, dbnet["ip_addr"], dbnet["ip_addr"]); err != nil {
-      //panic(err)
-      panic(var_dump(err.Error(), query, net_id, dbnet["ip_addr"], dbnet["ip_addr"]))
-    }
-
-    ip_rights |= u64
-
-    if (ip_rights & R_EDIT_IP_VLAN) == 0 ||
+    if (ip_rights & R_VIEW_NET_IPS) == 0 ||
+       (ip_rights & R_EDIT_IP_VLAN) == 0 ||
        ((ip_rights & R_DENYIP) > 0 &&
         (ip_rights & R_IGNORE_R_DENY) == 0) ||
     false {
@@ -3650,9 +3270,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var off []string
     if off, err = get_p_array(q, "off", g_num_reg); err != nil { panic(err) }
 
-    var dbnet M
     var dbnet_rights uint64
-
 
     tx, tx_err := db.Begin()
     if tx_err != nil { panic(tx_err) }
@@ -3663,45 +3281,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
     } ()
 
-    var rows []M
-
-    query = "SELECT"+
-            " v"+v+"nets.*"+
-            ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
-                       " FROM gn"+v+"rs WHERE"+
-                       " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
-                       " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
-                       "),0) as rights"+
-            ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
-                       " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
-                       " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
-                       " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
-                       " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
-                       "), 0) AS r_rights"+
-            " FROM v"+v+"nets WHERE v"+v+"net_id=?"
-    if rows, err = return_query_A(tx, query, net_id); err != nil { panic(err) }
-    if len(rows) != 1 {
-      panic("Сеть не существует. Обновите страницу.")
-    }
-    dbnet = rows[0]
-
-    if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-    var dbnet_r_rights uint64
-    if dbnet_r_rights, var_ok = dbnet.Uint64("r_rights"); !var_ok { panic(PE) }
-
-    dbnet_rights |= dbnet_r_rights
-
-    var dbnet_owner string
-    dbnet_owner, _ = dbnet.AnyString("v"+v+"net_owner")
-
-    if dbnet_owner == user_id {
-      dbnet_rights = dbnet_rights | OWNER_RIGHTS
-    }
-
-    if user_is_admin {
-      dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-    }
+    if dbnet_rights, _, err = get_net_rights(tx, net_id, v, nil); err != nil { panic(err) }
 
     for _, r := range [...]uint64{R_NAME, R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET} {
       if (dbnet_rights & r) == 0 { panic(NoAccess()) }
@@ -3782,6 +3362,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         u64 |= ADMIN_VLAN_RIGHTS
       }
 
+      u64 |= g_vlans_rights
+
       if (u64 & R_VIEW_NET_IPS) > 0 {
         row["rights"] = u64
         ret = append(ret, row)
@@ -3816,6 +3398,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if user_is_admin {
       u64 |= ADMIN_VLAN_RIGHTS
     }
+
+    u64 |= g_vlans_rights
 
     if (u64 & R_VIEW_NET_IPS) == 0 { panic(NoAccess()) }
 
@@ -3853,6 +3437,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if user_is_admin {
         vlan_rights |= ADMIN_VLAN_RIGHTS
       }
+
+      vlan_rights |= g_vlans_rights
 
       vlan_ranges := make([]M, len(dbranges))
 
@@ -3989,7 +3575,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if u64 > 0 { panic("VLAN уже занят, обновите страницу") }
 
     ranges_check := ""
-    vlan_rights := uint64(0)
+    vlan_rights := g_vlans_rights
 
     query = "SELECT vrs.*"+
             ", IFNULL((SELECT BIT_OR(gvrr_rmask)"+
@@ -4080,7 +3666,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if vd_ranges, err = return_query_A(db, query, vlan["vlan_fk_vd_id"]); err != nil { panic(err) }
 
-    vlan_rights := uint64(0)
+    vlan_rights := g_vlans_rights
 
     for _, r := range vd_ranges {
       var r_start uint64
@@ -4266,7 +3852,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if rows, err = return_query_A(db, query, vd_id); err != nil { panic(err) }
 
-    vd_rights := uint64(0)
+    vd_rights := g_vlans_rights
 
     for _, row := range rows {
       var r_rights uint64
@@ -4577,6 +4163,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         tag_rights |= ADMIN_TAG_RIGHTS
       }
 
+      tag_rights |= g_tags_rights
+
       tag_data["rights"] = tag_rights
 
       if parent_id == "0" {
@@ -4629,9 +4217,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     tags["children"] = make([]M, 0)
 
     tags["data"] = make(M)
-    tags["data"].(M)["rights"] = uint64(0)
+    tags["data"].(M)["rights"] = uint64(g_tags_rights)
     if user_is_admin {
-      tags["data"].(M)["rights"] = uint64(ADMIN_TAG_RIGHTS)
+      tags["data"].(M)["rights"] = uint64(ADMIN_TAG_RIGHTS | g_tags_rights)
     }
 
     tags["data"].(M)["flags"] = F_ALLOW_LEAFS | F_DENY_SELECT
@@ -4674,7 +4262,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var tag_rights uint64
     if tag_rights, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
 
-    var parent_rights uint64 = 0
+    var parent_rights uint64 = g_tags_rights
     if tag["tag_fk_tag_id"] != nil {
       parent_id, _ := tag.UintString("tag_fk_tag_id")
       if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
@@ -4743,7 +4331,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var tag_rights uint64
     if tag_rights, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
 
-    var parent_rights uint64 = 0
+    var parent_rights uint64 = g_tags_rights
     if tag["tag_fk_tag_id"] != nil {
       parent_id, _ := tag.UintString("tag_fk_tag_id")
       if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
@@ -4762,6 +4350,54 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if used > 0 && !can_manage { panic("Только менеджер может удалять используемые теги") }
 
+    //check rights for affected objects
+    //nets v4
+
+    var rows []M
+
+    for _, v := range [...]string{"4","6"} {
+      query = "SELECT v"+v+"ntag_fk_v"+v+"net_id as net_id FROM v"+v+"ntags WHERE v"+v+"ntag_fk_tag_id=?"
+      if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
+
+      for _, row := range rows {
+        var net_id string
+        if net_id, var_ok = row.UintString("net_id"); !var_ok { panic(PE) }
+
+        var net_rights uint64
+        if net_rights, _, err = get_net_rights(db, net_id, v, nil); err != nil { panic(err) }
+
+        if (net_rights & R_MANAGE_NET) == 0 { panic("Тег связан с сетью, к которой у Вас нет доступа на изменение. v"+v+"net_id="+net_id) }
+      }
+
+      query = "SELECT iv_fk_v"+v+"ip_id as ip_id FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE ic_type='tag'"+
+              " AND iv_value=?"
+
+      if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
+
+      for _, row := range rows {
+        var ip_id string
+        if ip_id, var_ok = row.UintString("ip_id"); !var_ok { panic(PE) }
+
+        var ip_rights uint64
+        if ip_rights, _, err = get_ip_rights(db, ip_id, v, nil); err != nil { panic(err) }
+
+        if (ip_rights & R_EDIT_IP_VLAN) == 0 ||
+           (ip_rights & R_VIEW_NET_IPS) == 0 ||
+           ((ip_rights & R_DENYIP) > 0 &&
+            (ip_rights & R_IGNORE_R_DENY) == 0) ||
+        false { panic("Тег связан с IP, к которому у Вас нет доступа на изменение. v"+v+"ip_id="+ip_id) }
+      }
+
+
+      if !user_is_admin {
+        query = "SELECT COUNT(*) FROM v"+v+"otags WHERE v"+v+"otag_fk_tag_id=?"
+        if u64, err = must_return_one_uint(db, query, tag_id); err != nil { panic(err) }
+        if u64 > 0 { panic("Тег связан с внешним объектом, к которому у Вас нет доступа.") }
+      }
+
+    } //4,6
+
+//
     var delete_tag_tree func(interface{}, interface{}, int) (error)
     delete_tag_tree = func(db interface{}, tag_id interface{}, counter int) (error) {
       if counter > MAX_TREE_LEN { return errors.New("Tag tree loop detected") }
@@ -4806,10 +4442,18 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var p_id interface{}
     var tag_parent_id string
 
+    var parent_flags uint64
+    var parent_rights uint64
+
     if parent_id == "#" {
       tag_parent_id = "0"
       p_id = nil
-      if !user_is_admin { panic(NoAccess()) }
+
+      parent_flags = F_ALLOW_LEAFS
+      parent_rights = g_tags_rights
+      if user_is_admin {
+        parent_rights |= ADMIN_TAG_RIGHTS
+      }
 
     } else {
       tag_parent_id = parent_id
@@ -4818,16 +4462,14 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       var parent_node M
       if parent_node, err = get_tag(db, parent_id); err != nil { panic(err) }
 
-      var parent_flags uint64
       if parent_flags, var_ok = parent_node.Uint64("tag_flags"); !var_ok { panic(PE) }
 
-      if (parent_flags & F_ALLOW_LEAFS) == 0 { panic("Родительский тег не допускает создание потомков. Проверьте флаги") }
-
-      var parent_rights uint64
       if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
-      if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
 
     }
+
+    if (parent_flags & F_ALLOW_LEAFS) == 0 { panic("Родительский тег не допускает создание потомков. Проверьте флаги") }
+    if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
 
     var flags interface {}
 
@@ -4906,6 +4548,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if tag["tag_fk_tag_id"] != nil {
       if old_parent_rights, err = get_tag_rights(db, tag["tag_fk_tag_id"], 0); err != nil { panic(err) }
     } else {
+      old_parent_rights = g_tags_rights
       if user_is_admin { old_parent_rights |= ADMIN_TAG_RIGHTS }
     }
 
@@ -4916,6 +4559,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if new_parent_id != nil {
       if new_parent_rights, err = get_tag_rights(db, new_parent_id, 0); err != nil { panic(err) }
     } else {
+      new_parent_rights = g_tags_rights
       if user_is_admin { new_parent_rights |= ADMIN_TAG_RIGHTS }
     }
 

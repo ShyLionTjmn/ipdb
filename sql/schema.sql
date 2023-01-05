@@ -256,6 +256,9 @@ CREATE TABLE v4ips(
 CREATE TABLE v4ntags (
   v4ntag_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
   v4ntag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_u_id	BIGINT UNSIGNED,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   UNIQUE KEY (v4ntag_fk_v4net_id, v4ntag_fk_tag_id),
   FOREIGN KEY (v4ntag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
   FOREIGN KEY (v4ntag_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
@@ -300,6 +303,9 @@ CREATE TABLE v6ips(
 CREATE TABLE v6ntags (
   v6ntag_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
   v6ntag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_u_id	BIGINT UNSIGNED,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   UNIQUE KEY (v6ntag_fk_v6net_id, v6ntag_fk_tag_id),
   FOREIGN KEY (v6ntag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
   FOREIGN KEY (v6ntag_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
@@ -522,6 +528,9 @@ CREATE TABLE v4oobs (
 CREATE TABLE v4otags (
   v4otag_fk_v4oob_id	BIGINT UNSIGNED NOT NULL,
   v4otag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_u_id	BIGINT UNSIGNED,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   UNIQUE KEY (v4otag_fk_v4oob_id, v4otag_fk_tag_id),
   FOREIGN KEY (v4otag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
   FOREIGN KEY (v4otag_fk_v4oob_id) REFERENCES v4oobs(v4oob_id) ON UPDATE CASCADE ON DELETE CASCADE
@@ -544,7 +553,22 @@ CREATE TABLE v6oobs (
 CREATE TABLE v6otags (
   v6otag_fk_v6oob_id	BIGINT UNSIGNED NOT NULL,
   v6otag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_u_id	BIGINT UNSIGNED,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   UNIQUE KEY (v6otag_fk_v6oob_id, v6otag_fk_tag_id),
   FOREIGN KEY (v6otag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
   FOREIGN KEY (v6otag_fk_v6oob_id) REFERENCES v6oobs(v6oob_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE glrs (
+  glr_object  VARCHAR(64) NOT NULL,
+  glr_fk_g_id     BIGINT UNSIGNED NOT NULL,
+  glr_rmask   INTEGER UNSIGNED NOT NULL COMMENT 'bitmask: view http_server.go for details',
+  ts		BIGINT UNSIGNED NOT NULL,
+  fk_u_id	BIGINT UNSIGNED,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
+  FOREIGN KEY (glr_fk_g_id) REFERENCES gs(g_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY (glr_object, glr_fk_g_id),
+  tc      TINYINT COMMENT 'global rights for nets,vlans,tags'
 );

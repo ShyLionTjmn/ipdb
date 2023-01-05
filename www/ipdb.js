@@ -54,30 +54,6 @@ const ADMIN_GROUP = "usr_netapp_ipdb_appadmins";
 const F_ALLOW_LEAFS = 1;
 */
 
-$.jstree.plugins.addHTML = function (options, parent) {
-    this.redraw_node = function(obj, deep,
-                                callback, force_draw) {
-        obj = parent.redraw_node.call(
-            this, obj, deep, callback, force_draw
-        );
-        if (obj) {
-            var node = this.get_node(jQuery(obj).attr('id'));
-            if (node && 
-                node.data &&
-                ( "addHTML" in node.data ) ) {
-                jQuery(obj).append(
-                    "<div style='margin-left: 50px'>" +
-                        node.data.addHTML +
-                    "</div>"
-                );
-            }
-        }
-        return obj;
-    };
-};
-
-$.jstree.defaults.addHTML = {};
-
 let r_keys = keys(g_rights);
 r_keys.sort(function(a, b) { return Number(a) - Number(b); });
 
@@ -6717,6 +6693,7 @@ function actionTags() {
 
                  run_query({"action": "set_tag_rights", "rights": rights_index, "id": String(node['id'])}, function(res) {
                    node['data']['orig_groups_rights'] = new_rights;
+                   instance.redraw_node(node, false, false, false);
                  });
                };
  
@@ -6989,7 +6966,7 @@ function actionTags() {
      .appendTo( workarea )
     ;
 
-    let tree_plugins = [ "state", "search", "dnd", "types", "unique" ];
+    let tree_plugins = [ "state", "search", "dnd", "types", "unique", "myplugin" ];
 
     tree.jstree({
       "core": {
@@ -7246,6 +7223,7 @@ function actionTags() {
               if(node['data']['orig_flags'] != flags) {
                 run_query({"action": "set_tag_flags", "id": String(node['id']), "flags": String(flags)}, function(res) {
                   node['data']['orig_flags'] = flags;
+                  instance.redraw_node(node, false, false, false);
                 });
               };
             })
@@ -7306,6 +7284,7 @@ function actionTags() {
        run_query({"action": "move_tag", "id": String(node['id']),
                   "new_parent": String(node['parent']), "sort": nodes_index,
                  }, function(res) {
+         instance.redraw(true);
        });
      })
      .on("rename_node.jstree", function (e, data) {
@@ -7388,6 +7367,7 @@ function actionTags() {
            };
          };
 
+         instance.redraw(true);
          $(".tree").trigger("select_node.jstree");
 
        });
@@ -7411,4 +7391,49 @@ function actionTags() {
   });
 };
 
-var g_counter = 0;
+$.jstree.plugins.myplugin = function (options, parent) {
+  this.redraw_node = function(obj, deep, callback, force_draw) {
+    obj = parent.redraw_node.call(this, obj, deep, callback, force_draw);
+    if (obj) {
+      var node = this.get_node($(obj).attr('id'));
+      if (node && 
+          node.data
+      ) {
+        let tag_label = $(obj).find("a").first();
+        tag_label.title(node['data']['descr']);
+        let labels  = $([]);
+        if(node['data']['groups_rights'] !== undefined && node['data']['groups_rights'].length > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-users"]).css({"margin-left": "0.5em", "color": "darkblue"})
+            .title("Заданы права")
+          );
+        };
+        if((node['data']['flags'] & F_ALLOW_LEAFS) > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-structure"]).css({"margin-left": "0.5em", "color": "darkgreen"})
+            .title("Допускаются дочерние теги")
+          );
+        };
+        if((node['data']['flags'] & F_DENY_SELECT) > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-forbidden"]).css({"margin-left": "0.5em", "color": "darkorange"})
+            .title("Запрещен к выбору в качестве значения")
+          );
+        };
+        if(node['data']['used'] > 0 || node['data']['used_children'] > 0) {
+          labels = labels.add( $(LABEL).text(String(node['data']['used'])+":"+String(node['data']['used_children']))
+            .title("Используется в "+node['data']['used']+" объектах\n"+
+                   "Дочерние теги используются в "+node['data']['used_children']+" объектах"
+            )
+            .css({"margin-left": "0.5em", "color": "black", "font-size": "x-small", "vertical-align": "top"})
+          );
+        };
+        labels.insertAfter( tag_label );
+      };
+    };
+    return obj;
+  };
+};
+
+$.jstree.defaults.myplugin = {};
+
