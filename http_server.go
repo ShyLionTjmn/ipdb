@@ -22,6 +22,7 @@ import (
   "github.com/davecgh/go-spew/spew"
   "database/sql"
   _ "github.com/go-sql-driver/mysql"
+  "golang.org/x/exp/slices"
 )
 
 const (
@@ -36,7 +37,8 @@ const (
 
 const (
   F_ALLOW_LEAFS uint64 = 1 << iota // allow to create leafs off non-root tag
-  F_DENY_SELECT
+  F_DENY_SELECT // deny selection as value
+  F_DISPLAY // display in root-> ... -> final_tag chain
 )
 
 var g_rights map[uint64]M
@@ -134,6 +136,12 @@ func init() {
   g_tag_flags[F_DENY_SELECT]["descr"] = "Запретить выбирать тег для значения, например для родительского тега"
   g_tag_flags[F_DENY_SELECT]["required_by"] = [...]uint64{}
   g_tag_flags[F_DENY_SELECT]["conflict_with"] = [...]uint64{}
+
+  g_tag_flags[F_DISPLAY] = make(M)
+  g_tag_flags[F_DISPLAY]["label"] = "ВклЦеп"
+  g_tag_flags[F_DISPLAY]["descr"] = "Отображать в цепочке Корневой-> ... -> Конечный тег"
+  g_tag_flags[F_DISPLAY]["required_by"] = [...]uint64{}
+  g_tag_flags[F_DISPLAY]["conflict_with"] = [...]uint64{}
 }
 
 func containsDotFile(name string) bool {
@@ -522,6 +530,7 @@ func handleConsts(w http.ResponseWriter, req *http.Request) {
 
   w.Write([]byte(fmt.Sprintf("const F_ALLOW_LEAFS = %d;\n", F_ALLOW_LEAFS)))
   w.Write([]byte(fmt.Sprintf("const F_DENY_SELECT = %d;\n", F_DENY_SELECT)))
+  w.Write([]byte(fmt.Sprintf("const F_DISPLAY = %d;\n", F_DISPLAY)))
 
   jstr, jerr := json.MarshalIndent(g_rights, "", "  ")
   if jerr != nil {
@@ -847,12 +856,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if ret, ex := tags_cache[tag_id]; ex { return ret.(M), nil }
 
     query = "SELECT tags.*"+
-            ", CAST(((SELECT COUNT(*) FROM v4ntags WHERE v4ntag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM v6ntags WHERE v6ntag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM v4otags WHERE v4otag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM v6otags WHERE v6otag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE iv_value=tag_id AND ic_type='tag')+"+
-            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE iv_value=tag_id AND ic_type='tag')+"+
+            ", CAST(("+
+            " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+            " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+            " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+            " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
             " 0) AS UNSIGNED) AS used"+
             ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
                       " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
@@ -2205,6 +2215,32 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       out["net_cols"] = net_cols
 
       vlan_cache := make(M)
+
+      query = "SELECT tags.*"+
+              ", CAST(("+
+              " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+              " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+              " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+              " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+              " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+              " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+              " 0) AS UNSIGNED) AS used"+
+              ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                        " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+              " FROM tags"
+      if tags_cache, err = return_query_M(db, query, "tag_id"); err != nil { panic(err) }
+
+      for tag_id, _ := range tags_cache {
+        if u64, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
+        tags_cache[tag_id].(M)["rights"] = u64
+        if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
+          tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
+          tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+          tags_cache[tag_id].(M)["tag_api_name"] = nil
+        }
+      }
+
+      out["tags"] = tags_cache
 
       query = "SELECT * FROM v4ips WHERE v4ip_fk_v4net_id=? ORDER BY v4ip_addr ASC"
       var ips_a []M
@@ -4071,12 +4107,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var dbtags []M
     query = "SELECT tags.*"+
-            ", CAST(((SELECT COUNT(*) FROM v4ntags WHERE v4ntag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM v6ntags WHERE v6ntag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM v4otags WHERE v4otag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM v6otags WHERE v6otag_fk_tag_id=tag_id)+"+
-            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE iv_value=tag_id AND ic_type='tag')+"+
-            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE iv_value=tag_id AND ic_type='tag')+"+
+            ", CAST(("+
+            " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+            " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+            " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+            " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
             " 0) AS UNSIGNED) AS used"+
             ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
                       " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
@@ -4225,6 +4262,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     tags["data"].(M)["flags"] = F_ALLOW_LEAFS | F_DENY_SELECT
 
     for _, root_tag_index := range root_tags {
+      tags_list[root_tag_index]["type"] = "root"
       tags["children"] = append(tags["children"].([]M), tags_list[root_tag_index])
       if _, err = traverse_tree(tags_list[root_tag_index], 0, 0); err != nil { panic(err) }
     }
@@ -4248,9 +4286,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     out["aux_userinfo"] = aux_userinfo
     out["tags"] = tags
-    if user_is_admin {
-      if out["gs"], err = return_query_M(db, "SELECT * FROM gs", "g_id"); err != nil { panic(err) }
-    }
+    if out["gs"], err = return_query_M(db, "SELECT * FROM gs", "g_id"); err != nil { panic(err) }
 
   } else if action == "set_tag_descr" || action == "rename_tag" || action == "set_tag_flags" {
     var tag_id string
@@ -4355,8 +4391,20 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var rows []M
 
+    del_from_ips := make(map[string]map[string]string)
+    del_from_ips["4"] = make(map[string]string)
+    del_from_ips["6"] = make(map[string]string)
+
+    del_from_nets := make(map[string]map[string]string)
+    del_from_nets["4"] = make(map[string]string)
+    del_from_nets["6"] = make(map[string]string)
+
+    del_from_oobs := make(map[string]map[string]string)
+    del_from_oobs["4"] = make(map[string]string)
+    del_from_oobs["6"] = make(map[string]string)
+
     for _, v := range [...]string{"4","6"} {
-      query = "SELECT v"+v+"ntag_fk_v"+v+"net_id as net_id FROM v"+v+"ntags WHERE v"+v+"ntag_fk_tag_id=?"
+      query = "SELECT v"+v+"net_id as net_id, v"+v+"net_tags as tags ROM v"+v+"nets WHERE FIND_IN_SET(?,v"+v+"net_tags) > 0"
       if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
 
       for _, row := range rows {
@@ -4367,16 +4415,35 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if net_rights, _, err = get_net_rights(db, net_id, v, nil); err != nil { panic(err) }
 
         if (net_rights & R_MANAGE_NET) == 0 { panic("Тег связан с сетью, к которой у Вас нет доступа на изменение. v"+v+"net_id="+net_id) }
+
+        del_from_nets[v][net_id] = row["tags"].(string)
       }
 
-      query = "SELECT iv_fk_v"+v+"ip_id as ip_id FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE ic_type='tag'"+
-              " AND iv_value=?"
+      query = "SELECT v"+v+"oob_id as oob_id, v"+v+"oob_tags as tags ROM v"+v+"oobs WHERE FIND_IN_SET(?,v"+v+"oob_tags) > 0"
+      if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
+
+      for _, row := range rows {
+        var oob_id string
+        if oob_id, var_ok = row.UintString("oob_id"); !var_ok { panic(PE) }
+
+        if !user_is_admin {
+          panic("Тег связан с внешним объектом, к которому у Вас нет доступа.")
+        }
+
+        del_from_oobs[v][oob_id] = row["tags"].(string)
+      }
+
+      query = "SELECT iv_fk_v"+v+"ip_id as ip_id, iv_id, iv_value FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE (ic_type='tag' OR ic_type='multitag')"+
+              " AND FIND_IN_SET(?,iv_value) > 0"
 
       if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
 
       for _, row := range rows {
         var ip_id string
         if ip_id, var_ok = row.UintString("ip_id"); !var_ok { panic(PE) }
+
+        var iv_id string
+        if iv_id, var_ok = row.UintString("iv_id"); !var_ok { panic(PE) }
 
         var ip_rights uint64
         if ip_rights, _, err = get_ip_rights(db, ip_id, v, nil); err != nil { panic(err) }
@@ -4386,14 +4453,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
            ((ip_rights & R_DENYIP) > 0 &&
             (ip_rights & R_IGNORE_R_DENY) == 0) ||
         false { panic("Тег связан с IP, к которому у Вас нет доступа на изменение. v"+v+"ip_id="+ip_id) }
+
+        del_from_ips[v][iv_id] = row["iv_value"].(string)
       }
 
-
-      if !user_is_admin {
-        query = "SELECT COUNT(*) FROM v"+v+"otags WHERE v"+v+"otag_fk_tag_id=?"
-        if u64, err = must_return_one_uint(db, query, tag_id); err != nil { panic(err) }
-        if u64 > 0 { panic("Тег связан с внешним объектом, к которому у Вас нет доступа.") }
-      }
 
     } //4,6
 
@@ -4415,6 +4478,50 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     }
 
     if err = delete_tag_tree(db, tag_id, 0); err != nil { panic(err) }
+
+    for _, v := range [...]string{"4","6"} {
+      for id, old_value := range del_from_ips[v] {
+        list := strings.Split(old_value, ",")
+        index := slices.Index(list, tag_id)
+        if index < 0 { panic(PE) }
+        list = slices.Delete(list, index, index+1)
+
+        query = "UPDATE i"+v+"vs SET"+
+                " iv_value=?"+
+                ",ts=?"+
+                ",fk_u_id=?"+
+                " WHERE iv_id=?"
+        if _, err = db.Exec(query, strings.Join(list, ","), ts, user_id, id); err != nil { panic(err) }
+      }
+
+      for id, old_value := range del_from_nets[v] {
+        list := strings.Split(old_value, ",")
+        index := slices.Index(list, tag_id)
+        if index < 0 { panic(PE) }
+        list = slices.Delete(list, index, index+1)
+
+        query = "UPDATE v"+v+"nets SET"+
+                " v"+v+"net_tags=?"+
+                ",ts=?"+
+                ",fk_u_id=?"+
+                " WHERE v"+v+"net_id=?"
+        if _, err = db.Exec(query, strings.Join(list, ","), ts, user_id, id); err != nil { panic(err) }
+      }
+
+      for id, old_value := range del_from_nets[v] {
+        list := strings.Split(old_value, ",")
+        index := slices.Index(list, tag_id)
+        if index < 0 { panic(PE) }
+        list = slices.Delete(list, index, index+1)
+
+        query = "UPDATE v"+v+"oobs SET"+
+                " v"+v+"oob_tags=?"+
+                ",ts=?"+
+                ",fk_u_id=?"+
+                " WHERE v"+v+"oob_id=?"
+        if _, err = db.Exec(query, strings.Join(list, ","), ts, user_id, id); err != nil { panic(err) }
+      }
+    }
 
     out["done"] = 1
 
@@ -4649,6 +4756,222 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     }
 
     out["done"] = 1
+
+  } else if action == "get_tags_subtree" {
+    var root_api_name interface{} = nil
+    if v, ex := q["root_api_name"]; ex && v != nil {
+      if root_api_name, err = get_p_string(q, "root_api_name", g_api_name_reg); err != nil { panic(err) }
+    } else {
+      if !ex { panic("No root_api_name in query") }
+    }
+
+    users_index := make(map[string]bool)
+
+    var dbtags []M
+    query = "SELECT tags.*"+
+            ", CAST(("+
+            " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+            " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+            " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+            " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " 0) AS UNSIGNED) AS used"+
+            ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                      " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+            " FROM tags ORDER BY tag_sort"
+    if dbtags, err = return_query_A(db, query); err != nil { panic(err) }
+
+    tags_groups_rights := make(M)
+
+    var groups_rights_rows []M
+    query = "SELECT tgr_fk_tag_id, tgr_fk_g_id, tgr_rmask, ts, fk_u_id FROM tgrs ORDER BY tgr_fk_g_id"
+    if groups_rights_rows, err = return_query_A(db, query); err != nil { panic(err) }
+
+    for _, row := range groups_rights_rows {
+      var tag_id string
+      if tag_id, var_ok = row.UintString("tgr_fk_tag_id"); !var_ok { panic(PE) }
+      var g_id string
+      if g_id, var_ok = row.UintString("tgr_fk_g_id"); !var_ok { panic(PE) }
+      var rights string
+      if rights, var_ok = row.UintString("tgr_rmask"); !var_ok { panic(PE) }
+      m := make(M)
+
+      m["g_id"] = g_id
+      m["rights"] = rights
+      m["ts"] = row["ts"]
+      m["fk_u_id"] = row["fk_u_id"]
+
+      if _, ex := tags_groups_rights[tag_id]; !ex {
+        tags_groups_rights[tag_id] = make([]M, 0)
+      }
+
+      tags_groups_rights[tag_id] = append(tags_groups_rights[tag_id].([]M), m)
+    }
+
+    dbtags_index := make(map[string]int)
+
+    api_name_index := make(map[string]int)
+
+    root_tags := make([]int, 0)
+
+    tags_list := make([]M, len(dbtags))
+
+    for i, dbtag := range dbtags {
+
+      tags_list[i] = make(M)
+
+      var tag_id string
+      if tag_id, var_ok = dbtag.UintString("tag_id"); !var_ok { panic(fmt.Sprint("no tag_id in", dbtag)) }
+      tags_list[i]["id"] = tag_id
+
+      var parent_id string
+      if parent_id, var_ok = dbtag.UintString("tag_parent_id"); !var_ok { panic(fmt.Sprint("no parent_tag_id in", dbtag)) }
+      dbtag["_parent_id"] = parent_id
+
+      dbtags_index[tag_id] = i
+
+      if dbtag["tag_api_name"] != nil {
+        api_name_index[ dbtag["tag_api_name"].(string) ] = i
+      }
+
+      tag_data := make(M)
+
+      tag_data["fk_u_id"] = dbtag["fk_u_id"]
+      tag_data["ts"] = dbtag["ts"]
+      tag_data["name"] = dbtag["tag_name"]
+      tag_data["descr"] = dbtag["tag_descr"]
+      tag_data["flags"] = dbtag["tag_flags"]
+      tag_data["api_name"] = dbtag["tag_api_name"]
+
+      tag_data["orig_name"] = dbtag["tag_name"]
+      tag_data["orig_descr"] = dbtag["tag_descr"]
+      tag_data["orig_flags"] = dbtag["tag_flags"]
+      tag_data["orig_api_name"] = dbtag["tag_api_name"]
+
+      if u64, var_ok = dbtag.Uint64("used"); !var_ok { panic(PE) }
+      tag_data["used"] = u64
+      tag_data["used_children"] = uint64(0)
+
+      if _, ex := tags_groups_rights[tag_id]; !ex {
+        tag_data["groups_rights"] = make([]interface{}, 0)
+        tag_data["orig_groups_rights"] = make([]interface{}, 0)
+      } else {
+        tag_data["groups_rights"] = tags_groups_rights[tag_id]
+        tag_data["orig_groups_rights"] = tags_groups_rights[tag_id]
+      }
+
+      var tag_rights uint64
+      if tag_rights, var_ok = dbtag.Uint64("rights"); !var_ok { panic(PE) }
+
+      if user_is_admin {
+        tag_rights |= ADMIN_TAG_RIGHTS
+      }
+
+      tag_rights |= g_tags_rights
+
+      tag_data["rights"] = tag_rights
+
+      if parent_id == "0" {
+        if (tag_rights & R_VIEW_NET_IPS) > 0 {
+          root_tags = append(root_tags, i)
+        }
+      }
+
+      if _, ex := tags_list[i]["children"]; !ex {
+        tags_list[i]["children"] = make([]M, 0)
+      }
+
+      tags_list[i]["data"] = tag_data
+      tag_text := dbtag["tag_name"].(string)
+      if dbtag["tag_api_name"] != nil {
+        tag_text += " ("+dbtag["tag_api_name"].(string)+")"
+      }
+      tags_list[i]["text"] = tag_text
+    }
+
+
+    for i, dbtag := range dbtags {
+      parent_id := dbtag["_parent_id"].(string)
+
+      if parent_index, ex := dbtags_index[parent_id]; ex {
+        parent := tags_list[parent_index]
+
+        parent["children"] = append(parent["children"].([]M), tags_list[i])
+      }
+    }
+
+    var traverse_tree func(M,uint64,int) (uint64, error)
+    traverse_tree = func(t M, parent_rights uint64, c int) (uint64, error) {
+      if c > MAX_TREE_LEN { return 0, errors.New("Tags loop detected") }
+      used_children := uint64(0)
+      t["data"].(M)["rights"] = t["data"].(M)["rights"].(uint64) | parent_rights
+      for _, child := range t["children"].([]M) {
+        if fk_u_id, _ := child["data"].(M).UintString("fk_u_id"); fk_u_id != "" { users_index[fk_u_id] = true }
+        if child_used, e := traverse_tree(child, t["data"].(M)["rights"].(uint64), c+1); e != nil {
+          return 0, e
+        } else {
+          used_children += child_used
+        }
+      }
+      t["data"].(M)["used_children"] = used_children
+      return used_children+t["data"].(M)["used"].(uint64), nil
+    }
+
+    var tags M
+
+    if root_api_name == nil {
+      tags = make(M)
+      tags["children"] = make([]M, 0)
+
+      tags["data"] = make(M)
+      tags["data"].(M)["rights"] = uint64(g_tags_rights)
+      if user_is_admin {
+        tags["data"].(M)["rights"] = uint64(ADMIN_TAG_RIGHTS | g_tags_rights)
+      }
+
+      tags["data"].(M)["flags"] = F_ALLOW_LEAFS | F_DENY_SELECT
+
+      for _, root_tag_index := range root_tags {
+        tags_list[root_tag_index]["type"] = "root"
+        tags["children"] = append(tags["children"].([]M), tags_list[root_tag_index])
+        if _, err = traverse_tree(tags_list[root_tag_index], 0, 0); err != nil { panic(err) }
+      }
+    } else {
+      if _, ex := api_name_index[ root_api_name.(string) ]; !ex {
+        panic("В БД нет тега с API именем \""+root_api_name.(string)+"\"")
+      }
+
+      tags = tags_list[ api_name_index[ root_api_name.(string) ] ]
+      if dbtags[api_name_index[ root_api_name.(string) ] ]["tag_fk_tag_id"] == nil {
+        tags["type"] = "root"
+      }
+
+      if (tags["data"].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 { panic(NoAccess()) }
+
+      if _, err = traverse_tree(tags, 0, 0); err != nil { panic(err) }
+    }
+
+    user_ids := make([]string, len(users_index))
+    i := 0
+    for fk_u_id, _ := range users_index {
+      user_ids[i] = fk_u_id
+      i++
+    }
+
+    var aux_userinfo M
+
+    if len(user_ids) > 0 {
+      if aux_userinfo, err = return_query_M(db, "SELECT * FROM us WHERE u_id IN("+strings.Join(user_ids, ",")+")", "u_id");
+      err != nil { panic(err) }
+    } else {
+      aux_userinfo = make(M)
+    }
+    aux_userinfo[user_id] = user_row
+
+    out["aux_userinfo"] = aux_userinfo
+    out["tags"] = tags
+    if out["gs"], err = return_query_M(db, "SELECT * FROM gs", "g_id"); err != nil { panic(err) }
 
   } else if action == "query" {
     out["_query"] = q

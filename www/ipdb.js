@@ -566,9 +566,13 @@ $.fn.saveable=function(data) {
   $(this)
    .addClass("autosave")
    .data("autosave_data", data)
+  ;
+  let norm_value = autosave_normalize($(this));
+
+  $(this)
    .data("autosave_changed", false)
-   .data("autosave_prev", autosave_normalize($(this)))
-   .data("autosave_saved", autosave_normalize($(this)))
+   .data("autosave_prev", norm_value)
+   .data("autosave_saved", norm_value)
    .inputStop(timeout)
    .on("input_stop", function() {
 
@@ -829,7 +833,7 @@ $( document ).ready(function() {
       menu
        .append( $(SPAN).addClass("bigbutton").text("Теги")
          .click( function() {
-           window.location = "?action=tags"+(DEBUG?"&debug":"");
+           select_tag(null, null, undefined);
          })
        )
       ;
@@ -862,9 +866,6 @@ $( document ).ready(function() {
       break;
     case "templates":
       actionViewTemplates();
-      break;
-    case "tags":
-      actionTags();
       break;
     default:
       window.location = "?action=front"+(DEBUG?"&debug":"");
@@ -970,10 +971,10 @@ function save_all() {
         ipdata['values'][qdata['col_id']]['ts'] = unix_timestamp();
         ipdata['values'][qdata['col_id']]['u_id'] = user_self_id;
         tr.data("ipdata", ipdata);
-        let edit_state = qelm.hasClass("ip_edit");
+        let edit_state = qelm.closest(".ip_value").hasClass("ip_edit");
         let focus = qelm.is(":focus");
         let new_elm = ip_val_elm(ipdata, qdata['col_id'], edit_state);
-        qelm.replaceWith( new_elm );
+        qelm.closest(".ip_value").replaceWith( new_elm );
         if(focus) new_elm.focus();
         highlight = highlight.add(new_elm);
         break;
@@ -2080,6 +2081,22 @@ function actionView4() {
        .append( vlan_label("net", g_data['net_id'], g_data['vlan_data'], (g_data['net_rights'] & R_MANAGE_NET) > 0, "VLAN: ", "VLAN: не задан")
          .addClass("net_vlan")
        )
+       .append( $(SPAN).addClass("min1em") )
+       .append( $(SPAN).text("Теги: ") )
+       .append( $(SPAN).addClass("min1em") )
+       .append(
+         editable_elm({
+           'object': 'net',
+           'prop': 'v4net_tags',
+           'id': String(g_data['net_id']),
+           '_elm_id': 'net_tags_editable',
+           '_after_save': function(elm, new_val) {
+             g_data['net_tags'] = new_val;
+             $("#net_changed_ts").text( from_unix_time( unix_timestamp() ) );
+             $("#net_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
+           }
+         }, (g_data['net_rights'] & R_MANAGE_NET) > 0)
+       )
      )
     ;
 
@@ -2627,12 +2644,13 @@ function ip_menu(elm) {
              let row = $(this).closest("TR");
 
              row.find(".ip_edit").each(function() {
-               let changed = $(this).data("autosave_changed");
+               let changed = $(this).find(".autosave").data("autosave_changed");
                if(changed) {
                  g_autosave_changes--;
                };
                $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), false));
              });
+             row.find(".unsaved").removeClass("unsaved");
              if(g_autosave_changes < 0) {
                error_at();
                return;
@@ -2786,8 +2804,108 @@ function vlan_val_elm(row_data, prop, state) {
   return ret;
 };
 
+function get_tag_elm(tag_id, can_edit) {
+  let ret = $(LABEL)
+   .addClass("tag")
+   .addClass("value_tag_"+tag_id)
+   .addClass(can_edit?"can_edit":"cannot_edit")
+   .data("tag_id", tag_id)
+  ;
+
+  if(g_data['tags'] !== undefined && g_data['tags'][tag_id] !== undefined) {
+    if((g_data['tags'][tag_id]['rights'] & R_VIEW_NET_IPS) > 0) {
+      ret.text(g_data['tags'][tag_id]['tag_name']);
+    } else {
+      ret.addClass(["ui-icon", "ui-icon-forbidden"]);
+    };
+  } else {
+    ret.text(tag_id);
+  };
+
+  ret
+   .tooltip({
+     classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+     items: "LABEL.tag",
+     content: function() {
+       $(".tooltip").remove();
+       let tag_id = $(this).data("tag_id");
+       let ret = $(DIV);
+
+       let chain = [tag_id];
+       function tag_parents(_tag_id, counter) {
+         if(counter > 100) {
+           error_at();
+           return;
+         };
+
+         if(g_data['tags'] !== undefined && g_data['tags'][_tag_id] !== undefined &&
+            g_data['tags'][_tag_id]['tag_fk_tag_id'] !== null
+         ) {
+           chain.push(g_data['tags'][_tag_id]['tag_fk_tag_id']);
+           tag_parents(g_data['tags'][_tag_id]['tag_fk_tag_id'], counter + 1);
+         };
+       };
+
+       tag_parents(tag_id, 0);
+
+       for(let i = (chain.length - 1); i >= 0; i--) {
+         let chain_tag = chain[i];
+         if(g_data['tags'] !== undefined && g_data['tags'][chain_tag] !== undefined &&
+            (i == 0 || (g_data['tags'][chain_tag]['tag_flags'] & F_DISPLAY) > 0)
+         ) {
+           if((g_data['tags'][chain_tag]['rights'] & R_VIEW_NET_IPS) > 0) {
+             ret.append( $(LABEL).addClass("tag").text(g_data['tags'][chain_tag]['tag_name']) );
+           } else {
+             ret.append( $(LABEL).addClass("tag").addClass(["ui-icon", "ui-icon-forbidden"]) );
+           };
+         } else if(i == 0 || i == (chain.length - 1)) {
+           ret.append( $(LABEL).addClass("tag").text("Тег: "+chain_tag) );
+         };
+       };
+
+       if(g_data['tags'] !== undefined && g_data['tags'][tag_id] !== undefined &&
+          (g_data['tags'][tag_id]['rights'] & R_VIEW_NET_IPS) > 0 &&
+          String(g_data['tags'][tag_id]['tag_descr']).trim() !== ""
+       ) {
+         ret.append( $(BR) ).append( $(SPAN).text(String(g_data['tags'][tag_id]['tag_descr']).trim()) );
+       };
+
+       
+       return ret;
+     },
+   })
+  ;
+
+  if(can_edit) {
+    ret
+     .click(function(e) {
+       e.stopPropagation();
+
+       let tagset = $(this).closest(".tagset");
+       let current_tag_id = $(this).data("tag_id");
+       let col_id= tagset.data("col_id");
+       let coldata = g_data['net_cols'][col_id];
+       let collection = String(coldata['ic_options']).trim().toLowerCase();
+       if(collection === "") collection = null;
+
+       let current_tag = $(this);
+       select_tag(collection, current_tag_id, function(tag_id) {
+         if(tag_id !== null) {
+           let new_tag = get_tag_elm(tag_id, true);
+           current_tag.replaceWith(new_tag);
+         } else {
+           current_tag.remove();
+         };
+         tagset.trigger("recalc");
+       });
+     })
+    ;
+  };
+  return ret;
+};
+
 function ip_val_elm(ipdata, col_id, state) {
-  let ret;
+  let ret = $(SPAN);
   let coldata = g_data['net_cols'][col_id];
 
   let can_edit = false;
@@ -2804,7 +2922,7 @@ function ip_val_elm(ipdata, col_id, state) {
   let ts = undefined;
   let u_id = undefined;
 
-  if(ipdata["values"][col_id] !== undefined) {
+  if(ipdata["values"][col_id]['v'] !== undefined) {
     value = ipdata["values"][col_id]['v'];
     ts = ipdata["values"][col_id]['ts'];
     u_id = ipdata["values"][col_id]['u_id'];
@@ -2822,39 +2940,8 @@ function ip_val_elm(ipdata, col_id, state) {
 
   if(state && can_edit) {
     style = coldata['ic_style'];
-    if(coldata['ic_type'] == "textarea") {
-      ret = $(TEXTAREA);
-      ret.css({"min-height": "1em"});
-      let lines = String(value).split("\n").length;
-      ret.css({"height": lines+"em"});
-    } else {
-      ret = $(INPUT);
-    };
-    ret.val(value);
-
-    ret.saveable({"object": "ip_value", "id": String(ipdata['v4ip_id']), "col_id": col_id});
-    ret.addClass("ip_edit");
-
-    ret.keyup(function(e) {
-      if(e.key === "Escape") {
-        e.stopPropagation();
-        let row = $(this).closest(".row");
-        row.find(".ip_edit").each(function() {
-          if(!$(this).data("autosave_changed")) {
-            $(this).replaceWith( ip_val_elm(row.data("ipdata"), $(this).data("col_id"), false ));
-          };
-        });
-      };
-
-    });
-
   } else {
     style = coldata['ic_view_style'];
-    ret = $(SPAN)
-     .addClass("wsp")
-     .addClass("ip_view")
-     .text(value)
-    ;
   };
 
   let css = {};
@@ -2864,9 +2951,105 @@ function ip_val_elm(ipdata, col_id, state) {
   } catch(e) {
     css = {};
   };
+
+  if(state && can_edit) {
+    let input_elm;
+
+    if(coldata['ic_type'] == "textarea") {
+      let lines = String(value).split("\n").length;
+      input_elm = $(TEXTAREA)
+       .css({"min-height": "1em"})
+       .css({"height": lines+"em"})
+      ;
+      input_elm.css(css);
+    } else if(coldata['ic_type'] == "tag") {
+      input_elm = $(INPUT).prop("type", "hidden");
+     } else if(coldata['ic_type'] == "multitag") {
+      input_elm = $(INPUT).prop("type", "hidden");
+    } else {
+      input_elm = $(INPUT);
+      input_elm.css(css);
+    };
+    input_elm.val(value);
+
+    input_elm.saveable({"object": "ip_value", "id": String(ipdata['v4ip_id']), "col_id": col_id});
+
+    input_elm.keyup(function(e) {
+      if(e.key === "Escape") {
+        e.stopPropagation();
+        let row = $(this).closest(".row");
+        row.find(".ip_edit").each(function() {
+          if(!$(this).find(".autosave").data("autosave_changed")) {
+            $(this).replaceWith( ip_val_elm(row.data("ipdata"), $(this).data("col_id"), false ));
+          };
+        });
+      };
+    });
+    ret.append( input_elm );
+    ret.addClass("ip_edit");
+
+  } else {
+    ret
+     .addClass("wsp")
+     .addClass("ip_view")
+    ;
+    if(coldata['ic_type'] == "textarea" || coldata['ic_type'] == "text") {
+      ret.append( $(SPAN).text(value).css(css) );
+    };
+  };
+
+  if(coldata['ic_type'] == "tag" || coldata['ic_type'] == "multitag") {
+    ret.addClass("tagset");
+    let tag_ids = [];
+    if(String(value).trim() != "") {
+      tag_ids = String(value).split(",");
+      for(let i in tag_ids) {
+        let tag_id = tag_ids[i];
+        let tag = get_tag_elm(tag_id, can_edit && state);
+        tag.css(css).appendTo(ret);
+      };
+    };
+
+    if(can_edit && state) {
+      ret
+       .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus", "add_tag_btn"])
+         .click(function(e) {
+           e.stopPropagation();
+
+           let tagset = $(this).closest(".tagset");
+           let col_id= tagset.data("col_id");
+           let coldata = g_data['net_cols'][col_id];
+           let collection = String(coldata['ic_options']).trim().toLowerCase();
+           if(collection === "") collection = null;
+           select_tag(collection, null, function(tag_id) {
+             if(tag_id !== null) {
+               get_tag_elm(tag_id, true).insertBefore(tagset.find(".add_tag_btn"));
+               tagset.trigger("recalc");
+             };
+           });
+         })
+         .toggle(tag_ids.length == 0 || coldata['ic_type'] == "multitag")
+       )
+       .on("recalc", function() {
+         let tagset = $(this).closest(".tagset");
+         let list = [];
+         tagset.find(".tag").each(function() {
+           list.push($(this).data("tag_id"));
+         });
+
+         let col_id = tagset.data("col_id");
+         let coldata = g_data['net_cols'][col_id];
+
+         tagset.find(".add_tag_btn").toggle(list.length == 0 || coldata['ic_type'] == "multitag");
+
+         tagset.find("INPUT[type=hidden]").val(list.join(",")).trigger("input_stop");
+       })
+      ;
+    };
+  };
+
   ret.addClass("ip_value");
   ret.data("col_id", col_id);
-  ret.css(css);
   ret.data("title", title);
 
   return ret;
@@ -2882,6 +3065,8 @@ function editable_elm(data, edit) {
     value = g_data[ 'net_name' ];
   } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
     value = g_data[ 'net_owner' ];
+  } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
+    value = g_data[ 'net_tags' ];
   } else if(data['object'] == 'vdom' && data['prop'] == 'vd_name') {
     value = g_data[ 'vd_name' ];
   } else if(data['object'] == 'vdom' && data['prop'] == 'vd_descr') {
@@ -5661,6 +5846,7 @@ function actionViewFields() {
      .append( $(SPAN).addClass("th").text("API_name").title("Имя на латинице без пробелов, для использования в API запросах. Должно быть уникальным") )
      .append( $(SPAN).addClass("th").text("Описание") )
      .append( $(SPAN).addClass("th").text("Тип данных") )
+     .append( $(SPAN).addClass("th").text("Опции") )
      .append( $(SPAN).addClass("th").text("RegExp")
        .title("Регулярное выражение для проверки вводимых данных. Должно быть совместимо с JS и golang одновременно")
      )
@@ -5879,14 +6065,39 @@ function field_row(row_data) {
      )
      .append( $(SELECT)
        .prop("disabled", true).css("color", "black")
-       .append( $(OPTION).text("text").val("text") )
-       .append( $(OPTION).text("textarea").val("textarea") )
+       .append( $(OPTION).text("Однострочный текст").val("text") )
+       .append( $(OPTION).text("Многострочный текст").val("textarea") )
+       .append( $(OPTION).text("Один тег")
+         .title("Задайте в опциях API имя корневого тега, чтобы ограничить выбор значений")
+         .val("tag")
+       )
+       .append( $(OPTION).text("Несколько тегов")
+         .title("Задайте в опциях API имя корневого тега, чтобы ограничить выбор значений")
+         .val("multitag")
+       )
        .on("change", function() {
          $(this).siblings(".ic_type")
           .val($(this).val()).trigger("input_stop")
          ;
        })
        .val(row_data['ic_type'])
+       .tooltip({
+         classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+         items: "SELECT",
+         content: function() {
+           return $(this).find("OPTION:selected").prop("title");
+         }
+       })
+     )
+   )
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append(
+       editable_elm({
+         "object": "ic",
+         "prop": "ic_options",
+         "id": String(row_data['ic_id']),
+         "_edit_css": { 'width': '7em' },
+       })
      )
    )
    .append( $(SPAN).addClass("td").addClass("unsaved_elm")
@@ -6570,18 +6781,78 @@ function select_rights(object, current, allow_edit, on_done) {
   });
 };
 
-function actionTags() {
-  workarea.empty();
-  fixed_div.empty();
+$.jstree.plugins.myplugin = function (options, parent) {
+  this.redraw_node = function(obj, deep, callback, force_draw) {
+    obj = parent.redraw_node.call(this, obj, deep, callback, force_draw);
+    if (obj) {
+      var node = this.get_node($(obj).attr('id'));
+      if (node && 
+          node.data
+      ) {
+        let tag_label = $(obj).find("a").first();
+        tag_label.title("Id:"+node['id']+" "+node['data']['descr']);
+        let labels  = $([]);
+        if(node['data']['groups_rights'] !== undefined && node['data']['groups_rights'].length > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-users"]).css({"margin-left": "0.5em", "color": "darkblue"})
+            .title("Заданы права")
+          );
+        };
+        if((node['data']['flags'] & F_ALLOW_LEAFS) > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-structure"]).css({"margin-left": "0.5em", "color": "darkgreen"})
+            .title(g_tag_flags[F_ALLOW_LEAFS]['descr'])
+          );
+        };
+        if((node['data']['flags'] & F_DENY_SELECT) > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass("flag_"+F_DENY_SELECT)
+            .addClass(["ui-icon", "ui-icon-forbidden"]).css({"margin-left": "0.5em", "color": "darkorange"})
+            .title(g_tag_flags[F_DENY_SELECT]['descr'])
+          );
+        };
+        if((node['data']['flags'] & F_DISPLAY) > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-flag"]).css({"margin-left": "0.5em", "color": "darkgreen"})
+            .title(g_tag_flags[F_DISPLAY]['descr'])
+          );
+        };
+        if(node['data']['used'] > 0 || node['data']['used_children'] > 0) {
+          labels = labels.add( $(LABEL).text(String(node['data']['used'])+":"+String(node['data']['used_children']))
+            .title("Используется в "+node['data']['used']+" объектах\n"+
+                   "Дочерние теги используются в "+node['data']['used_children']+" объектах"
+            )
+            .css({"margin-left": "0.5em", "color": "black", "font-size": "x-small", "vertical-align": "top"})
+          );
+        };
+        labels.insertAfter( tag_label );
+      };
+    };
+    return obj;
+  };
+};
 
-  run_query({"action": "get_tags"}, function(res) {
-    g_data = res['ok'];
+$.jstree.defaults.myplugin = {};
 
-    for(let i in g_data['tags']['children']) {
-      g_data['tags']['children'][i]['type'] = "root";
+function select_tag(root_api_name, preselect, donefunc) {
+  run_query({"action": "get_tags_subtree", "root_api_name": root_api_name}, function(res) {
+
+    let can_add_root = false;
+
+    if(res['ok']['tags']['id'] === undefined &&
+       (res['ok']['tags']['data']['rights'] & R_EDIT_IP_VLAN) > 0
+    ) {
+      can_add_root = true;
     };
 
-    fixed_div
+    let dlg = $(DIV).addClass("dialog_start")
+     .data("dlg_data", res["ok"])
+     .data("preselect", preselect)
+     .data("donefunc", donefunc)
+     .title(donefunc !== undefined?"Выбор тега":"Управление тегами")
+    ;
+
+    dlg
      .append( $(DIV)
        .css({"font-size": "larger"})
        .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
@@ -6610,13 +6881,13 @@ function actionTags() {
        .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
        .append( $(SPAN).addClass("tag_info")
          .append( $(SPAN).text("Описание: ") )
-         .append( $(INPUT).addClass("tag_descr").css({"width": "80em"})
+         .append( $(INPUT).addClass("tag_descr").css({"width": "40em"})
            .enterKey(function() { $(".save_descr_btn").trigger("click"); })
          )
          .append( $(LABEL)
            .addClass(["button", "ui-icon", "ui-icon-save save_descr_btn"])
            .click(function() {
-             let instance = $(".tree").jstree(true);
+             let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
              let nodes = instance.get_selected(true);
              if(nodes.length != 1) return;
              let node = nodes[0];
@@ -6631,10 +6902,15 @@ function actionTags() {
 
              run_query({"action": "set_tag_descr", "id": String(node['id']), "descr": new_descr}, function(res) {
                node['data']['orig_descr'] = new_descr;
+               instance.redraw_node(node, false, false, false);
+               if(g_data['tags'] !== undefined && g_data['tags'][ node['id'] ] !== undefined) {
+                 g_data['tags'][ node['id'] ]['tag_descr'] = new_descr;
+               };
              });
 
            })
          )
+         .hide()
        )
      )
      .append( $(DIV)
@@ -6651,7 +6927,7 @@ function actionTags() {
            .addClass("rights_btn")
            .text("Права групп")
            .click(function() {
-             let instance = $(".tree").jstree(true);
+             let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
              let nodes = instance.get_selected(true);
              if(nodes.length != 1) return;
 
@@ -6709,32 +6985,34 @@ function actionTags() {
        .append( $(INPUT).prop("type", "search")
          .inputStop(500)
          .on("input_stop", function() {
-           $(".tree").jstree(true).search($(this).val());
+           $(this).closest(".dialog_start").find(".tree").jstree(true).search($(this).val());
          })
        )
      )
      .append( $(DIV)
-       .css({"margin-top": "0.5em", "min-height": "1.6em"})
-       .append( !userinfo['is_admin']?$(LABEL):$(LABEL)
-         .addClass(["button", "add_collection_btn"])
+       .append( !can_add_root ? $(LABEL):$(LABEL)
+         .addClass("add_root_btn")
+         .addClass(["button"])
          .append( $(LABEL).addClass(["ui-icon", "ui-icon-plus"]) )
          .append( $(LABEL).addClass(["ui-icon", "ui-icon-folder"]) )
          .title("Добавить коллекцию")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
 
            let parent_node = instance.get_node("#");
 
            if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+           if((parent_node['data']['flags'] & F_ALLOW_LEAFS) == 0) return;
 
+           let parent_children = parent_node['children'];
            let new_name = "Новая коллекция";
 
            let counter = 1;
            let found = false;
            do {
              found = false;
-             for(let i in parent_node['children']) {
-               let child = instance.get_node(parent_node['children'][i]);
+             for(let i in parent_children) {
+               let child = instance.get_node(parent_children[i]);
                if(child['data']['name'] === new_name) {
                  found = true;
                  break;
@@ -6747,18 +7025,18 @@ function actionTags() {
            } while(found);
 
            let new_data = {"text": new_name,
-                           "type": "root",
                            "children": [],
-                           "data": { "rights": parent_node['data']['rights'], "flags": 0,
-                                     "api_name": null, "descr": "",
+                           "data": { "flags": 0, "api_name": null, "descr": "",
                                      "used": 0, "used_children": 0, "name": new_name,
                                      "orig_name": new_name, "orig_api_name": null, "orig_flags": 0,
+                                     "rights": parent_node['data']['rights'],
                                      "groups_rights": [], "orig_groups_rights": [],
-                           },
+                                   },
            };
            instance.create_node("#", new_data, "last");
          })
        )
+       .css({"margin-top": "0.5em", "min-height": "1.6em"})
        .append( $(LABEL)
          .addClass("add_sibling_btn")
          .addClass(["button"])
@@ -6766,7 +7044,7 @@ function actionTags() {
          .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrow-1-s"]) )
          .title("Добавить следующий тег (можно также нажать + или Ins)")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
 
            let nodes = instance.get_selected(true);
            if(nodes.length != 1) return;
@@ -6775,6 +7053,7 @@ function actionTags() {
            let parent_node = instance.get_node(node['parent']);
 
            if((parent_node['data']['rights'] & R_EDIT_IP_VLAN) == 0) return;
+           if((parent_node['data']['flags'] & F_ALLOW_LEAFS) == 0) return;
 
            let parent_children = parent_node['children'];
            let new_name = "Новый тег";
@@ -6826,7 +7105,7 @@ function actionTags() {
          .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrow-1-se"]) )
          .title("Добавить дочерний тег")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
 
            let nodes = instance.get_selected(true);
            if(nodes.length != 1) return;
@@ -6875,7 +7154,7 @@ function actionTags() {
          .css({"text-align": "center"})
          .title("Удалить тег (можно также нажать - или Del")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
 
            let nodes = instance.get_selected(true);
            if(nodes.length != 1) return;
@@ -6922,7 +7201,7 @@ function actionTags() {
          .css({"text-align": "center"})
          .title("Редактировать (можно также нажать F2")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
 
            let nodes = instance.get_selected(true);
            if(nodes.length != 1) return;
@@ -6932,14 +7211,13 @@ function actionTags() {
          })
          .hide()
        )
-     )
-     .append( $(DIV)
        .css({"margin-top": "0.5em"})
-       .append( $(LABEL)
+       .append( !DEBUG?$(LABEL):$(LABEL)
+         .css({"float": "right"})
          .addClass(["button"])
          .text("calc []")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
            debugLog(jstr(instance.get_json("#", {"no_state": true,
                                                  "no_a_attr": true, "no_li_attr": true, "flat": true,
                                                  "no_icon": true,
@@ -6947,11 +7225,12 @@ function actionTags() {
            )));
          })
        )
-       .append( $(LABEL)
+       .append( !DEBUG?$(LABEL):$(LABEL)
+         .css({"float": "right"})
          .addClass(["button"])
          .text("calc {}")
          .click(function() {
-           let instance = $(".tree").jstree(true);
+           let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
            debugLog(jstr(instance.get_json("#", {"no_state": true,
                                                  "no_a_attr": true, "no_li_attr": true, "flat": false,
                                                  "no_icon": true,
@@ -6963,7 +7242,7 @@ function actionTags() {
     ;
 
     let tree = $(DIV).addClass("tree")
-     .appendTo( workarea )
+     .appendTo( dlg )
     ;
 
     let tree_plugins = [ "state", "search", "dnd", "types", "unique", "myplugin" ];
@@ -6972,11 +7251,11 @@ function actionTags() {
       "core": {
         "multiple" : false,
         "animation" : 0,
-        "data": g_data["tags"]["children"],
+        "data": (res['ok']['tags']['id'] === undefined)?res['ok']["tags"]["children"]:res['ok']["tags"],
         "themes" : {
           "variant" : "large"
         },
-        "dblclick_toggle": false,
+        "dblclick_toggle": true,
         "force_text": true,
         "check_callback" : function (operation, node, parent_node, node_position, more) {
           let instance = this;
@@ -7130,29 +7409,31 @@ function actionTags() {
 
     tree
      .on("deselect_node.jstree", function(e, data) {
-       $(".add_sibling_btn,.add_child_btn,.del_tag_btn").hide();
-       $(".tag_info").hide();
+       dlg.find(".add_sibling_btn,.add_child_btn,.del_tag_btn").hide();
+       dlg.find(".tag_info").hide();
      })
      .on("select_node.jstree", function(e, data) {
-       let instance = $(".tree").jstree(true);
+       let dlg = $(this).closest(".dialog_start");
+       let instance = dlg.find(".tree").jstree(true);
+       let dlg_data = dlg.data("dlg_data");
        let nodes = instance.get_selected(true);
        if(nodes.length == 0) {
-         $(".tag_info").hide();
+         dlg.find(".tag_info").hide();
          return;
        };
        let node = nodes[0];
        let parent_node = instance.get_node(node['parent']);
 
-       if(parent_node['id'] === "#" && parent_node['data'] === undefined) parent_node['data'] = g_data['tags']['data'];
+       if(parent_node['id'] === "#" && parent_node['data'] === undefined) parent_node['data'] = dlg_data['tags']['data'];
 
-       $(".rights_btn").toggle((node['data']['rights'] & R_MANAGE_NET) > 0);
+       dlg.find(".rights_btn").toggle((node['data']['rights'] & R_MANAGE_NET) > 0);
 
        let rights_elms = rights_tds("tag", node['data']['rights'], false, "tag_right", "tag_rights");
-       $(".tag_rights").empty().append(rights_elms);
+       dlg.find(".tag_rights").empty().append(rights_elms);
 
-       $(".tag_name").text(node['data']['name']);
-       $(".tag_api_name").text(node['data']['api_name'] !== null?node['data']['api_name']:'не задан.');
-       $(".tag_descr").val(node['data']['descr']);
+       dlg.find(".tag_name").text(node['data']['name']);
+       dlg.find(".tag_api_name").text(node['data']['api_name'] !== null?node['data']['api_name']:'не задан.');
+       dlg.find(".tag_descr").val(node['data']['descr']);
 
        let flags_elms = $([]);
        let flags = (node['data']['flags'] !== undefined)?node['data']['flags']:0;
@@ -7168,9 +7449,9 @@ function actionTags() {
 
        let can_manage = ((node['data']['rights'] & R_MANAGE_NET) > 0);
 
-       $(".edit_tag_btn").toggle(can_edit);
+       dlg.find(".edit_tag_btn").toggle(can_edit);
 
-       $(".tag_descr").prop("readonly", !can_edit);
+       dlg.find(".tag_descr").prop("readonly", !can_edit);
 
        for(let i in flags_keys) {
          let flag = flags_keys[i];
@@ -7215,7 +7496,7 @@ function actionTags() {
               row.find(".flag").each(function() {
                 if($(this).hasClass("flag_on")) flags |= Number($(this).data("flag"));
               });
-              let instance = $(".tree").jstree(true);
+              let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
               let node = instance.get_node(node_id);
               node['data']['flags'] = flags;
               instance.trigger("select_node.jstree");
@@ -7223,6 +7504,9 @@ function actionTags() {
               if(node['data']['orig_flags'] != flags) {
                 run_query({"action": "set_tag_flags", "id": String(node['id']), "flags": String(flags)}, function(res) {
                   node['data']['orig_flags'] = flags;
+                  if(g_data['tags'] !== undefined && g_data['tags'][ node['id'] ] !== undefined) {
+                    g_data['tags'][ node['id'] ]['tag_flags'] = flags;
+                  };
                   instance.redraw_node(node, false, false, false);
                 });
               };
@@ -7233,18 +7517,18 @@ function actionTags() {
          flags_elms = flags_elms.add(elm);
        };
 
-       $(".tag_flags").empty().append(flags_elms);
+       dlg.find(".tag_flags").empty().append(flags_elms);
 
-       $(".tag_info").show();
+       dlg.find(".tag_info").show();
 
-       $(".del_tag_btn").toggle(can_edit);
+       dlg.find(".del_tag_btn").toggle(can_edit);
 
        let allow_sibling = node['parent'] != "#" && (parent_node['data']['flags'] & F_ALLOW_LEAFS) > 0 &&
                            (parent_node['data']['rights'] & R_EDIT_IP_VLAN) > 0;
-       $(".add_sibling_btn").toggle(allow_sibling);
+       dlg.find(".add_sibling_btn").toggle(allow_sibling);
 
        let allow_child = (node['data']['flags'] & F_ALLOW_LEAFS) > 0 && (node['data']['rights'] & R_EDIT_IP_VLAN) > 0;
-       $(".add_child_btn").toggle(allow_child);
+       dlg.find(".add_child_btn").toggle(allow_child);
        
      })
      /*.on("dblclick.jstree", function (e) {
@@ -7284,6 +7568,10 @@ function actionTags() {
        run_query({"action": "move_tag", "id": String(node['id']),
                   "new_parent": String(node['parent']), "sort": nodes_index,
                  }, function(res) {
+         if(g_data['tags'] !== undefined && g_data['tags'][ node['id'] ] !== undefined) {
+           g_data['tags'][ node['id'] ]['tag_fk_tag_id'] = (node['parent'] === "#")?null:node['parent'];
+           g_data['tags'][ node['id'] ]['tag_parent_id'] = (node['parent'] === "#")?"0":node['parent'];
+         };
          instance.redraw(true);
        });
      })
@@ -7319,6 +7607,13 @@ function actionTags() {
            node['data']['orig_name'] = node['data']['name'];
            node['data']['orig_api_name'] = node['data']['api_name'];
 
+           $(".value_tag_"+node['id']).text(node['data']['name']);
+
+           if(g_data['tags'] !== undefined && g_data['tags'][ node['id'] ] !== undefined) {
+             g_data['tags'][ node['id'] ]['tag_name'] = node['data']['name'];
+             g_data['tags'][ node['id'] ]['tag_api_name'] = node['data']['api_name'];
+           };
+
            instance.get_node(node, true).find("a").first().contents().last().replaceWith(node['text']);
            instance.trigger("select_node.jstree");
 
@@ -7349,6 +7644,21 @@ function actionTags() {
          node['data']['orig_api_name'] = node['data']['api_name'];
          node['data']['orig_flags'] = node['data']['flags'];
 
+         if(g_data['tags'] !== undefined) {
+           g_data['tags'][res['ok']['new_id']] = {
+             'tag_id': res['ok']['new_id'],
+             'tag_name': node['data']['name'],
+             'tag_descr': node['data']['descr'],
+             'tag_api_name': node['data']['api_name'],
+             'tag_flags': node['data']['flags'],
+             'tag_fk_tag_id': node['parent'] === "#"?null:node['parent'],
+             'tag_parent_id': node['parent'] === "#"?"0":node['parent'],
+             'ts': unix_timestamp(),
+             'fk_u_id': user_self_id,
+             'rights': node['data']['rights'],
+           };
+         };
+
          instance.deselect_all(true);
          instance.select_node(res['ok']['new_id']);
          instance.trigger("select_node.jstree");
@@ -7367,73 +7677,105 @@ function actionTags() {
            };
          };
 
+         if(g_data['tags'] !== undefined && g_data['tags'][node['id']] !== undefined) {
+           delete(g_data['tags'][node['id']]);
+         };
+
+         $(".value_tag_"+node['id']).text("DELETED").css("color", "red");
+
          instance.redraw(true);
-         $(".tree").trigger("select_node.jstree");
+         $(this).closest(".dialog_start").find(".tree").trigger("select_node.jstree");
 
        });
      })
      .on("keyup", function(e) {
        if($(e.originalEvent.target).is("INPUT")) return;
        if (e.key === "+" || e.key === "Insert") {
-         $(".add_sibling_btn").trigger("click");
+         dlg.find(".add_sibling_btn").trigger("click");
        } else if(e.key === "-" || e.key === "Delete") {
-         $(".del_tag_btn").trigger("click");
+         dlg.find(".del_tag_btn").trigger("click");
        };
      })
      .on("ready.jstree", function(e, data) {
        let instance = data.instance;
        let root = instance.get_node("#");
-       root['data'] = {};
-       root['data']['rights'] = g_data['tags']['data']['rights'];
-       root['data']['flags'] = g_data['tags']['data']['flags'];
+       if(root['data'] === undefined) {
+         let dlg = $(this).closest(".dialog_start");
+         let dlg_data = dlg.data("dlg_data");
+         root['data'] = dlg_data['tags']['data'];
+       };
+       let dlg = $(this).closest(".dialog_start");
+       let presel = dlg.data("preselect");
+       if(presel !== null && presel !== undefined) {
+         instance.deselect_all(false);
+         instance.select_node(presel);
+       } else {
+         instance.deselect_all(true);
+       };
+       instance.trigger("select_node.jstree");
+       dlg.dialog("option", "position", {"my": "center", "at": "center", "of": $("BODY")});
      })
     ;
+
+    let buttons = [];
+    if(donefunc !== undefined) {
+      buttons.push({
+        'class': 'left_dlg_button',
+        'text': 'Снять выбор',
+        'click': function() {
+          let dlg = $(this);
+          let donefunc = dlg.data("donefunc");
+          dlg.dialog("close");
+          if(donefunc !== undefined) {
+            donefunc(null);
+          };
+        },
+      });
+
+      buttons.push({
+        'text': 'Выбрать',
+        'click': function() {
+          let dlg = $(this);
+          let donefunc = dlg.data("donefunc");
+          let instance = dlg.find(".tree").jstree(true);
+          let nodes = instance.get_selected(true);
+
+          if(nodes.length != 1) return;
+          let node = nodes[0];
+          if((node['data']['flags'] & F_DENY_SELECT) > 0) {
+            instance.get_node(node, true).find(".flag_"+F_DENY_SELECT).first().animateHighlight("red", 300);
+            return;
+          };
+
+          dlg.dialog("close");
+
+          if(donefunc !== undefined) {
+            donefunc(node['id']);
+          };
+        },
+      });
+    };
+
+    buttons.push({
+      'text': 'Закрыть',
+      'click': function() {$(this).dialog( "close" );},
+    });
+
+    let dialog_options = {
+      modal:true,
+      maxHeight:980,
+      maxWidth:1800,
+      minWidth:1000,
+      width: 1000,
+      height: "auto",
+      buttons: buttons,
+      close: function() {
+        $(this).dialog("destroy");
+        $(this).remove();
+      }
+    };
+
+    dlg.appendTo("BODY");
+    dlg.dialog( dialog_options );
   });
 };
-
-$.jstree.plugins.myplugin = function (options, parent) {
-  this.redraw_node = function(obj, deep, callback, force_draw) {
-    obj = parent.redraw_node.call(this, obj, deep, callback, force_draw);
-    if (obj) {
-      var node = this.get_node($(obj).attr('id'));
-      if (node && 
-          node.data
-      ) {
-        let tag_label = $(obj).find("a").first();
-        tag_label.title(node['data']['descr']);
-        let labels  = $([]);
-        if(node['data']['groups_rights'] !== undefined && node['data']['groups_rights'].length > 0) {
-          labels = labels.add( $(LABEL)
-            .addClass(["ui-icon", "ui-icon-users"]).css({"margin-left": "0.5em", "color": "darkblue"})
-            .title("Заданы права")
-          );
-        };
-        if((node['data']['flags'] & F_ALLOW_LEAFS) > 0) {
-          labels = labels.add( $(LABEL)
-            .addClass(["ui-icon", "ui-icon-structure"]).css({"margin-left": "0.5em", "color": "darkgreen"})
-            .title("Допускаются дочерние теги")
-          );
-        };
-        if((node['data']['flags'] & F_DENY_SELECT) > 0) {
-          labels = labels.add( $(LABEL)
-            .addClass(["ui-icon", "ui-icon-forbidden"]).css({"margin-left": "0.5em", "color": "darkorange"})
-            .title("Запрещен к выбору в качестве значения")
-          );
-        };
-        if(node['data']['used'] > 0 || node['data']['used_children'] > 0) {
-          labels = labels.add( $(LABEL).text(String(node['data']['used'])+":"+String(node['data']['used_children']))
-            .title("Используется в "+node['data']['used']+" объектах\n"+
-                   "Дочерние теги используются в "+node['data']['used_children']+" объектах"
-            )
-            .css({"margin-left": "0.5em", "color": "black", "font-size": "x-small", "vertical-align": "top"})
-          );
-        };
-        labels.insertAfter( tag_label );
-      };
-    };
-    return obj;
-  };
-};
-
-$.jstree.defaults.myplugin = {};
-

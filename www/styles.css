@@ -330,3 +330,12 @@ BODY {
 .cannot_edit {
   color: dimgray;
 }
+.tag {
+  display: inline-block;
+  border: 1px solid black;
+  padding-left: 0.2em;
+  padding-right: 0.2em;
+  margin-left: 0.1em;
+  margin-right: 0.1em;
+  background-color: white;
+}

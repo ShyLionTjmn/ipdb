@@ -226,6 +226,7 @@ CREATE TABLE v4nets (
   v4net_owner	BIGINT UNSIGNED DEFAULT NULL,
   v4net_name	VARCHAR(256) NOT NULL DEFAULT '',
   v4net_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  v4net_tags	VARCHAR(1024) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
   taken_ts		BIGINT UNSIGNED NOT NULL,
@@ -253,17 +254,6 @@ CREATE TABLE v4ips(
   FOREIGN KEY (v4ip_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE TABLE v4ntags (
-  v4ntag_fk_v4net_id	BIGINT UNSIGNED NOT NULL,
-  v4ntag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
-  ts		BIGINT UNSIGNED NOT NULL,
-  fk_u_id	BIGINT UNSIGNED,
-  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
-  UNIQUE KEY (v4ntag_fk_v4net_id, v4ntag_fk_tag_id),
-  FOREIGN KEY (v4ntag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v4ntag_fk_v4net_id) REFERENCES v4nets(v4net_id) ON UPDATE CASCADE ON DELETE CASCADE
-);
-
 CREATE TABLE v6nets (
   v6net_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for att linking',
   v6net_addr    VARBINARY(16) NOT NULL,
@@ -273,6 +263,7 @@ CREATE TABLE v6nets (
   v6net_owner	BIGINT UNSIGNED DEFAULT NULL,
   v6net_name    VARCHAR(256) NOT NULL DEFAULT '',
   v6net_descr   VARCHAR(1024) NOT NULL DEFAULT '',
+  v6net_tags	VARCHAR(1024) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id    BIGINT UNSIGNED,
   taken_ts		BIGINT UNSIGNED NOT NULL,
@@ -300,23 +291,14 @@ CREATE TABLE v6ips(
   FOREIGN KEY (v6ip_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE TABLE v6ntags (
-  v6ntag_fk_v6net_id	BIGINT UNSIGNED NOT NULL,
-  v6ntag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
-  ts		BIGINT UNSIGNED NOT NULL,
-  fk_u_id	BIGINT UNSIGNED,
-  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
-  UNIQUE KEY (v6ntag_fk_v6net_id, v6ntag_fk_tag_id),
-  FOREIGN KEY (v6ntag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v6ntag_fk_v6net_id) REFERENCES v6nets(v6net_id) ON UPDATE CASCADE ON DELETE CASCADE
-);
-
 CREATE TABLE i4vs(
+  iv_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   iv_fk_ic_id	BIGINT UNSIGNED NOT NULL,
   iv_fk_v4ip_id	BIGINT UNSIGNED NOT NULL,
   iv_value	VARCHAR(1024) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
+  PRIMARY KEY (iv_id),
   UNIQUE KEY uk_ids(iv_fk_ic_id,iv_fk_v4ip_id),
   KEY k_v4ip_id(iv_fk_v4ip_id),
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
@@ -326,11 +308,13 @@ CREATE TABLE i4vs(
 );
 
 CREATE TABLE i6vs(
+  iv_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   iv_fk_ic_id	BIGINT UNSIGNED NOT NULL,
   iv_fk_v6ip_id	BIGINT UNSIGNED NOT NULL,
   iv_value	VARCHAR(1024) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
+  PRIMARY KEY (iv_id),
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   UNIQUE KEY uk_ids(iv_fk_ic_id,iv_fk_v6ip_id),
   KEY k_v6ip_id(iv_fk_v6ip_id),
@@ -517,6 +501,7 @@ CREATE TABLE v4oobs (
   v4oob_addr	INTEGER UNSIGNED NOT NULL,
   v4oob_mask	TINYINT UNSIGNED NOT NULL,
   v4oob_descr	VARCHAR(256) NOT NULL DEFAULT '',
+  v4oob_tags	VARCHAR(1024) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
@@ -525,40 +510,19 @@ CREATE TABLE v4oobs (
   tc            TINYINT COMMENT 'v4 out of band nets for router_groups, etc...'
 );
 
-CREATE TABLE v4otags (
-  v4otag_fk_v4oob_id	BIGINT UNSIGNED NOT NULL,
-  v4otag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
-  ts		BIGINT UNSIGNED NOT NULL,
-  fk_u_id	BIGINT UNSIGNED,
-  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
-  UNIQUE KEY (v4otag_fk_v4oob_id, v4otag_fk_tag_id),
-  FOREIGN KEY (v4otag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v4otag_fk_v4oob_id) REFERENCES v4oobs(v4oob_id) ON UPDATE CASCADE ON DELETE CASCADE
-);
-
 
 CREATE TABLE v6oobs (
   v6oob_id	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'used for tag linking',
   v6oob_addr	VARBINARY(16) NOT NULL,
   v6oob_mask	TINYINT UNSIGNED NOT NULL,
   v6oob_descr	VARCHAR(256) NOT NULL DEFAULT '',
+  v6oob_tags	VARCHAR(1024) NOT NULL DEFAULT '',
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id	BIGINT UNSIGNED,
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   PRIMARY KEY (v6oob_id),
   UNIQUE KEY (v6oob_addr, v6oob_mask),
   tc            TINYINT COMMENT 'v6 out of band nets for router_groups, etc...'
-);
-
-CREATE TABLE v6otags (
-  v6otag_fk_v6oob_id	BIGINT UNSIGNED NOT NULL,
-  v6otag_fk_tag_id	BIGINT UNSIGNED DEFAULT NULL,
-  ts		BIGINT UNSIGNED NOT NULL,
-  fk_u_id	BIGINT UNSIGNED,
-  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
-  UNIQUE KEY (v6otag_fk_v6oob_id, v6otag_fk_tag_id),
-  FOREIGN KEY (v6otag_fk_tag_id) REFERENCES tags(tag_id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (v6otag_fk_v6oob_id) REFERENCES v6oobs(v6oob_id) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 CREATE TABLE glrs (
