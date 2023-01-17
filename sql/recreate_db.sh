@@ -21,7 +21,7 @@ mysqldump -u $DB_USER --password=$DB_PASS --skip-extended-insert --order-by-prim
 echo "Deleting all tables"
 $MYSQL -B -N -e 'SHOW TABLES' | sed 's/.*/DROP TABLE &;/' | $MYSQL --init-command="SET FOREIGN_KEY_CHECKS=0;" || on_error
 
-for f in schema.sql local_*.sql test_*.sql
+for f in schema.sql local_before_*.sql
 do
   if [ -f "$f" ]
   then
@@ -32,3 +32,13 @@ done
 
 echo "Importing OLD IPDB"
 /devel/go/src/github.com/ShyLionTjmn/import_ipdb/import_ipdb
+
+for f in local_after_*.sql
+do
+  if [ -f "$f" ]
+  then
+    echo "Importing $f"
+    $MYSQL < $f || on_error
+  fi
+done
+

@@ -3219,8 +3219,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     for g_id, _ := range groups {
       if _, ex := rights[g_id]; ex {
         var s string
-        if s, var_ok = rights[g_id].(M).UintString("fk_u_id"); !var_ok { panic(PE) }
-        user_ids = append(user_ids, s)
+        if s, var_ok = rights[g_id].(M).UintString("fk_u_id"); var_ok {
+          user_ids = append(user_ids, s)
+        }
         groups[g_id].(M)["ts"] = rights[g_id].(M)["ts"]
         groups[g_id].(M)["fk_u_id"] = rights[g_id].(M)["fk_u_id"]
         groups[g_id].(M)["rights"] = rights[g_id].(M)["rights"]
