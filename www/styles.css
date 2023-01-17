@@ -339,3 +339,25 @@ BODY {
   margin-right: 0.1em;
   background-color: white;
 }
+.iprow.focuson > TD {
+  background-color: yellow !important;
+}
+.tr.focuson {
+  background-color: yellow !important;
+}
+.vlan_elm {
+  display: inline-block;
+  border: 1px solid black;
+  padding-left: 0.2em;
+  padding-right: 0.2em;
+  margin-left: 0.1em;
+  margin-right: 0.1em;
+  background-color: white;
+}
+.search_val_span {
+  margin-right: 1em;
+}
+.search_val_name {
+  margin-right: 0.3em;
+  background-color: #EEEEFF;
+}

@@ -39,6 +39,7 @@ const (
   F_ALLOW_LEAFS uint64 = 1 << iota // allow to create leafs off non-root tag
   F_DENY_SELECT // deny selection as value
   F_DISPLAY // display in root-> ... -> final_tag chain
+  F_IN_LABEL // display in tag label, before tag name, root-> ... -> final_tag chain
 )
 
 var g_rights map[uint64]M
@@ -46,7 +47,7 @@ var g_tag_flags map[uint64]M
 
 const MAX_TREE_LEN int = 100
 
-const ADMIN_RIGHTS uint64 = R_NAME | R_VIEW_NET_INFO | R_VIEW_NET_IPS |
+const ADMIN_NET_RIGHTS uint64 = R_NAME | R_VIEW_NET_INFO | R_VIEW_NET_IPS |
                           R_EDIT_IP_VLAN | R_MANAGE_NET
 
 const OWNER_RIGHTS uint64 = R_NAME | R_VIEW_NET_INFO | R_VIEW_NET_IPS |
@@ -56,9 +57,13 @@ const ADMIN_VLAN_RIGHTS uint64 = R_VIEW_NET_IPS | R_EDIT_IP_VLAN
 
 const ADMIN_TAG_RIGHTS uint64 = R_VIEW_NET_IPS | R_EDIT_IP_VLAN | R_MANAGE_NET
 
+const ADMIN_OOB_RIGHTS uint64 = R_VIEW_NET_IPS | R_EDIT_IP_VLAN
+
 const MAX_SUBNETS_NAMES_LEN = 512
 
 const PE = "Backend Program error"
+
+var g_rights_obj M
 
 var g_name_reg *regexp.Regexp
 var g_num_reg *regexp.Regexp
@@ -72,41 +77,49 @@ func init() {
   g_num_list_reg = regexp.MustCompile(`^(?:\d+(,\d+)*)?$`)
   g_api_name_reg = regexp.MustCompile(`^[0-9a-z_\-]+$`)
 
+  g_rights_obj = make(M)
+  g_rights_obj["nets"] = "Права на все сети и IP адреса"
+  g_rights_obj["vlans"] = "Права на все VLAN"
+  g_rights_obj["tags"] = "Права на все Теги"
+  g_rights_obj["oobs"] = "Права на все Внешние сети"
+
   g_rights = make(map[uint64]M)
 
   g_rights[R_NAME] = make(M)
   g_rights[R_NAME]["label"] = "ПрИмнСет"
   g_rights[R_NAME]["descr"] = "Просмотр имени сети в списке сетей"
   g_rights[R_NAME]["required_by"] = [...]uint64{R_VIEW_NET_INFO, R_VIEW_NET_IPS, R_EDIT_IP_VLAN, R_MANAGE_NET}
-  g_rights[R_NAME]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
+  g_rights[R_NAME]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "nets"}
   g_rights[R_NAME]["conflict_with"] = [...]uint64{}
 
   g_rights[R_VIEW_NET_INFO] = make(M)
   g_rights[R_VIEW_NET_INFO]["label"] = "ПрИнфСет"
   g_rights[R_VIEW_NET_INFO]["descr"] = "Просмотр информации о сети, кроме списка IP адресов"
   g_rights[R_VIEW_NET_INFO]["required_by"] = [...]uint64{R_MANAGE_NET}
-  g_rights[R_VIEW_NET_INFO]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl"}
+  g_rights[R_VIEW_NET_INFO]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "nets"}
   g_rights[R_VIEW_NET_INFO]["conflict_with"] = [...]uint64{}
 
   g_rights[R_VIEW_NET_IPS] = make(M)
   g_rights[R_VIEW_NET_IPS]["label"] = "ПрАдрVLT"
   g_rights[R_VIEW_NET_IPS]["descr"] = "Просмотр IP адресов, VLAN-ов, Тегов"
   g_rights[R_VIEW_NET_IPS]["required_by"] = [...]uint64{R_EDIT_IP_VLAN, R_MANAGE_NET}
-  g_rights[R_VIEW_NET_IPS]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range", "tag"}
+  g_rights[R_VIEW_NET_IPS]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range",
+                                                    "tag", "nets", "vlans", "tags", "oobs"}
   g_rights[R_VIEW_NET_IPS]["conflict_with"] = [...]uint64{}
 
   g_rights[R_EDIT_IP_VLAN] = make(M)
   g_rights[R_EDIT_IP_VLAN]["label"] = "ИзмАдрVT"
   g_rights[R_EDIT_IP_VLAN]["descr"] = "Занятие, редактирование, освобождение IP адресов, VLAN-ов, вложенных тегов"
   g_rights[R_EDIT_IP_VLAN]["required_by"] = [...]uint64{R_MANAGE_NET}
-  g_rights[R_EDIT_IP_VLAN]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range", "int_v4net_range", "tag"}
+  g_rights[R_EDIT_IP_VLAN]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "vlan_range",
+                                                    "int_v4net_range", "tag", "nets", "vlans", "tags", "oobs"}
   g_rights[R_EDIT_IP_VLAN]["conflict_with"] = [...]uint64{R_DENYIP}
 
   g_rights[R_MANAGE_NET] = make(M)
   g_rights[R_MANAGE_NET]["label"] = "ИзмнСетT"
-  g_rights[R_MANAGE_NET]["descr"] = "Занятие, редактирование, освобождение сети, тега"
+  g_rights[R_MANAGE_NET]["descr"] = "Полные права на сеть, тег"
   g_rights[R_MANAGE_NET]["required_by"] = [...]uint64{}
-  g_rights[R_MANAGE_NET]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "tag"}
+  g_rights[R_MANAGE_NET]["used_in"] = [...]string{"ext_v4net_range", "v4net_acl", "tag", "nets", "tags"}
   g_rights[R_MANAGE_NET]["conflict_with"] = [...]uint64{}
 
   g_rights[R_IGNORE_R_DENY] = make(M)
@@ -142,6 +155,12 @@ func init() {
   g_tag_flags[F_DISPLAY]["descr"] = "Отображать в цепочке Корневой-> ... -> Конечный тег"
   g_tag_flags[F_DISPLAY]["required_by"] = [...]uint64{}
   g_tag_flags[F_DISPLAY]["conflict_with"] = [...]uint64{}
+
+  g_tag_flags[F_IN_LABEL] = make(M)
+  g_tag_flags[F_IN_LABEL]["label"] = "ВклЯрл"
+  g_tag_flags[F_IN_LABEL]["descr"] = "Отображать прямо в ярлыке тега"
+  g_tag_flags[F_IN_LABEL]["required_by"] = [...]uint64{}
+  g_tag_flags[F_IN_LABEL]["conflict_with"] = [...]uint64{}
 }
 
 func containsDotFile(name string) bool {
@@ -531,6 +550,7 @@ func handleConsts(w http.ResponseWriter, req *http.Request) {
   w.Write([]byte(fmt.Sprintf("const F_ALLOW_LEAFS = %d;\n", F_ALLOW_LEAFS)))
   w.Write([]byte(fmt.Sprintf("const F_DENY_SELECT = %d;\n", F_DENY_SELECT)))
   w.Write([]byte(fmt.Sprintf("const F_DISPLAY = %d;\n", F_DISPLAY)))
+  w.Write([]byte(fmt.Sprintf("const F_IN_LABEL = %d;\n", F_IN_LABEL)))
 
   jstr, jerr := json.MarshalIndent(g_rights, "", "  ")
   if jerr != nil {
@@ -547,6 +567,15 @@ func handleConsts(w http.ResponseWriter, req *http.Request) {
   }
 
   w.Write([]byte("const g_tag_flags = "))
+  w.Write(jstr)
+  w.Write([]byte(";\n"))
+
+  jstr, jerr = json.MarshalIndent(g_rights_obj, "", "  ")
+  if jerr != nil {
+    panic(jerr)
+  }
+
+  w.Write([]byte("const g_rights_obj = "))
   w.Write(jstr)
   w.Write([]byte(";\n"))
 
@@ -571,6 +600,9 @@ func handle_error(r interface{}, w http.ResponseWriter, req *http.Request) {
   case string:
     out = make(M)
     out["error"] = "Server message:\n"+v;
+    if v == PE {
+      out["error"] = out["error"].(string) + "\n\n" + string(debug.Stack())
+    }
   case error:
     out = make(M)
     out["error"] = v.Error() + "\n\n" + string(debug.Stack())
@@ -736,6 +768,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     panic(NoAccess())
   }
 
+  var prev_data interface{}
+  var new_data interface{}
+
   var user_r interface{}
   var user_row M
 
@@ -814,6 +849,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
   var g_nets_rights uint64
   var g_vlans_rights uint64
   var g_tags_rights uint64
+  var g_oobs_rights uint64
 
   query = "SELECT IFNULL(BIT_OR(glr_rmask), CAST(0 AS UNSIGNED)) FROM glrs WHERE glr_object=?"+
           " AND glr_fk_g_id IN("+user_groups_in+")"
@@ -821,8 +857,47 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
   if g_nets_rights, err = must_return_one_uint(db, query, "nets"); err != nil { panic(err) }
   if g_vlans_rights, err = must_return_one_uint(db, query, "vlans"); err != nil { panic(err) }
   if g_tags_rights, err = must_return_one_uint(db, query, "tags"); err != nil { panic(err) }
+  if g_oobs_rights, err = must_return_one_uint(db, query, "oobs"); err != nil { panic(err) }
+
+  if user_is_admin {
+    g_nets_rights |= ADMIN_NET_RIGHTS
+    g_vlans_rights |= ADMIN_VLAN_RIGHTS
+    g_tags_rights |= ADMIN_TAG_RIGHTS
+    g_oobs_rights |= ADMIN_OOB_RIGHTS
+  }
 
   var tags_cache M
+
+  audit_log := func(db interface{}, al_subject string, al_subject_id interface{},
+                    al_query string, al_prev_data, al_new_data interface{}) (error) {
+    table_name := time.Now().Format("audit_200601")
+    var e error
+
+    if _, e = db_exec(db, "CREATE TABLE IF NOT EXISTS "+table_name+" LIKE log_template");
+    e != nil { return e }
+
+    var prev_json []byte
+    if al_prev_data != nil {
+      if prev_json, e = json.MarshalIndent(al_prev_data, "", "  "); e != nil { return e }
+    } else {
+      prev_json = make([]byte, 0)
+    }
+
+    var new_json []byte
+    if al_new_data != nil {
+      if new_json, e = json.MarshalIndent(al_new_data, "", "  "); e != nil { return e }
+    } else {
+      new_json = make([]byte, 0)
+    }
+
+    if _, e = db_exec(db, "INSERT INTO "+table_name+"(ts,fk_u_id,al_subject,al_subject_id"+
+                      ",al_query,al_prev_data,al_new_data) VALUES(?,?,?,?,?,?,?)",
+                      ts, user_id, al_subject, al_subject_id, al_query,
+                      string(prev_json),string(new_json));
+    e != nil { return e }
+
+    return nil
+  }
 
   var get_tag = func(db interface{}, _tag_id interface{}) (M, error) {
     var tag_id string
@@ -942,9 +1017,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             }
           }
         }
-        if user_is_admin {
-          tag_rights |= ADMIN_TAG_RIGHTS
-        }
         tag_rights |= g_tags_rights
         return tag_rights, nil
       }
@@ -957,6 +1029,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     values := make([]interface{}, 2)
 
     var err error
+
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM tags WHERE tag_id=?", tag_id); err != nil { return err }
 
     sets[0] = "ts=?"
     sets[1] = "fk_u_id=?"
@@ -984,6 +1058,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     }
 
     if err != nil { return err }
+
+    if new_data, err = must_return_one_M(db, "SELECT * FROM tags WHERE tag_id=?", tag_id); err != nil { return err }
+    if err = audit_log(db, "tag", tag_id, query, prev_data, new_data); err != nil { return err }
 
     return err
   }
@@ -1022,10 +1099,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       ret |= OWNER_RIGHTS
     }
 
-    if user_is_admin {
-      ret |= ADMIN_RIGHTS
-    }
-
     ret |= g_nets_rights
 
     return ret, net, nil
@@ -1062,10 +1135,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if owner == user_id {
       ret |= OWNER_RIGHTS
-    }
-
-    if user_is_admin {
-      ret |= ADMIN_RIGHTS
     }
 
     ret |= g_nets_rights
@@ -1118,10 +1187,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       ret |= OWNER_RIGHTS
     }
 
-    if user_is_admin {
-      ret |= ADMIN_RIGHTS
-    }
-
     ret |= g_nets_rights
 
     var ip_rows []M
@@ -1149,6 +1214,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     return ret, net, nil
   }
 
+  query = ""
+
   if action == "userinfo" {
     out["id"] = user_id
     out["sub"] = user_sub
@@ -1157,6 +1224,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     out["groups"] = user_groups
     out["is_admin"] = user_is_admin
 
+    out["g_nets_rights"] = g_nets_rights
+    out["g_vlans_rights"] = g_vlans_rights
+    out["g_tags_rights"] = g_tags_rights
+    out["g_oobs_rights"] = g_oobs_rights
+
     has_vlans_access := false
 
     query = "SELECT BIT_OR(gvrr_rmask) as rights FROM"+
@@ -1164,10 +1236,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var rows []M
 
-    vlans_rights := uint64(0)
+    vlans_rights := g_vlans_rights
 
     if rows, err = return_query_A(db, query); err != nil { panic(err) }
-
 
     for _, row := range rows {
       if u64, var_ok = row.Uint64("rights"); !var_ok { panic(PE) }
@@ -1175,16 +1246,44 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       vlans_rights |= u64
     }
 
-    if user_is_admin {
-      vlans_rights |= ADMIN_VLAN_RIGHTS
-    }
-
-    vlans_rights |= g_vlans_rights
     if (vlans_rights & R_VIEW_NET_IPS) > 0 {
       has_vlans_access = true
     }
 
     out["has_vlans_access"] = has_vlans_access
+
+    has_tags_access := false
+
+    query = "SELECT tags.*"+
+            ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                      " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+            " FROM tags WHERE tag_fk_tag_id IS NULL"
+
+    tags_rights := g_tags_rights
+
+    if rows, err = return_query_A(db, query); err != nil { panic(err) }
+
+    for _, row := range rows {
+      if u64, var_ok = row.Uint64("rights"); !var_ok { panic(PE) }
+
+      tags_rights |= u64
+    }
+
+    if (tags_rights & R_VIEW_NET_IPS) > 0 {
+      has_tags_access = true
+    }
+
+    out["has_tags_access"] = has_tags_access
+
+    has_oobs_access := false
+
+    oobs_rights := g_oobs_rights
+
+    if (oobs_rights & R_VIEW_NET_IPS) > 0 {
+      has_oobs_access = true
+    }
+
+    out["has_oobs_access"] = has_oobs_access
 
   } else if action == "get_front" {
 
@@ -1197,6 +1296,352 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     out["v4favs"] = v4_favs
     out["v4accessible"] = v4_accessible
+
+    query = "SELECT tags.*"+
+            ", CAST(("+
+            " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+            " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+            " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+            " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+              " WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+              " WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " 0) AS UNSIGNED) AS used"+
+            ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                      " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+            " FROM tags"
+    if tags_cache, err = return_query_M(db, query, "tag_id"); err != nil { panic(err) }
+
+    for tag_id, _ := range tags_cache {
+      if u64, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
+      tags_cache[tag_id].(M)["rights"] = u64
+      if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
+        tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
+        tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+        tags_cache[tag_id].(M)["tag_api_name"] = nil
+      }
+    }
+
+    out["tags"] = tags_cache
+
+  } else if action == "search" {
+    var search_string string
+    var search_tags string
+    var search_vlans string
+
+    if search_string, err = get_p_string(q, "search_string", nil); err != nil { panic(err) }
+    if search_tags, err = get_p_string(q, "search_tags", g_num_list_reg); err != nil { panic(err) }
+    if search_vlans, err = get_p_string(q, "search_vlans", g_num_list_reg); err != nil { panic(err) }
+
+    search_string = strings.ToLower(strings.TrimSpace(search_string))
+    search_tags = strings.TrimSpace(search_tags)
+    search_vlans = strings.TrimSpace(search_vlans)
+
+    out["rows"] = make([]M, 0)
+
+    if search_string == "" && search_tags == "" && search_vlans == "" {
+      goto OUT
+    }
+
+    var tags_list []string
+
+    if search_tags != "" {
+
+      query = "SELECT tags.*"+
+              ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                        " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+              " FROM tags"
+      if tags_cache, err = return_query_M(db, query, "tag_id"); err != nil { panic(err) }
+
+      for tag_id, _ := range tags_cache {
+        if u64, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
+        tags_cache[tag_id].(M)["rights"] = u64
+        if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
+          tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
+          tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+          tags_cache[tag_id].(M)["tag_api_name"] = nil
+        }
+
+        if parent_id, _ := tags_cache[tag_id].(M).UintString("tag_fk_tag_id"); parent_id != "" {
+          if tags_cache[parent_id].(M)["_children"] == nil {
+            tags_cache[parent_id].(M)["_children"] = make([]string, 0)
+          }
+          tags_cache[parent_id].(M)["_children"] = append(tags_cache[parent_id].(M)["_children"].([]string), tag_id)
+        }
+      }
+      tags_list = make([]string, 0)
+      var append_tag_children func(string, int) (error)
+      append_tag_children = func(tag_id string, counter int) (error) {
+        if counter > MAX_TREE_LEN { return errors.New("Tag tree loop detected") }
+        if tags_cache[tag_id].(M)["_children"] != nil {
+          for _, child_id := range tags_cache[tag_id].(M)["_children"].([]string) {
+            tags_list = append(tags_list, child_id)
+            if e := append_tag_children(child_id, counter + 1); e != nil { return e }
+          }
+        }
+
+        return nil
+      }
+      for _, tag_id := range strings.Split(search_tags, ",") {
+        tags_list = append(tags_list, tag_id)
+        if err = append_tag_children(tag_id, 0); err != nil { panic(err) }
+      }
+    }
+
+    for _, v := range [...]string{"4", "6"} {
+
+      var rows []M
+
+      // search networks
+      query = "SELECT v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets"+
+              " WHERE TRUE"
+      args := make([]interface{}, 0)
+      if search_string != "" {
+        query += " AND (v"+v+"net_name LIKE CONCAT('%',?,'%') OR v"+v+"net_descr LIKE CONCAT('%',?,'%'))"
+        args = append(args, search_string, search_string)
+      }
+
+      if search_tags != "" && tags_list != nil && len(tags_list) > 0 {
+        query += " AND ( FALSE"
+        for _, tag_id := range tags_list {
+          query += " OR (FIND_IN_SET('"+tag_id+"',v"+v+"net_tags) > 0)"
+        }
+        query += ")"
+      }
+
+      if search_vlans != "" {
+        query += " AND v"+v+"net_fk_vlan_id IN("+search_vlans+")"
+      }
+
+      query += " ORDER BY v"+v+"net_addr"
+
+      if rows, err = return_query_A(db, query, args...); err != nil { panic(err.Error() + "\n\n"+query) }
+
+      for _, row := range rows {
+        if u64, _, err = get_net_rights(nil, nil, v, row); err != nil { panic(err) }
+
+        include := false
+
+        if (u64 & R_VIEW_NET_INFO) == 0 && (u64 & R_NAME) > 0 && search_string !="" &&
+        strings.Index(row["v"+v+"net_name"].(string), search_string) >= 0 {
+          //only name matched and there is no details access
+          row["v"+v+"net_descr"] = "HIDDEN"
+          row["v"+v+"net_fk_vlan_id"] = nil
+          row["v"+v+"net_owner"] = nil
+          row["v"+v+"net_tags"] = ""
+
+          include = true
+        } else if (u64 & R_VIEW_NET_INFO) > 0 {
+          include = true
+        }
+
+        if include {
+          if row["v"+v+"net_fk_vlan_id"] != nil {
+            var vlan_row M
+            vlan_rights := g_vlans_rights
+
+            query = "SELECT vd_name, vd_descr, vlan_name, vlan_descr, vlan_number"+
+                    ", IFNULL((SELECT BIT_OR(gvrr_rmask) FROM"+
+                               " gvrrs INNER JOIN vrs ON vr_id=gvrr_fk_vr_id WHERE"+
+                               " gvrr_fk_g_id IN("+user_groups_in+")"+
+                               " AND vr_fk_vd_id=vd_id"+
+                               " AND vr_start <= vlan_number AND vr_stop >= vlan_number"+
+                               "), 0) as rights"+
+                    " FROM vlans INNER JOIN vds ON vd_id=vlan_fk_vd_id"+
+                    " WHERE vlan_id=?"
+            if vlan_row, err = must_return_one_M(db, query, row["v"+v+"net_fk_vlan_id"]); err != nil { panic(err) }
+            if u64, var_ok = vlan_row.Uint64("rights"); !var_ok { panic(PE) }
+
+            vlan_rights |= u64
+
+            if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+              vlan_row["vd_name"] = "HIDDEN"
+              vlan_row["vd_descr"] = "HIDDEN"
+              vlan_row["vlan_name"] = "HIDDEN"
+              vlan_row["vlan_descr"] = "HIDDEN"
+            }
+            row["net_vlan_data"] = vlan_row
+          }
+          ret_row := make(M)
+          ret_row["v"] = v
+          ret_row["type"] = "net"
+          ret_row["data"] = row
+
+          out["rows"] = append(out["rows"].([]M), ret_row)
+        }
+      }
+
+      // search ips
+      query = "SELECT v"+v+"nets.*, v"+v+"ip_addr"+
+              ", v"+v+"ip_id"+
+              ", v"+v+"ip_fk_vlan_id"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets INNER JOIN v"+v+"ips ON v"+v+"ip_fk_v"+v+"net_id=v"+v+"net_id"+
+              " WHERE TRUE"
+
+      args = make([]interface{}, 0)
+      if search_string != "" {
+        query += " AND (SELECT COUNT(*) FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+                       " WHERE (ic_type='text' OR ic_type='textarea') AND iv_fk_v"+v+"ip_id=v"+v+"ip_id"+
+                       " AND iv_value LIKE CONCAT('%',?,'%')) > 0"
+        args = append(args, search_string)
+      }
+
+      if search_tags != "" && tags_list != nil && len(tags_list) > 0 {
+        query += " AND ( FALSE"
+        for _, tag_id := range tags_list {
+          query += " OR (SELECT COUNT(*) FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+                         " WHERE (ic_type='tag' OR ic_type='multitag') AND iv_fk_v"+v+"ip_id=v"+v+"ip_id"+
+                         " AND FIND_IN_SET('"+tag_id+"', iv_value) > 0) > 0"
+        }
+        query += ")"
+      }
+
+      if search_vlans != "" {
+        query += " AND v"+v+"ip_fk_vlan_id IN("+search_vlans+")"
+      }
+
+      query += " ORDER BY v"+v+"ip_addr"
+
+      if rows, err = return_query_A(db, query, args...); err != nil { panic(err.Error() + "\n\n"+query) }
+
+      for _, row := range rows {
+        if u64, _, err = get_net_rights(nil, nil, v, row); err != nil { panic(err) }
+
+        include := false
+
+        if (u64 & R_VIEW_NET_IPS) > 0 {
+          include = true
+        }
+
+        if include {
+          query = "SELECT ic_name, ic_type, iv_value"+
+                  " FROM ics INNER JOIN i"+v+"vs ON ic_id=iv_fk_ic_id"+
+                  " WHERE iv_fk_v"+v+"ip_id=? ORDER BY ic_sort"
+          var ip_values []M
+
+          if ip_values, err = return_query_A(db, query, row["v"+v+"ip_id"]); err != nil { panic(err) }
+
+          row["values"] = ip_values
+
+          if row["v"+v+"net_fk_vlan_id"] != nil {
+            var vlan_row M
+            vlan_rights := g_vlans_rights
+
+            query = "SELECT vd_name, vd_descr, vlan_name, vlan_descr, vlan_number"+
+                    ", IFNULL((SELECT BIT_OR(gvrr_rmask) FROM"+
+                               " gvrrs INNER JOIN vrs ON vr_id=gvrr_fk_vr_id WHERE"+
+                               " gvrr_fk_g_id IN("+user_groups_in+")"+
+                               " AND vr_fk_vd_id=vd_id"+
+                               " AND vr_start <= vlan_number AND vr_stop >= vlan_number"+
+                               "), 0) as rights"+
+                    " FROM vlans INNER JOIN vds ON vd_id=vlan_fk_vd_id"+
+                    " WHERE vlan_id=?"
+            if vlan_row, err = must_return_one_M(db, query, row["v"+v+"net_fk_vlan_id"]); err != nil { panic(err) }
+            if u64, var_ok = vlan_row.Uint64("rights"); !var_ok { panic(PE) }
+
+            vlan_rights |= u64
+
+            if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+              vlan_row["vd_name"] = "HIDDEN"
+              vlan_row["vd_descr"] = "HIDDEN"
+              vlan_row["vlan_name"] = "HIDDEN"
+              vlan_row["vlan_descr"] = "HIDDEN"
+            }
+            row["net_vlan_data"] = vlan_row
+          }
+
+          if row["v"+v+"ip_fk_vlan_id"] != nil {
+            var vlan_row M
+            vlan_rights := g_vlans_rights
+
+            query = "SELECT vd_name, vd_descr, vlan_name, vlan_descr, vlan_number"+
+                    ", IFNULL((SELECT BIT_OR(gvrr_rmask) FROM"+
+                               " gvrrs INNER JOIN vrs ON vr_id=gvrr_fk_vr_id WHERE"+
+                               " gvrr_fk_g_id IN("+user_groups_in+")"+
+                               " AND vr_fk_vd_id=vd_id"+
+                               " AND vr_start <= vlan_number AND vr_stop >= vlan_number"+
+                               "), 0) as rights"+
+                    " FROM vlans INNER JOIN vds ON vd_id=vlan_fk_vd_id"+
+                    " WHERE vlan_id=?"
+            if vlan_row, err = must_return_one_M(db, query, row["v"+v+"ip_fk_vlan_id"]); err != nil { panic(err) }
+            if u64, var_ok = vlan_row.Uint64("rights"); !var_ok { panic(PE) }
+
+            vlan_rights |= u64
+
+            if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+              vlan_row["vd_name"] = "HIDDEN"
+              vlan_row["vd_descr"] = "HIDDEN"
+              vlan_row["vlan_name"] = "HIDDEN"
+              vlan_row["vlan_descr"] = "HIDDEN"
+            }
+            row["ip_vlan_data"] = vlan_row
+          }
+          ret_row := make(M)
+          ret_row["type"] = "ip"
+          ret_row["v"] = v
+          ret_row["data"] = row
+
+          out["rows"] = append(out["rows"].([]M), ret_row)
+        }
+      }
+
+      if (g_oobs_rights & R_VIEW_NET_IPS) > 0 &&
+        (search_string != "" || search_tags != "") &&
+      true {
+        query = "SELECT * FROM v"+v+"oobs"+
+                " WHERE TRUE"
+
+        args = make([]interface{}, 0)
+
+        if search_string != "" {
+          query += " AND v"+v+"oob_descr LIKE CONCAT('%', ?, '%')"
+          args = append(args, search_string)
+        }
+
+        if search_tags != "" {
+          query += " AND ( FALSE"
+          for _, tag_id := range tags_list {
+            query += " OR (FIND_IN_SET('"+tag_id+"',v"+v+"oob_tags) > 0)"
+          }
+          query += ")"
+        }
+
+        if rows, err = return_query_A(db, query, args...); err != nil { panic(err) }
+        for _, row := range rows {
+          ret_row := make(M)
+          ret_row["type"] = "oob"
+          ret_row["v"] = v
+          ret_row["data"] = row
+
+          out["rows"] = append(out["rows"].([]M), ret_row)
+        }
+      }
+    }
+
   } else if action == "get_groups" {
 
     query = "SELECT * FROM gs ORDER BY g_id"
@@ -1205,7 +1650,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     query = "SELECT u_id, u_name, u_login FROM us WHERE u_id IN (SELECT fk_u_id FROM gs)"
     if out["users"], err = return_query(db, query, "u_id"); err != nil { panic(err) }
-    if out["users"].(M)[user_id], err = must_return_one_M(db, "SELECT * FROM us WHERE u_id=?", user_id); err != nil { panic(err) }
+    if out["users"].(M)[user_id], err = must_return_one_M(db, "SELECT * FROM us WHERE u_id=?", user_id);
+    err != nil { panic(err) }
 
   } else if action == "add_group" {
 
@@ -1221,6 +1667,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     query = "INSERT INTO gs(g_name, g_descr, added, ts, fk_u_id) VALUES(?,?,?,0,?)"
 
+    log_query := query
+
     if dbres, err = db.Exec(query, g_name, g_descr, ts, user_id); err != nil { panic(err) }
     var lid int64
 
@@ -1228,7 +1676,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if lid <= 0 { panic("weird LastInsertId returned") }
 
     query = "SELECT * FROM gs WHERE g_id=?"
-    if out["gs"], err = return_query(db, query, "", lid); err != nil { panic(err) }
+    if out["gs"], err = must_return_one_M(db, query, lid); err != nil { panic(err) }
+
+    if err = audit_log(db, "group", lid, log_query, nil, out["gs"].(M)); err != nil { panic(err) }
 
     query = "SELECT u_id, u_name, u_login FROM us WHERE u_id IN (SELECT g_id FROM gs WHERE g_id=?)"
     if out["users"], err = return_query(db, query, "u_id", lid); err != nil { panic(err) }
@@ -1281,8 +1731,14 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       goto OUT
     }
 
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM gs WHERE g_id=?", id); err != nil { panic(err) }
+
+
     query = "DELETE FROM gs WHERE g_id=?"
+    log_query := query
     if _, err = db.Exec(query, id); err != nil { panic(err) }
+
+    if err = audit_log(db, "group", id, log_query, prev_data, nil); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -1340,6 +1796,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
 
       switch(object) {
+      case "global_rights":
+        if !user_is_admin { panic(NoAccess()) }
+        objects_rights := make(map[string]map[string]string)
+        if err = json.Unmarshal([]byte(value.(string)), &objects_rights); err != nil { panic(err) }
+        for obj, _ := range g_rights_obj {
+          if _, ex := objects_rights[obj]; !ex { panic("No object: "+obj+" in data") }
+        }
       case "group":
         if !user_is_admin { panic(NoAccess()) }
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
@@ -1398,6 +1861,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         if prop != "v4net_name" && prop != "v4net_descr" &&
            prop != "v4net_owner" && prop != "vlan" &&
+           prop != "v4net_tags" &&
         true { panic(fmt.Sprint("Bad property in queue item #", i)) }
 
         if (dbnet_rights & R_MANAGE_NET) == 0 { panic(NoAccess()) }
@@ -1456,10 +1920,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         }
 
-        if user_is_admin {
-          vlan_rights |= ADMIN_VLAN_RIGHTS
-        }
-
         if (vlan_rights & R_EDIT_IP_VLAN) == 0 ||
            (vlan_rights & R_VIEW_NET_IPS) == 0 ||
         false { panic(NoAccess()) }
@@ -1512,6 +1972,15 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           panic(fmt.Sprint("Bad value in queue item #", i))
         }
 
+      case "oob":
+        if (g_oobs_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
+        if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+        if prop != "descr" && prop != "tags" { panic(fmt.Sprint("Bad property in queue item #", i)) }
+        if _, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        var v string
+        if v, var_ok = data.String("v"); !var_ok { panic(fmt.Sprint("No v in queue item #", i)) }
+        if v != "4" && v != "6" { panic(fmt.Sprint("Bad v in queue item #", i)) }
+
       default:
         panic("Unknown object type: "+object)
       }
@@ -1531,7 +2000,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       var value interface {}
 
-      value = qm["value"].(string)
+      value = strings.ReplaceAll(qm["value"].(string), "\r\n", "\n")
 
       data := M(qm["data"].(map[string]interface{}))
       _ = data
@@ -1543,22 +2012,83 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if object, var_ok = data.String("object"); !var_ok { panic(fmt.Sprint("No object in queue item #", i)) }
 
       switch(object) {
+      case "global_rights":
+        objects_rights := make(map[string]map[string]string)
+        if err = json.Unmarshal([]byte(value.(string)), &objects_rights); err != nil { panic(err) }
+
+        prev_data = make(M)
+        changes := 0
+
+        for obj, _ := range g_rights_obj {
+          prev_data.(M)[obj] = make(M)
+
+          query = "SELECT glr_fk_g_id as g_id, glr_rmask as rights FROM glrs WHERE glr_object=? ORDER BY g_id"
+          var rows []M
+          if rows, err = return_query_A(tx, query, obj); err != nil { panic(err) }
+          for _, row := range rows {
+            g_id, _ := row.UintString("g_id")
+            prev_rights, _ := row.UintString("rights")
+            prev_data.(M)[obj].(M)[g_id] = prev_rights
+
+            if new_rights, ex := objects_rights[obj][g_id]; !ex {
+              query = "DELETE FROM glrs WHERE glr_object=? AND glr_fk_g_id=?"
+              if _, err = db_exec(tx, query, obj, g_id); err != nil { panic(err) }
+              changes ++
+            } else if new_rights != prev_rights {
+              query = "UPDATE glrs SET"+
+                      " glr_rmask=?"+
+                      ",ts=?"+
+                      ",fk_u_id=?"+
+                      " WHERE glr_object=? AND glr_fk_g_id=?"
+              if _, err = db_exec(tx, query, new_rights, ts, user_id, obj, g_id); err != nil { panic(err) }
+              changes ++
+            }
+          }
+
+          for g_id, new_rights := range objects_rights[obj] {
+            if _, ex := prev_data.(M)[obj].(M)[g_id]; !ex {
+              query = "INSERT INTO glrs SET"+
+                      " glr_rmask=?"+
+                      ",ts=?"+
+                      ",fk_u_id=?"+
+                      ",glr_object=?"+
+                      ",glr_fk_g_id=?"
+              if _, err = db_exec(tx, query, new_rights, ts, user_id, obj, g_id); err != nil { panic(err) }
+              changes ++
+            }
+          }
+        }
+        if changes > 0 {
+          if err = audit_log(tx, object, 0, "set rights", prev_data, objects_rights); err != nil { panic(err) }
+        }
       case "group":
         if !user_is_admin { panic(NoAccess()) }
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
 
+        if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM gs WHERE g_id=?", obj_id); err != nil { panic(err) }
+
         query = "UPDATE gs SET "+prop+"=?, ts=?, fk_u_id=? WHERE g_id=?"
+
         _, err = tx.Exec(query, value, ts, user_id, obj_id)
         if err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
+
       case "vdom":
         if !user_is_admin { panic(NoAccess()) }
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
 
+        if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM vds WHERE vd_id=?", obj_id); err != nil { panic(err) }
+
         query = "UPDATE vds SET "+prop+"=?, ts=?, fk_u_id=? WHERE vd_id=?"
+
         _, err = tx.Exec(query, value, ts, user_id, obj_id)
         if err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
+
       case "ip":
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
@@ -1570,14 +2100,20 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           }
         }
 
+        if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM v4ips WHERE v4ip_id=?", obj_id); err != nil { panic(err) }
+
         query = "UPDATE v4ips SET "+prop+"=?, ts=?, fk_u_id=? WHERE v4ip_id=?"
         _, err = tx.Exec(query, value, ts, user_id, obj_id)
         if err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
 
       case "ip_value":
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
         var col_id string
         if col_id, var_ok = data.UintString("col_id"); !var_ok { panic(fmt.Sprint("No col_id in queue item #", i)) }
+
+        prev_data, _ = must_return_one_M(tx, "SELECT iv_value FROM i4vs WHERE iv_fk_ic_id=? AND iv_fk_v4ip_id=?", col_id, obj_id)
 
         query = "INSERT INTO i4vs SET"+
                 " iv_fk_ic_id=?"+
@@ -1591,6 +2127,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
                 ",fk_u_id=VALUES(fk_u_id)"
         _, err = tx.Exec(query, col_id, obj_id, value, ts, user_id)
         if err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
 
       case "net":
 
@@ -1608,18 +2146,27 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           }
         }
 
+        if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM v4nets WHERE v4net_id=?", obj_id); err != nil { panic(err) }
+
         query = "UPDATE v4nets SET "+prop+"=?, ts=?, fk_u_id=? WHERE v4net_id=?"
         _, err = tx.Exec(query, value, ts, user_id, obj_id)
         if err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
 
       case "vlan_value":
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
 
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
 
+        if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM vlans WHERE vlan_id=?", obj_id); err != nil { panic(err) }
+
         query = "UPDATE vlans SET "+prop+"=?, ts=?, fk_u_id=? WHERE vlan_id=?"
         _, err = tx.Exec(query, value, ts, user_id, obj_id)
         if err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
+
       case "ics":
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
 
@@ -1629,14 +2176,20 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           if _, err = tx.Exec(query, i, id); err != nil { panic(err) }
         }
 
+        if err = audit_log(tx, object, 0, query, nil, value); err != nil { panic(err) }
+
       case "ic":
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
         if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+
+        if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM ics WHERE ic_id=?", obj_id); err != nil { panic(err) }
 
         query = "UPDATE ics SET "+prop+"=?, ts=?, fk_u_id=? WHERE ic_id=?"
         if _, err = tx.Exec(query, value, ts, user_id, obj_id); err != nil {
           panic(err)
         }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
 
       case "tp":
         if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
@@ -1644,25 +2197,56 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         switch(prop) {
         case "tp_name","tp_descr":
+          if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM tps WHERE tp_id=?", obj_id); err != nil { panic(err) }
+
           query = "UPDATE tps SET "+prop+"=?, ts=?, fk_u_id=? WHERE tp_id=?"
           if _, err = tx.Exec(query, value, ts, user_id, obj_id); err != nil { panic(err) }
+
+          if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
 
         case "fields":
           if value.(string) == "" {
             query = "DELETE FROM tcs WHERE tc_fk_tp_id=?"
             if _, err = tx.Exec(query, obj_id); err != nil { panic(err) }
+
+            if err = audit_log(tx, object, obj_id, query, nil, nil); err != nil { panic(err) }
+
           } else {
             query = "DELETE FROM tcs WHERE tc_fk_tp_id=? AND tc_fk_ic_id NOT IN("+value.(string)+")"
             if _, err = tx.Exec(query, obj_id); err != nil { panic(err) }
+
+            if err = audit_log(tx, object, obj_id, query, nil, nil); err != nil { panic(err) }
+
           }
           if value.(string) != "" {
             query = "INSERT IGNORE INTO tcs(tc_fk_ic_id, tc_fk_tp_id, ts, fk_u_id)"+
                     " SELECT ic_id, ?, ?, ? FROM ics WHERE ic_id IN("+value.(string)+")"
             if _, err = tx.Exec(query, obj_id, ts, user_id); err != nil { panic(err) }
+
+            if err = audit_log(tx, object, obj_id, query, nil, nil); err != nil { panic(err) }
+
           }
         default:
           panic("Unknown object prop")
         }
+
+      case "oob":
+        if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        var v string
+        if v, var_ok = data.String("v"); !var_ok { panic(fmt.Sprint("No v in queue item #", i)) }
+
+        if prev_data, err = must_return_one_M(tx, "SELECT v"+v+"oob_"+prop+" FROM v"+v+"oobs WHERE v"+v+"oob_id=?", obj_id);
+        err != nil { panic(err) }
+
+        query = "UPDATE v"+v+"oobs SET"+
+                " v"+v+"oob_"+prop+"=?"+
+                ",ts=?"+
+                ",fk_u_id=?"+
+                " WHERE v"+v+"oob_id=?"
+        if _, err = tx.Exec(query, value, ts, user_id, obj_id); err != nil { panic(err) }
+
+        if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
 
       default:
         panic("Unknown object type: "+object)
@@ -1841,9 +2425,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
           cell_net_last_addr := uint32(row_net | (0xFFFFFFFF >> m))
           var net_rights uint64 = g_nets_rights
-          if user_is_admin {
-            net_rights = net_rights | ADMIN_RIGHTS
-          }
           for i, _ := range ranges {
 
             range_rights := ranges[i]["_rights"].(uint64)
@@ -1887,10 +2468,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       dbnet_owner, _ = dbnet.AnyString("v4net_owner")
 
       if dbnet_rights, var_ok = dbnet.Uint64("rights"); !var_ok { panic(PE) }
-
-      if user_is_admin {
-        dbnet_rights = dbnet_rights | ADMIN_RIGHTS
-      }
 
       if dbnet_owner == user_id {
         dbnet_rights = dbnet_rights | OWNER_RIGHTS
@@ -1964,10 +2541,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
           var vlan_rights uint64
           if vlan_rights, var_ok = vlan_data.Uint64("rights"); !var_ok { panic(PE) }
-
-          if user_is_admin {
-            vlan_rights |= ADMIN_VLAN_RIGHTS
-          }
 
           vlan_rights |= g_vlans_rights
 
@@ -2101,6 +2674,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     }
     out["fk_u_id"] = dbnet["fk_u_id"]
     out["net_name"] = dbnet["v4net_name"]
+    out["net_tags"] = dbnet["v4net_tags"]
 
     if (dbnet_rights & R_VIEW_NET_INFO) > 0 {
       out["net_descr"] = dbnet["v4net_descr"]
@@ -2129,8 +2703,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
         var vlan_rights uint64
         if vlan_rights, var_ok = dbnet_vlan_info_a[0].Uint64("rights"); !var_ok { panic(PE) }
-
-        if user_is_admin { vlan_rights |= ADMIN_VLAN_RIGHTS }
 
         vlan_rights |= g_vlans_rights
 
@@ -2222,8 +2794,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
               " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
               " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
               " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
-              " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
-              " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+              " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+                " WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+              " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+                " WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
               " 0) AS UNSIGNED) AS used"+
               ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
                         " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
@@ -2278,7 +2852,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             var vlan_rights uint64
             if vlan_rights, var_ok = vlan_cache[vlan_id].(M).Uint64("rights"); !var_ok { panic(PE) }
 
-            if user_is_admin { vlan_rights |= ADMIN_VLAN_RIGHTS }
             vlan_rights |= g_vlans_rights
 
             if (vlan_rights & R_VIEW_NET_IPS) == 0 {
@@ -2553,6 +3126,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ",v4ip_fk_v4net_id=?"+
             ",ts=?"+
             ",fk_u_id=?"
+
+    log_query := query
     if dbres, err = tx.Exec(query, take_ip, dbnet["v4net_id"], ts, user_id); err != nil { panic(err) }
 
     var rows []M
@@ -2588,6 +3163,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     }
 
     out["ipdata"] = ipdata
+
+    if err = audit_log(tx, "v4ip", ipdata["v4ip_id"], log_query, nil, ipdata); err != nil { panic(err) }
 
     err = tx.Commit()
     if err != nil { panic(err) }
@@ -2745,6 +3322,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
     }
 
+    if err = audit_log(tx, object, object_id, "set rights", groups_rights, rights); err != nil { panic(err) }
+
     out["done"] = 1
 
     err = tx.Commit()
@@ -2809,7 +3388,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       object_key = "gr4r_fk_v4r_id"
       right_mask_field = "gr4r_rmask"
 
-      if dbnet_rights, dbnet, err = get_net_rights(tx, object_id, "4", nil); err != nil { panic(err) }
+      if dbnet_rights, dbnet, err = get_net_rights(tx, net_id, "4", nil); err != nil { panic(err) }
 
       var dbnet_addr uint64
       var dbnet_last_addr uint64
@@ -2843,7 +3422,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if lid <= 0 { panic("weird LastInsertId returned") }
 
         object_id = strconv.FormatInt(lid, 10)
+
+        if new_data, err = must_return_one_M(tx, "SELECT * FROM v4rs WHERE v4r_id=?", lid); err != nil { panic(err) }
+        if err = audit_log(tx, object, object_id, query, nil, new_data); err != nil { panic(err) }
+
       } else {
+        if prev_data, err = must_return_one_M(tx, "SELECT * FROM v4rs WHERE v4r_id=?", object_id); err != nil { panic(err) }
         query = "UPDATE v4rs SET"+
                 " v4r_start=?"+
                 ",v4r_stop=?"+
@@ -2857,6 +3441,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
                 " WHERE v4r_fk_v4net_id=? AND v4r_id=?"
         if _, err = tx.Exec(query, r_start, r_stop, r_name, r_descr, r_style, r_icon, r_icon_style, ts, user_id, net_id, object_id);
         err != nil { panic(err) }
+
+        if new_data, err = must_return_one_M(tx, "SELECT * FROM v4rs WHERE v4r_id=?", object_id); err != nil { panic(err) }
+        if err = audit_log(tx, object, object_id, query, prev_data, new_data); err != nil { panic(err) }
+
       }
 
     case "ext_v4net_range":
@@ -2892,7 +3480,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if lid <= 0 { panic("weird LastInsertId returned") }
 
         object_id = strconv.FormatInt(lid, 10)
+
+        if new_data, err = must_return_one_M(tx, "SELECT * FROM v4rs WHERE v4r_id=?", object_id); err != nil { panic(err) }
+        if err = audit_log(tx, object, object_id, query, nil, new_data); err != nil { panic(err) }
+
       } else {
+        if prev_data, err = must_return_one_M(tx, "SELECT * FROM v4rs WHERE v4r_id=?", object_id); err != nil { panic(err) }
         query = "UPDATE v4rs SET"+
                 " v4r_start=?"+
                 ",v4r_stop=?"+
@@ -2906,6 +3499,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
                 " WHERE v4r_fk_v4net_id IS NULL AND v4r_id=?"
         if _, err = tx.Exec(query, r_start, r_stop, r_name, r_descr, r_style, r_icon, r_icon_style, ts, user_id, object_id);
         err != nil { panic(err) }
+
+        if new_data, err = must_return_one_M(tx, "SELECT * FROM v4rs WHERE v4r_id=?", object_id); err != nil { panic(err) }
+        if err = audit_log(tx, object, object_id, query, prev_data, new_data); err != nil { panic(err) }
+
       }
     default:
       panic(PE)
@@ -2947,6 +3544,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if _, err = tx.Exec(query,  rights[g_id], ts, user_id, g_id, object_id); err != nil { panic(err) }
       }
     }
+
+    if err = audit_log(tx, object, object_id, "set rights", groups_rights, rights); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -3081,6 +3680,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     var table string
     var key_field string
+    var prev_rights M
 
     switch object {
     case "int_v4net_range":
@@ -3103,6 +3703,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if (dbnet_rights & r) == 0 { panic(NoAccess()) }
       }
 
+      query = "SELECT gr4r_fk_g_id as g_id, gr4r_rmask as rights FROM gr4rs WHERE gr4r_fk_v4r_id=?"
+      if prev_rights, err = return_query_M(db, query, "g_id", object_id); err != nil { panic(err) }
+
     case "ext_v4net_range":
 
       if !user_is_admin { panic(NoAccess()) }
@@ -3119,12 +3722,22 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       if net_id, var_ok = rows[0].UintString("v4r_fk_v4net_id"); var_ok { panic(PE) }
 
+      query = "SELECT gr4r_fk_g_id as g_id, gr4r_rmask as rights FROM gr4rs WHERE gr4r_fk_v4r_id=?"
+      if prev_rights, err = return_query_M(db, query, "g_id", object_id); err != nil { panic(err) }
+
     default:
       panic(PE)
     }
 
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM "+table+" WHERE "+key_field+"=?", object_id);
+    err != nil { panic(err) }
+
+    prev_data.(M)["rights"] = prev_rights
+
     query = "DELETE FROM "+table+" WHERE "+key_field+"=?"
     if _, err = db.Exec(query, object_id); err != nil { panic(err) }
+
+    if err = audit_log(db, object, object_id, query, prev_data, nil); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -3154,8 +3767,18 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if (dbnet_rights & r) == 0 { panic(NoAccess()) }
     }
 
+    if prev_data, err = must_return_one_M(tx, "SELECT * FROM v"+v+"nets WHERE v"+v+"net_id=?", net_id); err != nil { panic(err) }
+
+    var prev_rights M
+    query = "SELECT gn4r_fk_g_id as g_id, gn4r_rmask as rights FROM gr4rs WHERE gn4r_fk_v4net_id=?"
+    if prev_rights, err = return_query_M(tx, query, "g_id", net_id); err != nil { panic(err) }
+
+    prev_data.(M)["rights"] = prev_rights
+
     query = "DELETE FROM v"+v+"nets WHERE v"+v+"net_id=?"
     if _,err = tx.Exec(query, net_id); err != nil { panic(err) }
+
+    if err = audit_log(tx, "v"+v+"net", net_id, query, prev_data, nil); err != nil { panic(err) }
 
     /*
     TODO Cleanup dependable tables
@@ -3196,8 +3819,20 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       panic(NoAccess())
     }
 
+    query = "SELECT ic_name, iv_value FROM i"+v+"vs INNER JOIN ics ON ic_id=iv_fk_ic_id WHERE iv_fk_v"+v+"ip_id=?"
+    var rows []M
+    if rows, err = return_query_A(tx, query, ip_id); err != nil { panic(err) }
+
+    if prev_data, err = must_return_one_M(tx, "SELECT * FROM v"+v+"ips WHERE v"+v+"ip_id=?", ip_id);
+    err != nil { panic(err) }
+
+    prev_data.(M)["values"] = rows
+
     query = "DELETE FROM v"+v+"ips WHERE v"+v+"ip_id=?"
     if _, err = tx.Exec(query, ip_id); err != nil { panic(err) }
+
+
+    if err = audit_log(tx, "v"+v+"ip", ip_id, query, prev_data, nil); err != nil { panic(err) }
 
     err = tx.Commit()
     if err != nil { panic(err) }
@@ -3269,6 +3904,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ",taken_ts=?"+
             ",fk_u_id=?"+
             ",taken_u_id=?"
+    log_query := query
     if dbres, err = tx.Exec(query, net_addr, net_last_addr, masklen, user_id, template["tp_descr"], ts, ts, user_id, user_id);
     err != nil { panic(err) }
 
@@ -3277,11 +3913,15 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
     if lid <= 0 { panic("weird LastInsertId returned") }
 
+    if new_data, err = must_return_one_M(tx, "SELECT * FROM v"+v+"nets WHERE v"+v+"net_id=?", lid); err != nil { panic(err) }
+
     for _, tc := range template_cols {
       if _, err = tx.Exec("INSERT INTO n"+v+"cs SET nc_fk_v"+v+"net_id=?, nc_fk_ic_id=?, ts=?, fk_u_id=?",
                           lid, tc["tc_fk_ic_id"], ts, user_id);
       err != nil { panic(err) }
     }
+
+    if err = audit_log(tx, "v"+v+"net", lid, log_query, nil, new_data); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -3366,6 +4006,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     query = "UPDATE v"+v+"nets SET ts=?, fk_u_id=? WHERE v"+v+"net_id=?"
     if _, err = tx.Exec(query, ts, user_id, net_id); err != nil { panic(err) }
 
+    if err = audit_log(tx, "v"+v+"net", net_id, "set columns", nil, q); err != nil { panic(err) }
+
     if err = tx.Commit(); err != nil { panic(err) }
     commited = true
 
@@ -3393,10 +4035,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     for _, row := range rows {
       if u64, var_ok = row.Uint64("rights"); !var_ok { panic(PE) }
-
-      if user_is_admin {
-        u64 |= ADMIN_VLAN_RIGHTS
-      }
 
       u64 |= g_vlans_rights
 
@@ -3430,10 +4068,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if vd, err = must_return_one_M(db, query, vd_id); err != nil { panic(err) }
 
     if u64, var_ok = vd.Uint64("rights"); !var_ok { panic(PE) }
-
-    if user_is_admin {
-      u64 |= ADMIN_VLAN_RIGHTS
-    }
 
     u64 |= g_vlans_rights
 
@@ -3469,12 +4103,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       vlan_number := strconv.FormatUint(v, 10)
       _, taken := dbvlans[vlan_number]
 
-      vlan_rights := uint64(0)
-      if user_is_admin {
-        vlan_rights |= ADMIN_VLAN_RIGHTS
-      }
-
-      vlan_rights |= g_vlans_rights
+      vlan_rights := g_vlans_rights
 
       vlan_ranges := make([]M, len(dbranges))
 
@@ -3643,10 +4272,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       panic("В данные внесены изменения другим пользователем. Обновите страницу.")
     }
 
-    if user_is_admin {
-      vlan_rights |= ADMIN_VLAN_RIGHTS
-    }
-
     if (vlan_rights & R_VIEW_NET_IPS) == 0 ||
        (vlan_rights & R_EDIT_IP_VLAN) == 0 ||
     false { panic(NoAccess()) }
@@ -3657,11 +4282,15 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ",vlan_name=?"+
             ",ts=?"+
             ",fk_u_id=?"
+    log_query := query
+
     if _, err = tx.Exec(query, take_vlan, vd_id, fmt.Sprintf("VLAN%04d", take_vlan), ts, user_id); err != nil { panic(err) }
 
     var row_data M
     if row_data, err = must_return_one_M(tx, "SELECT * FROM vlans WHERE vlan_number=? AND vlan_fk_vd_id=?", take_vlan, vd_id);
     err != nil { panic(err) }
+
+    if err = audit_log(tx, "vlan", row_data["vlan_id"], log_query, nil, row_data); err != nil { panic(err) }
 
     vlan_ranges := make([]M, len(vd_ranges))
     for i, _ := range vd_ranges {
@@ -3674,6 +4303,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     row_data["ranges"] = vlan_ranges
     row_data["rights"] = vlan_rights
     row_data["is_taken"] = 1
+
 
     if err = tx.Commit(); err != nil { panic(err) }
     commited = true
@@ -3718,15 +4348,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       }
     }
 
-    if user_is_admin {
-      vlan_rights |= ADMIN_VLAN_RIGHTS
-    }
-
     if (vlan_rights & R_VIEW_NET_IPS) == 0 ||
        (vlan_rights & R_EDIT_IP_VLAN) == 0 ||
     false { panic(NoAccess()) }
 
     if _, err = db.Exec("DELETE FROM vlans WHERE vlan_id=?", vlan_id); err != nil { panic(err) }
+
+    if err = audit_log(db, "vlan", vlan_id, "DELETE FROM vlans WHERE vlan_id=?", vlan, nil); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -3798,7 +4426,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if lid <= 0 { panic("weird LastInsertId returned") }
 
       object_id = strconv.FormatInt(lid, 10)
+
+      if new_data, err = must_return_one_M(tx, "SELECT * FROM vrs WHERE vr_id=?", object_id); err != nil { panic(err) }
+      if err = audit_log(tx, "vr", object_id, query, nil, new_data); err != nil { panic(err) }
     } else {
+      if prev_data, err = must_return_one_M(tx, "SELECT * FROM vrs WHERE vr_id=?", object_id); err != nil { panic(err) }
       query = "UPDATE vrs SET"+
               " vr_start=?"+
               ",vr_stop=?"+
@@ -3812,6 +4444,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
               " WHERE vr_fk_vd_id=? AND vr_id=?"
       if _, err = tx.Exec(query, r_start, r_stop, r_name, r_descr, r_style, r_icon, r_icon_style, ts, user_id, vd_id, object_id);
       err != nil { panic(err) }
+
+      if new_data, err = must_return_one_M(tx, "SELECT * FROM vrs WHERE vr_id=?", object_id); err != nil { panic(err) }
+      if err = audit_log(tx, "vr", object_id, query, prev_data, new_data); err != nil { panic(err) }
     }
 
     query = "SELECT gvrr_rmask as rights"+
@@ -3850,6 +4485,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if _, err = tx.Exec(query,  rights[g_id], ts, user_id, g_id, object_id); err != nil { panic(err) }
       }
     }
+
+    if err = audit_log(tx, "vr", object_id, "set rights", groups_rights, rights); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -3894,10 +4531,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       var r_rights uint64
       if r_rights, var_ok = row.Uint64("rights"); !var_ok { panic(PE) }
       vd_rights |= r_rights
-    }
-
-    if user_is_admin {
-      vd_rights |= ADMIN_VLAN_RIGHTS
     }
 
     if (vd_rights & R_VIEW_NET_IPS) == 0 { panic(NoAccess()) }
@@ -3950,8 +4583,16 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
 
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM vrs WHERE vr_id=?", object_id); err != nil { panic(err) }
     if _, err = db.Exec("DELETE FROM vrs WHERE vr_id=?", object_id); err != nil { panic(err) }
 
+    var prev_rights M
+    query = "SELECT gvrr_fk_g_id as g_id, gvrr_rmask as rights FROM gvrrs WHERE gvrr_fk_vr_id=?"
+    if prev_rights, err = return_query_M(db, query, "g_id", object_id); err != nil { panic(err) }
+
+    prev_data.(M)["rights"] = prev_rights
+
+    if err = audit_log(db, "vr", object_id, "DELETE FROM vrs WHERE vr_id=?", prev_data, nil); err != nil { panic(err) }
     out["done"] = 1
 
   } else if action == "del_vdom" {
@@ -3960,11 +4601,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if object_id, err = get_p_string(q, "object_id", g_num_reg); err != nil { panic(err) }
 
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM vds WHERE vd_id=?", object_id); err != nil { panic(err) }
     if _, err = db.Exec("DELETE FROM vds WHERE vd_id=?", object_id); err != nil {
       if strings.Index(err.Error(), "1451") >= 0 { panic("В домене есть VLANы. Удалите сперва их.") }
       panic(err)
     }
 
+    if err = audit_log(db, "vd", object_id, "DELETE FROM vds WHERE vd_id=?", prev_data, nil); err != nil { panic(err) }
     out["done"] = 1
 
   } else if action == "add_vdom" {
@@ -3979,6 +4622,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
     if lid <= 0 { panic("weird LastInsertId returned") }
+
+    if new_data, err = must_return_one_M(db, "SELECT * FROM vds WHERE vd_id=?", lid); err != nil { panic(err) }
+    if err = audit_log(db, "vd", lid, "INSERT INTO vds SET vd_name=?, ts=?, fk_u_id=?", nil, new_data); err != nil { panic(err) }
 
     out["vd_id"] = lid
 
@@ -4028,7 +4674,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
     if lid <= 0 { panic("weird LastInsertId returned") }
 
-    if out["ic"], err = must_return_one_M(db, "SELECT ics.*, CAST(0 AS UNSIGNED) as used FROM ics WHERE ic_id=?", lid); err != nil { panic(err) }
+    if new_data, err = must_return_one_M(db, "SELECT ics.*, CAST(0 AS UNSIGNED) as used FROM ics WHERE ic_id=?", lid);
+    err != nil { panic(err) }
+
+    if err = audit_log(db, "ic", lid, query, nil, new_data); err != nil { panic(err) }
+
+    out["ic"] = new_data
 
   } else if action == "del_ic" {
     if !user_is_admin { panic(NoAccess()) }
@@ -4037,7 +4688,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if ic_id, err = get_p_string(q, "ic_id", g_num_reg); err != nil { panic(err) }
 
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM ics WHERE ic_id=?", ic_id);
+    err != nil { panic(err) }
+
     if _, err = db.Exec("DELETE FROM ics WHERE ic_id=?", ic_id); err != nil { panic(err) }
+    if err = audit_log(db, "ic", ic_id, "DELETE FROM ics WHERE ic_id=?", prev_data, nil); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -4074,6 +4729,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     query = "INSERT INTO tps SET tp_name=?"+
             ", ts=?, fk_u_id=?"
+    log_query := query
 
     if dbres, err = db.Exec(query, tp_name, ts, user_id); err != nil { panic(err) }
 
@@ -4090,6 +4746,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             " FROM tps WHERE tp_id=?"
     if out["tp"], err = must_return_one_M(db, query, lid); err != nil { panic(err) }
 
+    if err = audit_log(db, "tp", lid, log_query, nil, out["tp"]); err != nil { panic(err) }
+
   } else if action == "del_tp" {
     if !user_is_admin { panic(NoAccess()) }
 
@@ -4097,7 +4755,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     if tp_id, err = get_p_string(q, "tp_id", g_num_reg); err != nil { panic(err) }
 
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM tps WHERE tp_id=?", tp_id); err != nil { panic(err) }
+
     if _, err = db.Exec("DELETE FROM tps WHERE tp_id=?", tp_id); err != nil { panic(err) }
+    if err = audit_log(db, "tp", tp_id, "DELETE FROM tps WHERE tp_id=?", prev_data, nil); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -4196,10 +4857,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       var tag_rights uint64
       if tag_rights, var_ok = dbtag.Uint64("rights"); !var_ok { panic(PE) }
 
-      if user_is_admin {
-        tag_rights |= ADMIN_TAG_RIGHTS
-      }
-
       tag_rights |= g_tags_rights
 
       tag_data["rights"] = tag_rights
@@ -4255,9 +4912,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     tags["data"] = make(M)
     tags["data"].(M)["rights"] = uint64(g_tags_rights)
-    if user_is_admin {
-      tags["data"].(M)["rights"] = uint64(ADMIN_TAG_RIGHTS | g_tags_rights)
-    }
 
     tags["data"].(M)["flags"] = F_ALLOW_LEAFS | F_DENY_SELECT
 
@@ -4302,10 +4956,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if tag["tag_fk_tag_id"] != nil {
       parent_id, _ := tag.UintString("tag_fk_tag_id")
       if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
-    }
-
-    if user_is_admin {
-      parent_rights |= ADMIN_TAG_RIGHTS
     }
 
     if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
@@ -4373,10 +5023,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if parent_rights, err = get_tag_rights(db, parent_id, 0); err != nil { panic(err) }
     }
 
-    if user_is_admin {
-      parent_rights |= ADMIN_TAG_RIGHTS
-    }
-
     if (parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
 
     can_manage := (tag_rights & R_MANAGE_NET) > 0
@@ -4404,7 +5050,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     del_from_oobs["6"] = make(map[string]string)
 
     for _, v := range [...]string{"4","6"} {
-      query = "SELECT v"+v+"net_id as net_id, v"+v+"net_tags as tags ROM v"+v+"nets WHERE FIND_IN_SET(?,v"+v+"net_tags) > 0"
+      query = "SELECT v"+v+"net_id as net_id, v"+v+"net_tags as tags FROM v"+v+"nets WHERE FIND_IN_SET(?,v"+v+"net_tags) > 0"
       if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
 
       for _, row := range rows {
@@ -4419,7 +5065,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         del_from_nets[v][net_id] = row["tags"].(string)
       }
 
-      query = "SELECT v"+v+"oob_id as oob_id, v"+v+"oob_tags as tags ROM v"+v+"oobs WHERE FIND_IN_SET(?,v"+v+"oob_tags) > 0"
+      query = "SELECT v"+v+"oob_id as oob_id, v"+v+"oob_tags as tags FROM v"+v+"oobs WHERE FIND_IN_SET(?,v"+v+"oob_tags) > 0"
       if rows, err = return_query_A(db, query, tag_id); err != nil { panic(err) }
 
       for _, row := range rows {
@@ -4472,9 +5118,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if err = delete_tag_tree(db, row[0], counter + 1); err != nil { return err }
       }
 
+      if prev_data, err = must_return_one_M(db, "SELECT * FROM tags WHERE tag_id=?", tag_id); err != nil { return err }
       query = "DELETE FROM tags WHERE tag_id=?"
-      _, err = db_exec(db, query, tag_id)
-      return err
+      if _, err = db_exec(db, query, tag_id); err != nil { return err }
+      if err = audit_log(db, "tag", tag_id, query, prev_data, nil); err != nil { return err }
+
+      return nil
     }
 
     if err = delete_tag_tree(db, tag_id, 0); err != nil { panic(err) }
@@ -4558,9 +5207,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       parent_flags = F_ALLOW_LEAFS
       parent_rights = g_tags_rights
-      if user_is_admin {
-        parent_rights |= ADMIN_TAG_RIGHTS
-      }
 
     } else {
       tag_parent_id = parent_id
@@ -4605,7 +5251,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ",tag_parent_id=?"+
             ",ts=?"+
             ",fk_u_id=?"
-    if dbres, err = db.Exec(query, tag_name, tag_descr, tag_api_name, flags, p_id, tag_parent_id, ts, user_id); err != nil { panic(err) }
+    log_query := query
+    if dbres, err = db.Exec(query, tag_name, tag_descr, tag_api_name, flags, p_id, tag_parent_id, ts, user_id);
+    err != nil { panic(err) }
 
     var lid int64
 
@@ -4624,6 +5272,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     for tag_id, tag_sort := range sort {
       if _, err = db.Exec(query, tag_sort, tag_id); err != nil { panic(err) }
     }
+
+    if new_data, err = must_return_one_M(db, "SELECT * FROM tags WHERE tag_id=?", new_tag_id); err != nil { panic(err) }
+    if err = audit_log(db, "tag", new_tag_id, log_query, nil, new_data); err != nil { panic(err) }
 
     out["done"] = 1
     out["new_id"] = new_tag_id
@@ -4656,7 +5307,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if old_parent_rights, err = get_tag_rights(db, tag["tag_fk_tag_id"], 0); err != nil { panic(err) }
     } else {
       old_parent_rights = g_tags_rights
-      if user_is_admin { old_parent_rights |= ADMIN_TAG_RIGHTS }
     }
 
     if (old_parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
@@ -4667,7 +5317,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if new_parent_rights, err = get_tag_rights(db, new_parent_id, 0); err != nil { panic(err) }
     } else {
       new_parent_rights = g_tags_rights
-      if user_is_admin { new_parent_rights |= ADMIN_TAG_RIGHTS }
     }
 
     if (new_parent_rights & R_EDIT_IP_VLAN) == 0 { panic(NoAccess()) }
@@ -4707,6 +5356,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       query = "UPDATE tags SET tag_fk_tag_id=?, tag_parent_id=IFNULL(?, 0), ts=?, fk_u_id=? WHERE tag_id=?"
       if _, err = db.Exec(query, new_parent_id, new_parent_id, ts, user_id, tag_id); err != nil { panic(err) }
+
+      if err = audit_log(db, "tag", tag_id, query, old_parent_id, new_parent_id); err != nil { panic(err) }
 
       if _, err = db.Exec("UPDATE tags SET ts=?, fk_u_id=? WHERE tag_id=?", ts, user_id, new_parent_id); err != nil { panic(err) }
       if _, err = db.Exec("UPDATE tags SET ts=?, fk_u_id=? WHERE tag_id=?", ts, user_id, tag["tag_fk_tag_id"]); err != nil { panic(err) }
@@ -4754,6 +5405,8 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if _, err = db.Exec("DELETE FROM tgrs WHERE tgr_fk_g_id=? AND tgr_fk_tag_id=?", g_id, tag_id); err != nil { panic(err) }
       }
     }
+
+    if err = audit_log(db, "tag", tag_id, "set rights", current_rights, new_rights); err != nil { panic(err) }
 
     out["done"] = 1
 
@@ -4864,10 +5517,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       var tag_rights uint64
       if tag_rights, var_ok = dbtag.Uint64("rights"); !var_ok { panic(PE) }
 
-      if user_is_admin {
-        tag_rights |= ADMIN_TAG_RIGHTS
-      }
-
       tag_rights |= g_tags_rights
 
       tag_data["rights"] = tag_rights
@@ -4926,9 +5575,6 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       tags["data"] = make(M)
       tags["data"].(M)["rights"] = uint64(g_tags_rights)
-      if user_is_admin {
-        tags["data"].(M)["rights"] = uint64(ADMIN_TAG_RIGHTS | g_tags_rights)
-      }
 
       tags["data"].(M)["flags"] = F_ALLOW_LEAFS | F_DENY_SELECT
 
@@ -4972,6 +5618,209 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     out["aux_userinfo"] = aux_userinfo
     out["tags"] = tags
     if out["gs"], err = return_query_M(db, "SELECT * FROM gs", "g_id"); err != nil { panic(err) }
+
+  } else if action == "get_oobs" {
+    oobs_rights := g_oobs_rights
+
+    if (oobs_rights & R_VIEW_NET_IPS) == 0 {
+      panic(NoAccess())
+    }
+
+    query = "SELECT tags.*"+
+            ", CAST(("+
+            " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+            " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+            " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+            " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+              " WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+              " WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " 0) AS UNSIGNED) AS used"+
+            ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                      " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+            " FROM tags"
+    if tags_cache, err = return_query_M(db, query, "tag_id"); err != nil { panic(err) }
+
+    for tag_id, _ := range tags_cache {
+      if u64, err = get_tag_rights(db, tag_id, 0); err != nil { panic(err) }
+      tags_cache[tag_id].(M)["rights"] = u64
+      if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
+        tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
+        tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+        tags_cache[tag_id].(M)["tag_api_name"] = nil
+      }
+    }
+
+    out["tags"] = tags_cache
+    out["oobs"] = make(M)
+
+    users_index := make(map[string]bool)
+
+    for _, v := range [...]string{"4","6"} {
+      query = "SELECT * FROM v"+v+"oobs ORDER BY v"+v+"oob_addr, v"+v+"oob_mask"
+      if out["oobs"].(M)[v], err = return_query_A(db, query); err != nil { panic(err) }
+      for _, row := range out["oobs"].(M)[v].([]M) {
+        u_id, _ := row.UintString("fk_u_id")
+        if u_id != "" { users_index[u_id] = true }
+      }
+    }
+
+    user_ids := make([]string, len(users_index))
+    i := 0
+    for fk_u_id, _ := range users_index {
+      user_ids[i] = fk_u_id
+      i++
+    }
+
+    var aux_userinfo M
+
+    if len(user_ids) > 0 {
+      if aux_userinfo, err = return_query_M(db, "SELECT * FROM us WHERE u_id IN("+strings.Join(user_ids, ",")+")", "u_id");
+      err != nil { panic(err) }
+    } else {
+      aux_userinfo = make(M)
+    }
+    aux_userinfo[user_id] = user_row
+
+    out["aux_userinfo"] = aux_userinfo
+
+  } else if action == "add_oob" {
+    oobs_rights := g_oobs_rights
+
+    if (oobs_rights & R_EDIT_IP_VLAN) == 0 {
+      panic(NoAccess())
+    }
+
+    var v string
+    if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
+
+    var descr string
+    if descr, err = get_p_string(q, "descr", nil); err != nil { panic(err) }
+
+    var tags string
+    if tags, err = get_p_string(q, "tags", g_num_list_reg); err != nil { panic(err) }
+
+    var masklen uint32
+    if masklen, err = get_p_uint32(q, "masklen"); err != nil { panic(err) }
+
+    if (v == "4" && masklen > 32) ||
+       (v == "6" && masklen > 128) ||
+    false { panic("Bad masklen") }
+
+    var addr interface {}
+
+    if v == "4" {
+      if addr, err = get_p_uint32(q, "addr"); err != nil { panic(err) }
+      if addr.(uint32) != ip4net(addr.(uint32), masklen) { panic("Bad network") }
+    } else {
+      panic("Not implemented yet")
+    }
+
+    query = "INSERT INTO v"+v+"oobs SET"+
+            " v"+v+"oob_addr=?"+
+            ",v"+v+"oob_mask=?"+
+            ",v"+v+"oob_descr=?"+
+            ",v"+v+"oob_tags=?"+
+            ",ts=?"+
+            ",fk_u_id=?"
+    if dbres, err = db.Exec(query, addr, masklen, descr, tags, ts, user_id); err != nil { panic(err) }
+
+    var lid int64
+
+    if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
+    if lid <= 0 { panic("weird LastInsertId returned") }
+
+    if out["oob"], err = must_return_one_M(db, "SELECT * FROM v"+v+"oobs WHERE v"+v+"oob_id=?", lid); err != nil { panic(err) }
+
+    if err = audit_log(db, "v"+v+"oob", lid, query, nil, out["oob"]); err != nil { panic(err) }
+
+  } else if action == "del_oob" {
+    oobs_rights := g_oobs_rights
+
+    if (oobs_rights & R_EDIT_IP_VLAN) == 0 {
+      panic(NoAccess())
+    }
+
+    var v string
+    if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
+
+    var id string
+    if id, err = get_p_string(q, "id", g_num_reg); err != nil { panic(err) }
+
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM v"+v+"oobs WHERE v"+v+"oob_id=?", id); err != nil { panic(err) }
+
+    if _, err = db.Exec("DELETE FROM v"+v+"oobs WHERE v"+v+"oob_id=?", id); err != nil { panic(err) }
+
+    if err = audit_log(db, "v"+v+"oob", id, "DELETE FROM v"+v+"oobs WHERE v"+v+"oob_id=?", prev_data, nil); err != nil { panic(err) }
+
+    out["done"] = 1
+
+  } else if action == "find_net" {
+    var v string
+    if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
+
+    if v == "4" {
+      var addr uint32
+      if addr, err = get_p_uint32(q, "addr"); err != nil { panic(err) }
+
+      var rows []M
+
+      if _, ex := q["masklen"]; ex {
+        var masklen uint32
+        if masklen, err = get_p_uint32(q, "masklen"); err != nil { panic(err) }
+        if masklen > 32 { panic(PE) }
+
+        query = "SELECT v4net_addr, v4net_mask FROM v4nets WHERE v4net_addr <= ? AND v4net_last >= ? AND v4net_mask <= ?"
+        if rows, err = return_query_A(db, query, addr, addr, masklen); err != nil { panic(err) }
+      } else {
+        query = "SELECT v4net_addr, v4net_mask FROM v4nets WHERE v4net_addr <= ? AND v4net_last >= ?"
+        if rows, err = return_query_A(db, query, addr, addr); err != nil { panic(err) }
+      }
+
+      if len(rows) > 1 { panic(PE) }
+
+      if len(rows) == 0 {
+        if _, ex := q["masklen"]; ex {
+          var masklen uint32
+          if masklen, err = get_p_uint32(q, "masklen"); err != nil { panic(err) }
+          if masklen > 32 { panic(PE) }
+
+          if masklen == 32 { masklen = 31 }
+
+          net := ip4net(addr, masklen)
+
+          out["nav"] = 1
+          out["net"] = net
+          out["masklen"] = masklen
+        } else {
+          out["notfound"] = 1
+        }
+      } else {
+        out["net"] = rows[0]["v4net_addr"]
+        out["masklen"] = rows[0]["v4net_mask"]
+        out["focuson"] = addr
+      }
+    } else {
+      panic("Not implemented yet")
+    }
+
+  } else if action == "get_global_rights" {
+    if !user_is_admin { panic(NoAccess()) }
+
+    out["objects"] = make(M)
+
+    for object, _ := range g_rights_obj {
+      query = "SELECT glr_fk_g_id as g_id, glr_rmask as rights FROM glrs WHERE glr_object=?"
+      if out["objects"].(M)[object], err = return_query_M(db, query, "g_id", object);
+      err != nil { panic(err) }
+    }
+
+    query = "SELECT * FROM us WHERE u_sub NOT LIKE 'imported%'"
+    if out["users"], err = return_query_M(db, query, "u_id"); err != nil { panic(err) }
+
+    query = "SELECT * FROM gs WHERE g_name != ?"
+    if out["groups"], err = return_query_M(db, query, "g_id", opt_g); err != nil { panic(err) }
 
   } else if action == "query" {
     out["_query"] = q

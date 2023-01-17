@@ -475,7 +475,7 @@ CREATE TABLE gr6rs(
   tc            TINYINT COMMENT 'v6 range group rights'
 );
 
-CREATE TABLE audit_log(
+CREATE TABLE log_template(
   ts		BIGINT UNSIGNED NOT NULL,
   fk_u_id    BIGINT UNSIGNED,
   al_subject	VARCHAR(64) NOT NULL DEFAULT '',

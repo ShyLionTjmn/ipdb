@@ -326,6 +326,8 @@ function autosave_normalize(elm) {
   let value;
 
   switch(elm_data['object']) {
+  case 'global_rights':
+    return elm.val();
   case 'group':
     switch(elm_data['prop']) {
     case 'g_name':
@@ -392,6 +394,9 @@ function autosave_normalize(elm) {
   case 'tp':
     return String(elm.val()).trim();
     break;
+  case 'oob':
+    return String(elm.val()).trim();
+    break;
   };
   error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
 };
@@ -407,6 +412,8 @@ function saveable_check(elm) {
   let found;
 
   switch(elm_data['object']) {
+  case 'global_rights':
+    return true;
   case 'group':
     let id = elm_data['id'];
     if(id === undefined) { error_at(); return false; };
@@ -555,6 +562,8 @@ function saveable_check(elm) {
       if(found) return false;
       break;
     };
+    return true;
+  case 'oob':
     return true;
   };
   error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
@@ -829,11 +838,31 @@ $( document ).ready(function() {
       ;
     };
 
-    if(userinfo["has_tags_access"] || true) {
+    if(userinfo["has_tags_access"]) {
       menu
        .append( $(SPAN).addClass("bigbutton").text("Теги")
          .click( function() {
            select_tag(null, null, undefined);
+         })
+       )
+      ;
+    };
+
+    if(userinfo["has_oobs_access"]) {
+      menu
+       .append( $(SPAN).addClass("bigbutton").text("Внешние сети")
+         .click( function() {
+           window.location = "?action=oobs"+(DEBUG?"&debug":"");
+         })
+       )
+      ;
+    };
+
+    if(userinfo["is_admin"]) {
+      menu
+       .append( $(SPAN).addClass("bigbutton").text("Общие Права")
+         .click( function() {
+           window.location = "?action=global_rights"+(DEBUG?"&debug":"");
          })
        )
       ;
@@ -866,6 +895,12 @@ $( document ).ready(function() {
       break;
     case "templates":
       actionViewTemplates();
+      break;
+    case "oobs":
+      actionViewOobs();
+      break;
+    case "global_rights":
+      actionGlobalRights();
       break;
     default:
       window.location = "?action=front"+(DEBUG?"&debug":"");
@@ -956,6 +991,15 @@ function save_all() {
       let qdata = queue_elements[i]['data'];
       let tr;
 
+      let ed = qelm.closest(".editable");
+      if(ed.length == 1) {
+        let ed_data = ed.data("editable_data");
+        if(ed_data['value'] !== undefined) {
+          ed_data['value'] = qval;
+          ed.data("editable_data", ed_data);
+        };
+      };
+
       qelm.data("autosave_saved", qval);
       qelm.data("autosave_changed", false);
       switch(qdata['object']) {
@@ -1009,11 +1053,58 @@ function save_all() {
   });
 };
 
+function get_vlan_elm(vlan_data, allow_edit=false) {
+  let ret = $(LABEL).addClass("vlan").addClass("vlan_elm")
+   .data("vlan_data", vlan_data)
+   .data("id", vlan_data["vlan_id"])
+   .text("VLAN: "+vlan_data["vlan_number"])
+   .tooltip({
+     classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+     items: "LABEL",
+     content: function() {
+       let vlan_data = $(this).data('vlan_data');
+      
+       let ret = $(DIV)
+        .append( $(DIV)
+          .append( $(SPAN).text("VLAN: "+vlan_data['vlan_number']) )
+        )
+        .append( $(DIV)
+          .append( $(SPAN).text("Домен: "+vlan_data['vd_name']) )
+        )
+        .append( $(DIV)
+          .append( $(SPAN).text("Имя: "+vlan_data['vlan_name']) )
+        )
+       ;
+       return ret;
+     }
+   })
+   .click(!allow_edit?function(){}:function(e) {
+     e.stopPropagation();
+     let old_elm = $(this);
+     let set = $(this).closest(".set");
+     select_vlan(old_elm.data("vlan_data"), function(new_data) {
+       if(new_data["vlan_id"] != "") {
+         old_elm.replaceWith(get_vlan_elm(new_data, true));
+       } else {
+         old_elm.remove();
+       };
+       set.trigger("recalc");
+     });
+   })
+  ;
+  return ret;
+};
 function actionFront() {
   //history.pushState(undefined, undefined, "?action=front"+(DEBUG?"&debug":""));
   workarea.empty();
   fixed_div.empty();
   run_query({"action": "get_front"}, function(res) {
+
+    if(g_data === undefined) g_data = {};
+
+    if(res['ok']['tags'] !== undefined && g_data['tags'] === undefined) {
+      g_data['tags'] = res['ok']['tags'];
+    };
 
     let nav_div = $(DIV).css({"display": "inline-block", "vertical-align": "top"})
      .append( $(SPAN).text("Навигация: ") )
@@ -1035,9 +1126,40 @@ function actionFront() {
      .append( $(LABEL).text(">").title("Перейти к отображению сети").addClass("button")
        .prop({"id": "ipv4_goto_btn"})
        .click(function() {
-         $("#ipv4_goto").animateHighlight("green", 500);
+         let val = String($("#ipv4_goto").val()).trim();
+         let m = val.match(/^(\d+\.\d+\.\d+\.\d+)(?:\/(\d+))?/);
+         if(m === null) {
+           $("ipv4_goto").animateHighlight("red", 300);
+           return;
+         };
+         let ip = v4ip2long(m[1]);
+         if(ip === false) {
+           $("ipv4_goto").animateHighlight("red", 300);
+           return;
+         };
+         if(m[2] !== undefined) {
+           if(Number(m[2]) > 32) {
+             $("ipv4_goto").animateHighlight("red", 300);
+             return;
+           };
+         };
+
+         run_query({"action": "find_net", "v": "4", "addr": String(ip), "masklen": m[2]}, function(res) {
+           if(res['ok']['notfound'] !== undefined) {
+             $("ipv4_goto").animateHighlight("orange", 300);
+             return;
+           };
+           if(res['ok']['nav'] !== undefined) {
+             window.location = "?action=nav_v4&net="+res['ok']['net']+"&masklen="+res['ok']['masklen']+
+                               (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+           } else {
+             window.location = "?action=view_v4&net="+res['ok']['net']+"&masklen="+res['ok']['masklen']+"&focuson="+res['ok']['focuson']+
+                               (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+           };
+         });
        })
      )
+     .append( $(BR) )
      .append( $(BR) )
      .append( $(SPAN).text("Поиск: ") )
      .append( $(INPUT)
@@ -1049,11 +1171,66 @@ function actionFront() {
      .append( $(LABEL).text(">").title("Перейти к отображению сети").addClass("button")
        .prop({"id": "search_btn"})
        .click(function() {
-         $("#search_string").animateHighlight("green", 500);
+         let search_string = String($("#search_string").val()).trim();
+         let tags = String($("#search_tags").val()).trim();
+         let vlans = String($("#search_vlans").val()).trim();
+         if(search_string === "" && tags === "" && vlans ===  "") {
+           $("#search_string").animateHighlight("red", 300);
+           return;
+         };
+         run_query({"action": "search", "search_string": search_string, "search_tags": tags, "search_vlans": vlans}, function(res) {
+           show_search_results(res['ok']);
+         });
        })
      )
      .append( $(BR) )
-     .appendTo( workarea )
+     .append( $(LABEL).text("Ограничить тегами: ") )
+     .append( $(SPAN).addClass("tagset")
+       .append( $(INPUT).prop({"id": "search_tags", "type": "hidden"}) )
+       .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+         .click(function() {
+           let before = $(this);
+           select_tag(null, null, function(tag_id) {
+             if(tag_id !== null) {
+               get_tag_elm(tag_id, true).insertBefore(before);
+               before.closest(".tagset").trigger("recalc");
+             };
+           }, true);
+         })
+       )
+       .on("recalc", function() {
+         let list = [];
+         $(this).find(".tag").each(function() {
+           list.push( $(this).data("tag_id") );
+         });
+         $(this).find("INPUT[type=hidden]").val(list.join(","));
+       })
+     )
+     .append( $(BR) )
+     .append( $(LABEL).text("Ограничить VLAN-ами: ") )
+     .append( $(SPAN).addClass("set")
+       .append( $(INPUT).prop({"id": "search_vlans", "type": "hidden"}) )
+       .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+         .click(function() {
+           let before = $(this);
+
+           select_vlan(undefined, function(vlan_data) {
+             if(vlan_data["vlan_id"] != "") {
+               get_vlan_elm(vlan_data, true).insertBefore(before);
+               before.closest(".set").trigger("recalc");
+             };
+           });
+         })
+       )
+       .on("recalc", function() {
+         let list = [];
+         $(this).find(".vlan").each(function() {
+           list.push($(this).data("id"));
+         });
+         $(this).find("INPUT[type=hidden]").val(list.join(","));
+       })
+     )
+     .appendTo( fixed_div )
     ;
 
     if(res['ok']['v4favs'] !== undefined && Array.isArray(res['ok']['v4favs']) && res['ok']['v4favs'].length > 0) {
@@ -1106,7 +1283,7 @@ function actionFront() {
         ;
       };
 
-      v4favs.appendTo( workarea );
+      v4favs.appendTo( fixed_div );
     };
     if(res['ok']['v4accessible'] !== undefined && Array.isArray(res['ok']['v4accessible']) &&
        res['ok']['v4accessible'].length > 0
@@ -1148,8 +1325,9 @@ function actionFront() {
         ;
       };
 
-      v4accessible.appendTo( workarea );
+      v4accessible.appendTo( fixed_div );
     };
+    workarea.append( $(DIV).prop("id", "searchresult").addClass("table") );
   });
 };
 
@@ -1254,12 +1432,8 @@ function actionGroups() {
 
          run_query({"action": "add_group", "g_name": g_name, "g_descr": g_descr}, function(res) {
 
-           if(res['ok']['gs'] === undefined || !Array.isArray(res['ok']['gs'])) { return; };
+           get_group_row(res['ok']['gs'], res['ok']['users']).insertBefore(insert_before);
 
-
-           for(let i in res['ok']['gs']) {
-             get_group_row(res['ok']['gs'][i], res['ok']['users']).insertBefore(insert_before);
-           };
            insert_before.find(".g_name").val(initial_g_name);
            insert_before.find(".g_descr").val("");
            insert_before.find(".g_name").focus();
@@ -1689,9 +1863,9 @@ function actionNav4() {
   });
 };
 
-function ip_row(ipdata) {
+function ip_row(ipdata, focuson) {
   let empty_colspan = net_cols_ids.length;
-  let tr = $(TR).addClass("row")
+  let tr = $(TR).addClass("row").addClass("iprow")
    .data("ipdata", ipdata)
   ;
 
@@ -1757,6 +1931,11 @@ function ip_row(ipdata) {
     empty_td.appendTo( tr );
   } else if(ipdata['is_empty'] !== undefined) {
     ip_td.appendTo( tr );
+    if(focuson !== undefined) {
+      if(ipdata['start'] <= focuson && ipdata['stop'] >= focuson) {
+        tr.addClass("focuson");
+      };
+    };
     let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td");
     if(can_edit) {
       empty_td
@@ -1849,6 +2028,11 @@ function ip_row(ipdata) {
        })
      )
     ;
+    if(focuson !== undefined) {
+      if(Number(ipdata['v4ip_addr']) === Number(focuson)) {
+        tr.addClass("focuson");
+      };
+    };
     //
     ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])).addClass("ip_addr") );
 
@@ -1982,6 +2166,7 @@ function actionView4() {
   fixed_div.empty();
   let net = getUrlParameter("net", undefined);
   let masklen = getUrlParameter("masklen", undefined);
+  let focuson = getUrlParameter("focuson", undefined);
 
   let is_new = getUrlParameter("is_new", false);
 
@@ -2067,7 +2252,7 @@ function actionView4() {
              'object': 'net',
              'prop': 'v4net_name',
              'id': String(g_data['net_id']),
-             '_edit_css': { 'width': '50em' },
+             '_edit_css': { 'width': '30em' },
              '_elm_id': 'net_name_editable',
              '_after_save': function(elm, new_val) {
                g_data['net_name'] = new_val;
@@ -2082,6 +2267,19 @@ function actionView4() {
          .addClass("net_vlan")
        )
        .append( $(SPAN).addClass("min1em") )
+       .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
+         .addClass(["ui-icon", "ui-icon-edit"])
+         .title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+         .click(function() {
+           let elm = $("#net_tags_editable");
+           if(elm.hasClass("editable_edit")) {
+             $(this).title("Редактировать. Можно также сделать CTRL-Click или Dbl-Click на поле")
+           } else {
+             $(this).title("Отменить редактирование. Также можно нажать ESC когда курсор в поле ввода");
+           };
+           elm.trigger("editable_toggle");
+         })
+       )
        .append( $(SPAN).text("Теги: ") )
        .append( $(SPAN).addClass("min1em") )
        .append(
@@ -2095,7 +2293,7 @@ function actionView4() {
              $("#net_changed_ts").text( from_unix_time( unix_timestamp() ) );
              $("#net_changed_user").text(userinfo['name'] +" ("+userinfo['login']+")"); 
            }
-         }, (g_data['net_rights'] & R_MANAGE_NET) > 0)
+         }, false)
        )
      )
     ;
@@ -2427,7 +2625,7 @@ function actionView4() {
 
       for(let ip_i in res['ok']['ips']) {
         let ipdata = res['ok']['ips'][ip_i];
-        let tr = ip_row(ipdata);
+        let tr = ip_row(ipdata, focuson);
         tr.appendTo( tbody );
 
       };
@@ -2460,6 +2658,14 @@ function actionView4() {
             edit_net_range("int_v4net_range", g_data['net_ranges'][r_i]['v4r_id']);
           };
         });
+      };
+
+      if(focuson !== undefined) {
+        let tr = $(".focuson");
+        let prev = tr.prev();
+        if(prev.length > 0) {
+         prev[0].scrollIntoView();
+        };
       };
         
     } else {
@@ -2812,15 +3018,44 @@ function get_tag_elm(tag_id, can_edit) {
    .data("tag_id", tag_id)
   ;
 
-  if(g_data['tags'] !== undefined && g_data['tags'][tag_id] !== undefined) {
-    if((g_data['tags'][tag_id]['rights'] & R_VIEW_NET_IPS) > 0) {
-      ret.text(g_data['tags'][tag_id]['tag_name']);
-    } else {
-      ret.addClass(["ui-icon", "ui-icon-forbidden"]);
+  let label_span = $(SPAN);
+
+  let chain = [tag_id];
+  function tag_parents(_tag_id, counter) {
+    if(counter > 100) {
+      error_at();
+      return;
     };
-  } else {
-    ret.text(tag_id);
+
+    if(g_data['tags'] !== undefined && g_data['tags'][_tag_id] !== undefined &&
+       g_data['tags'][_tag_id]['tag_fk_tag_id'] !== null
+    ) {
+      chain.push(String(g_data['tags'][_tag_id]['tag_fk_tag_id']));
+      tag_parents(g_data['tags'][_tag_id]['tag_fk_tag_id'], counter + 1);
+    };
   };
+
+  tag_parents(tag_id, 0);
+
+  for(let i = (chain.length - 1); i >= 0; i--) {
+    let chain_tag = chain[i];
+    if(g_data['tags'] !== undefined && g_data['tags'][chain_tag] !== undefined &&
+       (i == 0 || (g_data['tags'][chain_tag]['tag_flags'] & F_IN_LABEL) > 0)
+    ) {
+      if((g_data['tags'][chain_tag]['rights'] & R_VIEW_NET_IPS) > 0) {
+        label_span.append( $(LABEL).text(g_data['tags'][chain_tag]['tag_name']) );
+      } else {
+        label_span.append( $(LABEL).addClass(["ui-icon", "ui-icon-forbidden"]) );
+      };
+      if(i != 0) {
+        label_span.append( $(LABEL).text(":") );
+      };
+    } else if(i == 0) {
+      label_span.append( $(LABEL).addClass("tag").text("Тег: "+chain_tag) );
+    };
+  };
+
+  ret.append( label_span );
 
   ret
    .tooltip({
@@ -2841,7 +3076,7 @@ function get_tag_elm(tag_id, can_edit) {
          if(g_data['tags'] !== undefined && g_data['tags'][_tag_id] !== undefined &&
             g_data['tags'][_tag_id]['tag_fk_tag_id'] !== null
          ) {
-           chain.push(g_data['tags'][_tag_id]['tag_fk_tag_id']);
+           chain.push(String(g_data['tags'][_tag_id]['tag_fk_tag_id']));
            tag_parents(g_data['tags'][_tag_id]['tag_fk_tag_id'], counter + 1);
          };
        };
@@ -2858,7 +3093,7 @@ function get_tag_elm(tag_id, can_edit) {
            } else {
              ret.append( $(LABEL).addClass("tag").addClass(["ui-icon", "ui-icon-forbidden"]) );
            };
-         } else if(i == 0 || i == (chain.length - 1)) {
+         } else if(i == 0) {
            ret.append( $(LABEL).addClass("tag").text("Тег: "+chain_tag) );
          };
        };
@@ -2883,10 +3118,13 @@ function get_tag_elm(tag_id, can_edit) {
 
        let tagset = $(this).closest(".tagset");
        let current_tag_id = $(this).data("tag_id");
+       let collection = null;
        let col_id= tagset.data("col_id");
-       let coldata = g_data['net_cols'][col_id];
-       let collection = String(coldata['ic_options']).trim().toLowerCase();
-       if(collection === "") collection = null;
+       if(col_id !== undefined) {
+         let coldata = g_data['net_cols'][col_id];
+         collection = String(coldata['ic_options']).trim().toLowerCase();
+         if(collection === "") collection = null;
+       };
 
        let current_tag = $(this);
        select_tag(collection, current_tag_id, function(tag_id) {
@@ -3056,6 +3294,7 @@ function ip_val_elm(ipdata, col_id, state) {
 };
 
 function editable_elm(data, edit) {
+  let ret_elm = $(SPAN).addClass("editable");
   let ret;
   let value = "";
 
@@ -3066,7 +3305,7 @@ function editable_elm(data, edit) {
   } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
     value = g_data[ 'net_owner' ];
   } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
-    value = g_data[ 'net_tags' ];
+    value = String(g_data[ 'net_tags' ]).trim();
   } else if(data['object'] == 'vdom' && data['prop'] == 'vd_name') {
     value = g_data[ 'vd_name' ];
   } else if(data['object'] == 'vdom' && data['prop'] == 'vd_descr') {
@@ -3075,6 +3314,8 @@ function editable_elm(data, edit) {
     value = g_data['ics'][ data['id'] ][ data['prop'] ];
   } else if(data['object'] == 'tp') {
     value = g_data['tps'][ data['id'] ][ data['prop'] ];
+  } else if(data['object'] == 'oob') {
+    value = data['value'];
   } else {
     error_at("Unknown object: "+data['object']+" prop: "+data['prop']);
     return;
@@ -3084,6 +3325,10 @@ function editable_elm(data, edit) {
       ret = $(TEXTAREA);
     } else if(data['object'] == 'vdom' && data['prop'] == 'vd_descr') {
       ret = $(TEXTAREA);
+    } else if(data['object'] == 'oob' && data['prop'] == 'tags') {
+      ret = $(INPUT).prop("type", "hidden");
+    } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
+      ret = $(INPUT).prop("type", "hidden");
     } else if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
       ret = $(SELECT);
       ret.append( $(OPTION).text("не задан").val(0) );
@@ -3108,7 +3353,7 @@ function editable_elm(data, edit) {
         ret.prop("placeholder", data['_placeholder'])
       };
     };
-    ret.addClass("editable_edit");
+    ret_elm.addClass("editable_edit");
     ret.val(value);
     ret.saveable(data);
     ret.keyup(function(e) {
@@ -3125,7 +3370,7 @@ function editable_elm(data, edit) {
     };
   } else {
     ret = $(SPAN);
-    ret.addClass("editable_view");
+    ret_elm.addClass("editable_view");
     if(data['object'] == 'net' && data['prop'] == 'v4net_owner') {
       if(value == 0) {
         ret.text("не задан");
@@ -3136,6 +3381,8 @@ function editable_elm(data, edit) {
       } else {
         ret.text("нет данных");
       };
+    } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
+    } else if(data['object'] == 'oob' && data['prop'] == 'tags') {
     } else {
       ret.text(value);
     };
@@ -3145,26 +3392,29 @@ function editable_elm(data, edit) {
     if(data['_view_classes'] !== undefined) {
       ret.addClass(data['_view_classes']);
     };
-    ret
+    ret_elm
      .on("click dblclick", function(e) {
        if ((e.type == "click" && e.ctrlKey) ||
            e.type == "dblclick"
        ) {
+         e.stopPropagation();
          $(this).trigger("editable_toggle");
        };
      })
     ;
   };
-  ret.data("editable_data", data);
-  ret.on("editable_toggle", function() {
+  ret_elm.data("editable_data", data);
+  ret_elm.on("editable_toggle", function() {
     let data = $(this).data("editable_data");
     if(data['object'] == 'net') {
       if( (g_data['net_rights'] & R_MANAGE_NET) == 0 ) return;
+    } else if(data['object'] == 'oob') {
+      if((userinfo['g_oobs_rights'] & R_EDIT_IP_VLAN) == 0) return;
     } else if(data['object'] == 'vdom') {
       if(!userinfo['is_admin']) return;
     };
     let new_state = $(this).hasClass("editable_view");
-    if(!new_state && $(this).data("autosave_changed") === true) {
+    if(!new_state && $(this).find(".autosave").data("autosave_changed") === true) {
       g_autosave_changes--;
       if(g_autosave_changes < 0) {
         error_at();
@@ -3184,12 +3434,56 @@ function editable_elm(data, edit) {
     };
     let new_elm = editable_elm(data, new_state);
     $(this).replaceWith( new_elm );
-    if(new_state) new_elm.focus();
+    if(new_state) new_elm.find(".autosave").focus();
   });
+
   if(data['_elm_id'] !== undefined) {
     ret.prop('id', data['_elm_id']);
   };
-  return ret;
+
+  if((data['object'] == 'net' && data['prop'] == 'v4net_tags') ||
+     (data['object'] == 'oob' && data['prop'] == 'tags')
+  ) {
+    ret_elm.addClass("tagset");
+    if(value !== "") {
+      let list = value.split(",");
+      for(let i in list) {
+        let tag_id = list[i];
+        let tag = get_tag_elm(tag_id, edit);
+        tag.appendTo(ret_elm);
+      };
+    };
+
+    if(edit) {
+      ret_elm
+       .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus", "add_tag_btn"])
+         .click(function(e) {
+           e.stopPropagation();
+
+           let tagset = $(this).closest(".tagset");
+           select_tag(null, null, function(tag_id) {
+             if(tag_id !== null) {
+               get_tag_elm(tag_id, true).insertBefore(tagset.find(".add_tag_btn"));
+               tagset.trigger("recalc");
+             };
+           });
+         })
+       )
+       .on("recalc", function() {
+         let tagset = $(this).closest(".tagset");
+         let list = [];
+         tagset.find(".tag").each(function() {
+           list.push($(this).data("tag_id"));
+         });
+
+         tagset.find("INPUT[type=hidden]").val(list.join(",")).trigger("input_stop");
+       })
+      ;
+    };
+  };
+
+  ret_elm.append(ret);
+  return ret_elm;
 };
 
 function edit_rights(object, object_id, allow_edit, on_done) {
@@ -3423,6 +3717,7 @@ function rights_tds(object, rights_mask, allow_edit=false, elm_class="td", row_c
                row.find(".right_"+rr).removeClass("right_on").addClass("right_off");
              };
            };
+           row.trigger("recalc");
          })
        )
      )
@@ -4644,7 +4939,7 @@ function actionViewVlanDomain() {
              'object': 'vdom',
              'prop': 'vd_name',
              'id': String(g_data['vd_id']),
-             '_edit_css': { 'width': '50em' },
+             '_edit_css': { 'width': '30em' },
              '_elm_id': 'vd_name_editable',
              '_after_save': function(elm, new_val) {
                g_data['vd_name'] = new_val;
@@ -6817,6 +7112,12 @@ $.jstree.plugins.myplugin = function (options, parent) {
             .title(g_tag_flags[F_DISPLAY]['descr'])
           );
         };
+        if((node['data']['flags'] & F_IN_LABEL) > 0) {
+          labels = labels.add( $(LABEL)
+            .addClass(["ui-icon", "ui-icon-tag"]).css({"margin-left": "0.5em", "color": "darkgreen"})
+            .title(g_tag_flags[F_IN_LABEL]['descr'])
+          );
+        };
         if(node['data']['used'] > 0 || node['data']['used_children'] > 0) {
           labels = labels.add( $(LABEL).text(String(node['data']['used'])+":"+String(node['data']['used_children']))
             .title("Используется в "+node['data']['used']+" объектах\n"+
@@ -6834,7 +7135,7 @@ $.jstree.plugins.myplugin = function (options, parent) {
 
 $.jstree.defaults.myplugin = {};
 
-function select_tag(root_api_name, preselect, donefunc) {
+function select_tag(root_api_name, preselect, donefunc, any=false) {
   run_query({"action": "get_tags_subtree", "root_api_name": root_api_name}, function(res) {
 
     let can_add_root = false;
@@ -6849,6 +7150,7 @@ function select_tag(root_api_name, preselect, donefunc) {
      .data("dlg_data", res["ok"])
      .data("preselect", preselect)
      .data("donefunc", donefunc)
+     .data("any", any)
      .title(donefunc !== undefined?"Выбор тега":"Управление тегами")
     ;
 
@@ -7154,6 +7456,7 @@ function select_tag(root_api_name, preselect, donefunc) {
          .css({"text-align": "center"})
          .title("Удалить тег (можно также нажать - или Del")
          .click(function() {
+           if(!$(this).is(":visible")) return;
            let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
 
            let nodes = instance.get_selected(true);
@@ -7416,6 +7719,7 @@ function select_tag(root_api_name, preselect, donefunc) {
        let dlg = $(this).closest(".dialog_start");
        let instance = dlg.find(".tree").jstree(true);
        let dlg_data = dlg.data("dlg_data");
+       let any = dlg.data("any");
        let nodes = instance.get_selected(true);
        if(nodes.length == 0) {
          dlg.find(".tag_info").hide();
@@ -7521,7 +7825,7 @@ function select_tag(root_api_name, preselect, donefunc) {
 
        dlg.find(".tag_info").show();
 
-       dlg.find(".del_tag_btn").toggle(can_edit);
+       dlg.find(".del_tag_btn").toggle(can_edit && node['children'].length === 0);
 
        let allow_sibling = node['parent'] != "#" && (parent_node['data']['flags'] & F_ALLOW_LEAFS) > 0 &&
                            (parent_node['data']['rights'] & R_EDIT_IP_VLAN) > 0;
@@ -7718,7 +8022,7 @@ function select_tag(root_api_name, preselect, donefunc) {
     ;
 
     let buttons = [];
-    if(donefunc !== undefined) {
+    if(donefunc !== undefined && preselect !== null && preselect !== undefined) {
       buttons.push({
         'class': 'left_dlg_button',
         'text': 'Снять выбор',
@@ -7731,18 +8035,21 @@ function select_tag(root_api_name, preselect, donefunc) {
           };
         },
       });
+    };
 
+    if(donefunc !== undefined) {
       buttons.push({
         'text': 'Выбрать',
         'click': function() {
           let dlg = $(this);
           let donefunc = dlg.data("donefunc");
+          let any = dlg.data("any");
           let instance = dlg.find(".tree").jstree(true);
           let nodes = instance.get_selected(true);
 
           if(nodes.length != 1) return;
           let node = nodes[0];
-          if((node['data']['flags'] & F_DENY_SELECT) > 0) {
+          if(!any && (node['data']['flags'] & F_DENY_SELECT) > 0) {
             instance.get_node(node, true).find(".flag_"+F_DENY_SELECT).first().animateHighlight("red", 300);
             return;
           };
@@ -7777,5 +8084,624 @@ function select_tag(root_api_name, preselect, donefunc) {
 
     dlg.appendTo("BODY");
     dlg.dialog( dialog_options );
+  });
+};
+
+function oob_row4(row_data, focuson) {
+  let ret = $(DIV).addClass("row").addClass("tr")
+   .prop("id", "v4oob_"+row_data['v4oob_id'])
+   .data("row_data", row_data)
+  ;
+
+  if((row_data['v4oob_id']+"v4") === focuson) {
+    ret.addClass("focuson");
+  };
+
+  let can_edit = ((userinfo['g_oobs_rights'] & R_EDIT_IP_VLAN) > 0);
+
+  ret
+   .append( $(SPAN).addClass("td")
+     .append( $(SPAN).text( v4long2ip(row_data['v4oob_addr'])+"/"+row_data['v4oob_mask'] ) )
+     .append( !can_edit?$(LABEL):$(LABEL)
+       .css({"float": "right", "margin-left": "0.5em"})
+       .addClass(["button", "ui-icon", "ui-icon-trash"])
+       .click(function() {
+         let row = $(this).closest(".tr");
+         let id = row.data("row_data")['v4oob_id'];
+         show_confirm_checkbox("Подтвердите удаление данных.\nВнимание! Отмена будет невозможна!", function() {
+           run_query({"action": "del_oob", "id": String(id), "v": "4"}, function(res) {
+             row.find(".autosave").each(function() {
+               if($(this).data("autosave_changed")) {
+                 g_autosave_changes--;
+               };
+             });
+             if(g_autosave_changes < 0) {
+               error_at();
+               return;
+             } else if(g_autosave_changes == 0) {
+               $("#autosave_btn").css({"color": "gray"});
+             } else {
+               $("#autosave_btn").css({"color": "yellow"});
+             };
+             row.remove();
+           });
+         });
+       })
+     )
+     .append( !can_edit?$(LABEL):$(LABEL)
+       .css({"float": "right", "margin-left": "0.5em"})
+       .addClass(["button", "ui-icon", "ui-icon-edit"])
+       .click(function() {
+         let row = $(this).closest(".tr");
+         if(row.find(".editable_view").length > 0) {
+           row.find(".editable_view").trigger("editable_toggle");
+         } else if(row.find(".editable_edit").length > 0) {
+           row.find(".editable_edit").trigger("editable_toggle");
+         };
+       })
+     )
+   )
+  ;
+
+  ret
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append(
+       editable_elm({
+         'object': 'oob',
+         'v': '4',
+         'id': row_data['v4oob_id'],
+         'prop': 'descr',
+         'value': row_data['v4oob_descr'],
+         '_edit_css': {"width": "30em"},
+         '_after_save': function(elm, new_val) {
+           let ed = elm.closest(".editable");
+           let elm_data = ed.data("editable_data");
+           let id = elm_data['id'];
+           let oob_data = $("#v4oob_"+id).data("row_data");
+           oob_data['v4oob_descr'] = new_val;
+           $("#v4oob_"+id).data("row_data", oob_data);
+         },
+       })
+     )
+   )
+  ;
+
+  ret
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append(
+       editable_elm({
+         'object': 'oob',
+         'v': '4',
+         'id': row_data['v4oob_id'],
+         'prop': 'tags',
+         'value': row_data['v4oob_tags'],
+         '_after_save': function(elm, new_val) {
+           let ed = elm.closest(".editable");
+           let elm_data = ed.data("editable_data");
+           let id = elm_data['id'];
+
+           let oob_data = $("#v4oob_"+id).data("row_data");
+           oob_data['v4oob_tags'] = new_val;
+           $("#v4oob_"+id).data("row_data", oob_data);
+         },
+       })
+     )
+   )
+  ;
+
+  return ret;
+};
+
+function actionViewOobs() {
+  workarea.empty();
+  fixed_div.empty();
+
+  let focuson = getUrlParameter("focuson", undefined);
+
+  run_query({"action": "get_oobs"}, function(res) {
+    g_data = res['ok'];
+
+    for(let v in g_data['oobs']) {
+
+      workarea.append( $(DIV).css({"font-size": "large"}).text("ipv"+v+" внешние сети") );
+
+      let table = $(DIV).addClass("table")
+       .data("v", v)
+       .appendTo(workarea)
+      ;
+
+      $(DIV).addClass("thead")
+       .append( $(SPAN).addClass("th").text("Адрес") )
+       .append( $(SPAN).addClass("th").text("Коментарий") )
+       .append( $(SPAN).addClass("th").text("Теги") )
+       .appendTo(table)
+      ;
+
+      let tbody = $(DIV).addClass("tbody")
+       .appendTo(table)
+      ;
+
+      for(let i in g_data['oobs'][v]) {
+        let row_data = g_data['oobs'][v][i];
+
+        if(v == "4") {
+          tbody.append( oob_row4(row_data, focuson) );
+        } else {
+        };
+      };
+
+      if((userinfo['g_oobs_rights'] & R_EDIT_IP_VLAN) > 0) {
+        table
+         .append( $(DIV).addClass("tfoot")
+           .append( $(SPAN).addClass("td")
+             .append( $(INPUT).addClass("oob_addr")
+               .css({"width": v === "4"?"10em":"20em"})
+               .prop("placeholder", v === "4"?"x.x.x.x/m":"xxxx::xxxx/m")
+               .enterKey(function() {
+                 $(this).closest(".td").find(".ui-icon-plus").trigger("click");
+               })
+             )
+             .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+               .css({"margin-right": "0.5em"})
+               .click(function() {
+                 let tbody = $(this).closest(".table").find(".tbody");
+                 let row = $(this).closest(".tfoot");
+                 let v = $(this).closest(".table").data("v");
+                 let addr_mask = $(this).closest(".tfoot").find(".oob_addr").val();
+                 let descr = $(this).closest(".tfoot").find(".oob_descr").val().trim();
+                 let tags = $(this).closest(".tfoot").find(".oob_tags").val().trim();
+                 if(v === "4") {
+                   let m = String(addr_mask).match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)\/(\d+)$/);
+                   if(m === null) { $(this).closest(".tfoot").find(".oob_addr").animateHighlight("red", 300); return; };
+                   if(m[1] > 255 || m[2] > 255 || m[3] > 255 || m[4] > 255 || m[5] > 32) {
+                     $(this).closest(".tfoot").find(".oob_addr").animateHighlight("red", 300);
+                     return;
+                   };
+
+                   let masklen = m[5];
+                   let mask = v4len2mask[m[5]];
+                   let ip=v4oct2long(m[1], m[2], m[3], m[4]);
+                   let net = (ip & mask) >>> 0;
+
+                   if(ip != net) {
+                     $(this).closest(".tfoot").find(".oob_addr").animateHighlight("red", 300);
+                     return;
+                   };
+
+                   let found = undefined;
+
+                   $(this).closest(".table").find(".tbody").find(".tr").each(function() {
+                     let row_data = $(this).data("row_data");
+                     if(row_data['v'+v+'oob_addr'] == ip && row_data['v'+v+'oob_mask'] == Number(masklen)) {
+                       found = $(this);
+                       return false;
+                     };
+                   });
+
+                   if(found !== undefined) {
+                     found[0].scrollIntoView();
+                     found.animateHighlight("red", 300);
+                     return;
+                   };
+
+                   run_query({"action": "add_oob", "v": v, "addr": String(ip), "masklen": String(masklen),
+                              "descr": String(descr), "tags": String(tags)}, function(res) {
+
+                     oob_row4(res['ok']['oob']).appendTo(tbody);
+
+                     row.find(".oob_addr").val("");
+                     row.find(".oob_descr").val("");
+                     row.find(".tagset").find(".tag").remove();
+                     row.find(".tagset").trigger("recalc");
+                   });
+                 } else {
+                   return;
+                 };
+               })
+             )
+           )
+           .append( $(SPAN).addClass("td")
+             .append( $(INPUT).addClass("oob_descr")
+               .css({"width": "30em"})
+             )
+           )
+           .append( $(SPAN).addClass("td")
+             .append( $(SPAN).addClass("tagset")
+               .append( $(INPUT).prop("type", "hidden").addClass("oob_tags") )
+               .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+                 .css({"margin-right": "0.5em"})
+                 .click(function() {
+                   let before = $(this);
+                   select_tag(null, null, function(tag_id) {
+                     if(tag_id !== null) {
+                       get_tag_elm(tag_id, true).insertBefore(before);
+                       before.closest(".tagset").trigger("recalc");
+                     };
+                   });
+                 })
+               )
+               .on("recalc", function() {
+                 let list = [];
+                 $(this).find(".tag").each(function() {
+                   list.push( $(this).data("tag_id") );
+                 });
+                 $(this).find("INPUT[type=hidden].oob_tags").val(list.join(","));
+               })
+             )
+           )
+         )
+        ;
+      };
+      workarea.append( $(BR) );
+    };
+  });
+};
+
+function show_search_results(results) {
+  let res_div = $("#searchresult");
+  res_div.empty();
+
+  if(results["rows"].length == 0) {
+    res_div.append( $(DIV).text("Ничего не найдено").css("color", "orange") );
+    return;
+  };
+
+  res_div
+   .append( $(DIV).addClass("thead")
+     .append( $(SPAN).addClass("th").text("Тип") )
+     .append( $(SPAN).addClass("th").text("Адрес") )
+     .append( $(SPAN).addClass("th").text("Сеть") )
+     .append( $(SPAN).addClass("th").text("Дополнительные данные") )
+   )
+  ;
+
+  let tbody = $(DIV).addClass("tbody").appendTo(res_div);
+
+  for(let i in results["rows"]) {
+    let row = results["rows"][i];
+
+    let table_row = $(DIV).addClass("tr")
+     .data("data", row['data'])
+     .data("type", row['type'])
+     .data("v", row['v'])
+    ;
+
+    let type_td = $(SPAN).addClass("td")
+     .appendTo(table_row);
+    ;
+
+    let addr_td = $(SPAN).addClass("td")
+     .appendTo(table_row);
+    ;
+
+    let name_td = $(SPAN).addClass("td")
+     .appendTo(table_row);
+    ;
+
+    let data_td = $(SPAN).addClass("td")
+     .appendTo(table_row);
+    ;
+
+    if(row["type"] == "net") {
+      type_td.text("Сеть");
+      let addr_str;
+      if(row["v"] == "4") {
+        addr_str = v4long2ip(row['data'][ 'v'+row['v']+'net_addr'])+"/"+row['data'][ 'v'+row['v']+'net_mask' ];
+      } else {
+        addr_str = "v6addr";
+      };
+
+      addr_td
+       .append( $(A)
+         .prop({"href": "?action=view_v"+row['v']+"&net="+row['data'][ 'v'+row['v']+'net_addr' ]+"&masklen="+
+                        row['data'][ 'v'+row['v']+'net_mask' ]+(DEBUG?"&debug":""),
+                "target": "_blank",
+         })
+         .text( addr_str )
+         .title( row['data'][ 'v'+row['v']+'net_name' ] )
+       )
+      ;
+
+      if(row['data'][ 'v'+row['v']+'net_fk_vlan_id' ] !== null) {
+        name_td.append( get_vlan_elm(row['data']['net_vlan_data']) );
+      };
+
+      name_td
+       .append( $(SPAN)
+         .text(row['data'][ 'v'+row['v']+'net_name' ])
+         .title(row['data'][ 'v'+row['v']+'net_descr' ])
+       )
+      ;
+
+      if(row['data'][ 'v'+row['v']+'net_tags' ] !== "") {
+        let tags = String(row['data'][ 'v'+row['v']+'net_tags' ]).split(",");
+        for(let i in tags) {
+          data_td.append( get_tag_elm(tags[i], false) );
+        };
+      };
+    } else if(row["type"] == "ip") {
+      type_td.text("IP");
+      let addr_str;
+      if(row["v"] == "4") {
+        addr_str = v4long2ip(row['data'][ 'v'+row['v']+'ip_addr']); //+"/"+row['data'][ 'v'+row['v']+'net_mask' ];
+      } else {
+        addr_str = "v6addr";
+      };
+
+      addr_td
+       .append( $(A)
+         .prop({"href": "?action=view_v"+row['v']+"&net="+row['data'][ 'v'+row['v']+'net_addr' ]+"&masklen="+
+                        row['data'][ 'v'+row['v']+'net_mask' ]+"&focuson="+row['data'][ 'v'+row['v']+'ip_addr']+(DEBUG?"&debug":""),
+                "target": "_blank",
+         })
+         .text( addr_str )
+         .title( row['data'][ 'v'+row['v']+'net_name' ] )
+       )
+      ;
+
+      if(row['data'][ 'v'+row['v']+'net_fk_vlan_id' ] !== null) {
+        name_td.append( get_vlan_elm(row['data']['net_vlan_data']) );
+      };
+
+      name_td
+       .append( $(SPAN)
+         .text(row['data'][ 'v'+row['v']+'net_name' ])
+         .title(row['data'][ 'v'+row['v']+'net_descr' ])
+       )
+      ;
+
+      if(row['data'][ 'v'+row['v']+'ip_fk_vlan_id' ] !== null) {
+        data_td.append( get_vlan_elm(row['data']['ip_vlan_data']) );
+      };
+
+      for(let vi in row['data']['values']) {
+        let val_row = row['data']['values'][vi];
+        if(val_row['iv_value'] !== "") {
+          let val_span = $(SPAN).addClass("search_val_span")
+           .append( $(SPAN).text(val_row['ic_name']+":").addClass("search_val_name") )
+          ;
+          if(val_row['ic_type'] == "text") {
+            val_span.append( $(SPAN).text(val_row['iv_value']).addClass("search_val_value") );
+          } else if(val_row['ic_type'] == "textarea") {
+            val_span.append( $(SPAN).text(String(val_row['iv_value']).split("\n")[0]).addClass("search_val_value") );
+          } else if(val_row['ic_type'] == "tag" || val_row['ic_type'] == "multitag") {
+            let list = String(val_row['iv_value']).split(",");
+            for(let ti in list) {
+              val_span.append( get_tag_elm(list[ti], false).addClass("search_val_value") );
+            };
+          };
+          data_td.append( val_span );
+        };
+      };
+    } else if(row["type"] == "oob") {
+      type_td.text("Внеш. сеть");
+      let addr_str;
+      if(row["v"] == "4") {
+        addr_str = v4long2ip(row['data'][ 'v'+row['v']+'oob_addr'])+"/"+row['data'][ 'v'+row['v']+'oob_mask' ];
+      } else {
+        addr_str = "v6addr";
+      };
+
+      addr_td
+       .append( $(A)
+         .prop({"href": "?action=oobs&focuson="+row['data'][ 'v'+row['v']+'oob_id' ]+"v"+row['v']+(DEBUG?"&debug":""),
+                "target": "_blank",
+         })
+         .text( addr_str )
+         .title( row['data'][ 'v'+row['v']+'oob_name' ] )
+       )
+      ;
+
+      name_td
+       .append( $(SPAN)
+         .text(row['data'][ 'v'+row['v']+'oob_descr' ])
+       )
+      ;
+
+      if(row['data'][ 'v'+row['v']+'oob_tags' ] !== "") {
+        let tags = String(row['data'][ 'v'+row['v']+'oob_tags' ]).split(",");
+        for(let i in tags) {
+          data_td.append( get_tag_elm(tags[i], false) );
+        };
+      };
+    };
+
+    table_row.appendTo(tbody);
+  };
+};
+
+function get_global_right_row(object, g_id, rights) {
+  let ret = $(DIV).addClass("tr")
+   .data("g_id", g_id)
+   .data("object", object)
+   .on("recalc", function() { $("#global_rights").trigger("recalc"); })
+   .append( $(SPAN).addClass("td")
+     .text(g_data['groups'][g_id]['g_name'])
+     .title(g_data['groups'][g_id]['g_descr'])
+   )
+   .append( $(SPAN).addClass("td")
+     .append( rights_tds(object, rights, true, "ignore") )
+   )
+   .append( $(SPAN).addClass("td")
+     .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-trash"])
+       .click(function() {
+         let elm = $(this);
+         show_confirm_checkbox("Подтвердите удаление.\nВнимание, отмена будет невозможна!", function() {
+           let g_id = elm.closest(".tr").data("g_id");
+           elm.closest(".table").find("SELECT")
+            .append( $(OPTION)
+              .val(String(g_id))
+              .text(g_data['groups'][g_id]['g_name'])
+              .title(g_data['groups'][g_id]['g_descr'])
+            )
+           ;
+           elm.closest(".tr").remove();
+           $("#global_rights").trigger("recalc");
+         });
+       })
+     )
+   )
+  ;
+
+  return ret;
+};
+
+function actionGlobalRights() {
+  workarea.empty();
+  fixed_div.empty();
+
+  let obj_list = keys(g_rights_obj);
+  obj_list.sort();
+
+  fixed_div
+   .append( $(LABEL).html("&nbsp;") )
+   .append( $(LABEL).text("Есть несохраненные изменения").addClass("unsaved")
+     .prop("id", "global_rights_unsaved")
+     .hide()
+   )
+  ;
+
+  run_query({"action": "get_global_rights"}, function(res) {
+    g_data = res['ok'];
+
+    let gids = keys(g_data['groups']);
+    sort_by_string_key(gids, g_data['groups'], 'g_name');
+
+    workarea
+     .append( $(INPUT).prop("type", "hidden")
+       .prop("id", "global_rights")
+       .val("")
+       .saveable({"object": "global_rights", "_changed_show": $("#global_rights_unsaved")})
+       .on("recalc", function(e, data) {
+         e.stopPropagation();
+
+         let save_data = {};
+         let obj_list = keys(g_rights_obj);
+         obj_list.sort();
+
+         for(let i in obj_list) {
+           let object = obj_list[i];
+           save_data[object] = {};
+           $(".global_rights_"+object).find(".tr").each(function() {
+             let g_id = $(this).data("g_id");
+             let this_rights = 0;
+             $(this).find(".right").each(function() {
+               if( $(this).hasClass("right_on") ) {
+                 this_rights = this_rights | $(this).data("right");
+               };
+             });
+
+             if(this_rights != 0) {
+               save_data[object][g_id] = String(this_rights);
+             };
+           });
+         };
+
+         let val = JSON.stringify(save_data);
+         $(this).val(val);
+         if(data !== 'init') {
+           $(this).trigger("input_stop");
+         } else {
+           $(this).data("autosave_prev", val);
+           $(this).data("autosave_saved", val);
+         };
+       })
+     )
+    ;
+
+    for(let i in obj_list) {
+      let object = obj_list[i];
+
+      workarea
+       .append( $(DIV).text(g_rights_obj[object])
+         .css({"font-size": "large", "margin-top": "1em"})
+       )
+      ;
+
+      let table = $(DIV).addClass("table").appendTo(workarea)
+       .data("object", object)
+      ;
+
+      let thead = $(DIV).addClass("thead")
+       .append( $(SPAN).addClass("th").text("Группа") )
+       .append( $(SPAN).addClass("th").text("Права") )
+       .append( $(SPAN).addClass("th").text("") )
+       .appendTo(table)
+      ;
+
+      let tbody = $(DIV).addClass("tbody").appendTo(table)
+       .addClass("global_rights_"+object)
+      ;
+
+      let added_groups = [];
+
+      if(g_data['objects'][object] !== undefined) {
+        for(let g_i in gids) {
+          let g_id = gids[g_i];
+          if(g_data['objects'][object][g_id] !== undefined) {
+            tbody.append( get_global_right_row(object, g_id, g_data['objects'][object][g_id]['rights']) );
+            added_groups.push( g_id );
+          };
+        };
+      };
+
+      let tfoot = $(DIV).addClass("tfoot").appendTo(table);
+
+      let sel = $(SELECT).addClass("g_id")
+       .append( $(OPTION).text("Выберете группу").val("") )
+      ;
+
+      for(let g_i in gids) {
+        let g_id = gids[g_i];
+        if(!in_array(added_groups, g_id)) {
+          sel
+           .append( $(OPTION).text(g_data['groups'][g_id]['g_name'])
+             .title( g_data['groups'][g_id]['g_descr'] )
+             .val(String(g_id))
+           )
+          ;
+        };
+      };
+
+      tfoot
+       .append( $(SPAN).addClass("td")
+         .append( sel )
+       )
+       .append( $(SPAN).addClass("td")
+         .append( rights_tds(object, 0, true, "ignore", "tfoot") )
+       )
+       .append( $(SPAN).addClass("td")
+         .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+           .click(function() {
+             let sel = $(this).closest(".tfoot").find("SELECT");
+             let g_id = sel.val();
+             if(g_id === "") return;
+
+             let rights = 0;
+             $(this).closest(".tfoot").find(".right").each(function() {
+               if( $(this).hasClass("right_on") ) {
+                 rights = rights | $(this).data("right");
+               };
+             });
+
+             if(rights == 0) return;
+
+             $(this).closest(".table").find(".tbody")
+              .append( get_global_right_row( $(this).closest(".table").data("object"), g_id, rights ) )
+             ;
+
+             sel.find("OPTION:selected").remove();
+             sel.val("");
+
+             $(this).closest(".tfoot").find(".right_on").addClass("right_off").removeClass("right_on");
+
+             $("#global_rights").trigger("recalc");
+           })
+         )
+       )
+      ;
+    };
+
+    $("#global_rights").trigger("recalc", "init");
   });
 };

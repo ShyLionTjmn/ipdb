@@ -21,7 +21,7 @@ mysqldump -u $DB_USER --password=$DB_PASS --skip-extended-insert --order-by-prim
 echo "Deleting all tables"
 $MYSQL -B -N -e 'SHOW TABLES' | sed 's/.*/DROP TABLE &;/' | $MYSQL --init-command="SET FOREIGN_KEY_CHECKS=0;" || on_error
 
-for f in schema.sql schema_populate_ru.sql local_data.sql test_*.sql
+for f in schema.sql local_*.sql test_*.sql
 do
   if [ -f "$f" ]
   then
