@@ -764,7 +764,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     return ok_out
   }
 
-  if !user_is_admin && len(user_groups) == 0 {
+  if !user_is_admin && len(user_groups) == 1 {
     panic(NoAccess())
   }
 
