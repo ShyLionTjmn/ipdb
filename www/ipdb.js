@@ -6225,7 +6225,13 @@ function actionViewFields() {
      .append( $(SPAN).addClass("th").text("API_name").title("Имя на латинице без пробелов, для использования в API запросах. Должно быть уникальным") )
      .append( $(SPAN).addClass("th").text("Описание") )
      .append( $(SPAN).addClass("th").text("Тип данных") )
-     .append( $(SPAN).addClass("th").text("Опции") )
+     .append( $(SPAN).addClass("th")
+       .append( $(SPAN).text("Опции") )
+       .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-info"])
+         .css({"font-size": "x-small", "margin-left": "0.3em", "vertical-align": "top"})
+         .click(ic_options_help)
+       )
+     )
      .append( $(SPAN).addClass("th").text("RegExp")
        .title("Регулярное выражение для проверки вводимых данных. Должно быть совместимо с JS и golang одновременно")
      )
@@ -8785,4 +8791,75 @@ function actionGlobalRights() {
 
     $("#global_rights").trigger("recalc", "init");
   });
+};
+
+function ic_options_help() {
+  let dlg = $(DIV).addClass("dialog_start")
+   .title("Справка")
+  ;
+
+  dlg
+   .append( $(DIV)
+     .css({"margin-top": "1em", "font-size": "large"})
+     .text("Для поля типа Тег:")
+   )
+   .append( $(DIV)
+     .text("Если оставить пустым, то пользователь сможет выбрать любой допустимый тег (без флага запрета выбора) к которому есть доступ на просмотр.")
+   )
+   .append( $(DIV)
+     .text("Если ввести API имя тега (отображается в скобках в списке тегов), то выбор будет ограничен только этим тегом и его дочерними (без флага запрета выбора), к которому есть доступ на просмотр.")
+   )
+   .append( $(DIV) )
+   .append( $(DIV)
+     .css({"margin-top": "1em", "font-size": "large"})
+     .text("Для поля типа Текст:")
+   )
+   .append( $(DIV)
+     .text("Можно оставить пустым, либо заполнить в виде JSON текста с опциями. Поддерживаемые опции:")
+   )
+   .append( $(DIV)
+     .text("val_css: Разные стили отображения в зависимости от значения ячейки. Содержит массив из элементов, проверяются по очереди, применяется стиль из первого совпадения. Примеры:")
+   )
+   .append( $(DIV)
+     .css({"white-space": "pre", "font-family": "monospace"})
+     .text('{"val_css": ['+"\n"+
+'  {"type": "regexp",'+"\n"+
+'   "regexp": "a",'+"\n"+
+'   "css": {"color": "blue"}'+"\n"+
+'  },'+"\n"+
+'  {"type": ">",'+"\n"+
+'   "than": 15,'+"\n"+
+'   "css": {"color": "green"}'+"\n"+
+'  },'+"\n"+
+'  {"type": "default",'+"\n"+
+'   "css": {"color": "red"}'+"\n"+
+'  }'+"\n"+
+']}')
+   )
+   .append( $(DIV)
+     .text("Допустимые типы: \"regexp\", \"default\", \"==\", \"===\", \">\", \">=\", \"<\", \"<=\"")
+   )
+  ;
+
+  let dialog_options = {
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1800,
+    minWidth:1200,
+    width: "auto",
+    height: "auto",
+    buttons: [
+      {
+        'text': 'Закрыть',
+        'click': function() {$(this).dialog( "close" );},
+      }
+    ],
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    }
+  };
+
+  dlg.appendTo("BODY");
+  dlg.dialog( dialog_options );
 };

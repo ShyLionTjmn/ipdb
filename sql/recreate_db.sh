@@ -1,5 +1,8 @@
 #!/bin/sh
 
+echo "Stop it!"
+exit 1
+
 cd /devel/go/src/github.com/ShyLionTjmn/ipdb/sql
 
 DB_USER=`cat .mysql_user`
