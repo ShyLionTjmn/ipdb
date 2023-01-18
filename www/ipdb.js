@@ -542,6 +542,17 @@ function saveable_check(elm) {
       } catch(e) {
         return false;
       };
+      break;
+    case 'ic_options':
+      if(String(value).length > 0 && String(value)[0] === "{") {
+        try {
+          JSON.parse(value);
+          return true;
+        } catch(e) {
+          return false;
+        };
+      };
+      break;
     };
     return true;
   case 'tp':
@@ -2591,8 +2602,22 @@ function actionView4() {
         return Number(res['ok']['net_cols'][a]['ic_sort']) - Number(res['ok']['net_cols'][b]['ic_sort']);
       });
 
+      g_data["_val_css"] = {};
+
       for(let col_i in net_cols_ids) {
         let col_id = net_cols_ids[col_i];
+
+        if(String(res['ok']['net_cols'][col_id]['ic_options']).length > 0 &&
+           String(res['ok']['net_cols'][col_id]['ic_options'])[0] === "{"
+        ) {
+          try {
+            let options_json = JSON.parse(res['ok']['net_cols'][col_id]['ic_options']);
+            if(options_json["val_css"] !== undefined && Array.isArray(options_json["val_css"])) {
+              g_data["_val_css"][col_id] = options_json["val_css"];
+            };
+          } catch(e) {};
+        };
+
         let th = $(TH)
          .text(res['ok']['net_cols'][col_id]['ic_name'])
         ;
@@ -3232,7 +3257,60 @@ function ip_val_elm(ipdata, col_id, state) {
      .addClass("ip_view")
     ;
     if(coldata['ic_type'] == "textarea" || coldata['ic_type'] == "text") {
-      ret.append( $(SPAN).text(value).css(css) );
+
+      let options_css = {};
+
+      if(g_data['_val_css'] !== undefined && g_data['_val_css'][ coldata['ic_id'] ] !== undefined) {
+        let val_css = g_data['_val_css'][ coldata['ic_id'] ];
+
+        for(let i in val_css) {
+          if(val_css[i]["type"] === "default") {
+            options_css = val_css[i]["css"];
+            break;
+          } else if(val_css[i]["type"] === "regexp") {
+            try {
+              let re = RegExp(val_css[i]["regexp"]);
+              if(re.test(value)) {
+                options_css = val_css[i]["css"];
+                break;
+              };
+            } catch(e) {
+            };
+          } else if(val_css[i]["type"] === "===") {
+            if(value === val_css[i]["than"]) {
+              options_css = val_css[i]["css"];
+              break;
+            };
+          } else if(val_css[i]["type"] === "==") {
+            if(value == val_css[i]["than"]) {
+              options_css = val_css[i]["css"];
+              break;
+            };
+          } else if(val_css[i]["type"] === "<=") {
+            if(value <= val_css[i]["than"]) {
+              options_css = val_css[i]["css"];
+              break;
+            };
+          } else if(val_css[i]["type"] === ">=") {
+            if(value >= val_css[i]["than"]) {
+              options_css = val_css[i]["css"];
+              break;
+            };
+          } else if(val_css[i]["type"] === "<") {
+            if(value < val_css[i]["than"]) {
+              options_css = val_css[i]["css"];
+              break;
+            };
+          } else if(val_css[i]["type"] === ">") {
+            if(value > val_css[i]["than"]) {
+              options_css = val_css[i]["css"];
+              break;
+            };
+          };
+        };
+      };
+
+      ret.append( $(SPAN).text(value).css(css).css(options_css) );
     };
   };
 
@@ -3345,6 +3423,8 @@ function editable_elm(data, edit) {
         ret.val(value);
         ret.on("select change", function() { $(this).trigger("input_stop"); });
       });
+    } else if(data['object'] == 'ic' && data['prop'] == 'ic_options') {
+      ret = $(TEXTAREA);
     } else if(data['object'] == 'tp' && data['prop'] == 'tp_descr') {
       ret = $(TEXTAREA);
     } else {
@@ -3383,6 +3463,10 @@ function editable_elm(data, edit) {
       };
     } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
     } else if(data['object'] == 'oob' && data['prop'] == 'tags') {
+    } else if(data['object'] == 'ic' && data['prop'] == 'ic_options') {
+      let lines = String(value).split("\n");
+      ret.text(lines[0]);
+      ret.title(value);
     } else {
       ret.text(value);
     };
@@ -7519,33 +7603,13 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
            })
            .hide()
          )
+         .append( $(SPAN)
+           .css({"float": "right"})
+           .addClass("wsp")
+           .append( $(SPAN).text("Образец: ") )
+           .append( $(SPAN).addClass("tag_preview") )
+         )
          .css({"margin-top": "0.5em"})
-         .append( !DEBUG?$(LABEL):$(LABEL)
-           .css({"float": "right"})
-           .addClass(["button"])
-           .text("calc []")
-           .click(function() {
-             let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
-             debugLog(jstr(instance.get_json("#", {"no_state": true,
-                                                   "no_a_attr": true, "no_li_attr": true, "flat": true,
-                                                   "no_icon": true,
-                                                  }
-             )));
-           })
-         )
-         .append( !DEBUG?$(LABEL):$(LABEL)
-           .css({"float": "right"})
-           .addClass(["button"])
-           .text("calc {}")
-           .click(function() {
-             let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
-             debugLog(jstr(instance.get_json("#", {"no_state": true,
-                                                   "no_a_attr": true, "no_li_attr": true, "flat": false,
-                                                   "no_icon": true,
-                                                  }
-             )));
-           })
-         )
        )
      )
     ;
@@ -7730,6 +7794,7 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
      })
      .on("select_node.jstree", function(e, data) {
        let dlg = $(this).closest(".dialog_start");
+       dlg.find(".tag_preview").empty();
        let instance = dlg.find(".tree").jstree(true);
        let dlg_data = dlg.data("dlg_data");
        let any = dlg.data("any");
@@ -7739,6 +7804,9 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
          return;
        };
        let node = nodes[0];
+
+       dlg.find(".tag_preview").append( get_tag_elm(node['id'], false) );
+
        let parent_node = instance.get_node(node['parent']);
 
        if(parent_node['id'] === "#" && parent_node['data'] === undefined) parent_node['data'] = dlg_data['tags']['data'];
