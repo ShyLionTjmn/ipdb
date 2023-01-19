@@ -280,10 +280,7 @@ BODY {
   margin-top: 1px;
 }
 .unsaved {
-  border: 3px solid orangered !important;
-}
-.sort_changed {
-  border: 3px solid orangered !important;
+  border: 3px solid darkorange !important;
 }
 .handle {
   color: gray;
@@ -360,4 +357,11 @@ BODY {
 .search_val_name {
   margin-right: 0.3em;
   background-color: #EEEEFF;
+}
+.ip_view {
+  width: 100%;
+}
+.ip_view > SPAN {
+  width: 100%;
+  display: inline-block;
 }

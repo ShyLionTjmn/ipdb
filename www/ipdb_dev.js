@@ -480,7 +480,7 @@ function saveable_check(elm) {
   case 'ic':
     switch(elm_data['prop']) {
     case 'ic_icon':
-      if(!String(value).match(/^(?:|ui-icon-[a-z\-0-9])$/)) return false;
+      if(!String(value).match(/^(?:|ui-icon-[a-z\-0-9]+)$/)) return false;
     case 'ic_name':
       let cmp_val;
       row = elm.closest(".tr");
@@ -1014,6 +1014,9 @@ function save_all() {
       qelm.data("autosave_saved", qval);
       qelm.data("autosave_changed", false);
       switch(qdata['object']) {
+      case "tp":
+        g_data['tps'][ qdata['id'] ][ qdata['prop'] ] = qval;
+        break;
       case "ic":
         g_data['ics'][ qdata['id'] ][ qdata['prop'] ] = qval;
         g_data['ics'][ qdata['id'] ][ 'ts' ] = unix_timestamp();;
@@ -2547,7 +2550,7 @@ function actionView4() {
                  if(row_ipdata['is_taken'] !== undefined) {
                    row.find(".ip_value").each(function() {
                      let col_id = $(this).data("col_id");
-                     let changed = $(this).data("autosave_changed");
+                     let changed = $(this).find(".autosave").data("autosave_changed");
                      if(changed === undefined || changed === false) {
                        let new_elm = ip_val_elm(row_ipdata, col_id, state);
                        $(this).replaceWith(new_elm);
@@ -2797,6 +2800,35 @@ function ip_menu(elm) {
        .click(function(e) {
          e.stopPropagation();
          $("UL.popupmenu").remove();
+       })
+     )
+   )
+   .append( $(LI)
+     .title("Скопировать в буфер")
+     .append( $(DIV)
+       //.css({"display": "inline-block"})
+       .append( $(LABEL).addClass(["ui-icon", "ui-icon-copy"]) )
+       .append( $(SPAN).text("Скопировать IP в буфер") )
+       .click(function(e) {
+         e.stopPropagation();
+         let row = $(this).closest("TR");
+         let ipdata = row.data("ipdata");
+         let ip_addr = v4long2ip(ipdata["v4ip_addr"]);
+         $("UL.popupmenu").remove();
+         try {
+           navigator.clipboard.writeText(ip_addr).then(
+             function() {
+               /* clipboard successfully set */
+               row.find("TD").first().animateHighlight("green", 300);
+             }, 
+             function() {
+               /* clipboard write failed */
+               window.alert('Opps! Your browser does not support the Clipboard API')
+             }
+           );
+         } catch(e) {
+           alert(e);
+         };
        })
      )
    )
@@ -3373,6 +3405,7 @@ function ip_val_elm(ipdata, col_id, state) {
 
 function editable_elm(data, edit) {
   let ret_elm = $(SPAN).addClass("editable");
+  ret_elm.addClass("wsp");
   let ret;
   let value = "";
 
@@ -3393,6 +3426,8 @@ function editable_elm(data, edit) {
   } else if(data['object'] == 'tp') {
     value = g_data['tps'][ data['id'] ][ data['prop'] ];
   } else if(data['object'] == 'oob') {
+    value = data['value'];
+  } else if(data['value'] !== undefined) {
     value = data['value'];
   } else {
     error_at("Unknown object: "+data['object']+" prop: "+data['prop']);
@@ -3423,10 +3458,11 @@ function editable_elm(data, edit) {
         ret.val(value);
         ret.on("select change", function() { $(this).trigger("input_stop"); });
       });
-    } else if(data['object'] == 'ic' && data['prop'] == 'ic_options') {
+    } else if(data['_input'] !== undefined && String(data['_input']).toLowerCase() == 'hidden') {
+      ret = $(INPUT).prop("type", "hidden");
+    } else if(data['_input'] !== undefined && String(data['_input']).toLowerCase() == 'textarea') {
       ret = $(TEXTAREA);
-    } else if(data['object'] == 'tp' && data['prop'] == 'tp_descr') {
-      ret = $(TEXTAREA);
+      ret.addClass("wsp");
     } else {
       ret = $(INPUT).css("font-size", "inherit");
       if(data['_placeholder'] !== undefined) {
@@ -3463,7 +3499,7 @@ function editable_elm(data, edit) {
       };
     } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
     } else if(data['object'] == 'oob' && data['prop'] == 'tags') {
-    } else if(data['object'] == 'ic' && data['prop'] == 'ic_options') {
+    } else if(data['_input'] !== undefined && String(data['_input']).toLowerCase() == 'textarea') {
       let lines = String(value).split("\n");
       ret.text(lines[0]);
       ret.title(value);
@@ -6206,7 +6242,7 @@ function actionViewFields() {
 
     fixed_div
      .append( $(DIV)
-       .append( $(SPAN).addClass("sort_changed").text("Изменен порядок полей").hide() )
+       .append( $(SPAN).addClass("sort_changed").addClass("unsaved").text("Изменен порядок полей").hide() )
        .append( $(SPAN).addClass("sort_unchanged").html("&nbsp;") )
      )
     ;
@@ -6480,8 +6516,10 @@ function field_row(row_data) {
        editable_elm({
          "object": "ic",
          "prop": "ic_options",
+         "_input": "textarea",
          "id": String(row_data['ic_id']),
-         "_edit_css": { 'width': '7em' },
+         "_edit_css": { 'min-width': '7em' },
+         "_view_css": { 'max-width': '7em', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis', 'display': 'inline-block' },
        })
      )
    )
@@ -6512,8 +6550,10 @@ function field_row(row_data) {
        editable_elm({
          "object": "ic",
          "prop": "ic_icon_style",
+         "_input": "textarea",
          "id": String(row_data['ic_id']),
          "_edit_css": { 'width': '10em' },
+         "_view_css": { 'max-width': '7em', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis', 'display': 'inline-block' },
          "_placeholder": '{"color": "red"}',
        })
      )
@@ -6524,7 +6564,9 @@ function field_row(row_data) {
          "object": "ic",
          "prop": "ic_view_style",
          "id": String(row_data['ic_id']),
+         "_input": "textarea",
          "_edit_css": { 'width': '10em' },
+         "_view_css": { 'max-width': '7em', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis', 'display': 'inline-block' },
          "_placeholder": '{"font-size": "large"}',
        })
      )
@@ -6535,7 +6577,9 @@ function field_row(row_data) {
          "object": "ic",
          "prop": "ic_style",
          "id": String(row_data['ic_id']),
+         "_input": "textarea",
          "_edit_css": { 'width': '10em' },
+         "_view_css": { 'max-width': '7em', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis', 'display': 'inline-block' },
          "_placeholder": '{"width": "2em"}',
        })
      )
