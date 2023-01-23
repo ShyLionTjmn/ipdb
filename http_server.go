@@ -1319,6 +1319,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
         tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
         tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+        tags_cache[tag_id].(M)["tag_options"] = "HIDDEN"
         tags_cache[tag_id].(M)["tag_api_name"] = nil
       }
     }
@@ -1360,6 +1361,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
           tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
           tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+          tags_cache[tag_id].(M)["tag_options"] = "HIDDEN"
           tags_cache[tag_id].(M)["tag_api_name"] = nil
         }
 
@@ -2810,6 +2812,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
           tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
           tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+          tags_cache[tag_id].(M)["tag_options"] = "HIDDEN"
           tags_cache[tag_id].(M)["tag_api_name"] = nil
         }
       }
@@ -4835,11 +4838,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       tag_data["ts"] = dbtag["ts"]
       tag_data["name"] = dbtag["tag_name"]
       tag_data["descr"] = dbtag["tag_descr"]
+      tag_data["options"] = dbtag["tag_options"]
       tag_data["flags"] = dbtag["tag_flags"]
       tag_data["api_name"] = dbtag["tag_api_name"]
 
       tag_data["orig_name"] = dbtag["tag_name"]
       tag_data["orig_descr"] = dbtag["tag_descr"]
+      tag_data["orig_options"] = dbtag["tag_options"]
       tag_data["orig_flags"] = dbtag["tag_flags"]
       tag_data["orig_api_name"] = dbtag["tag_api_name"]
 
@@ -4943,7 +4948,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     out["tags"] = tags
     if out["gs"], err = return_query_M(db, "SELECT * FROM gs", "g_id"); err != nil { panic(err) }
 
-  } else if action == "set_tag_descr" || action == "rename_tag" || action == "set_tag_flags" {
+  } else if action == "set_tag_descr" || action == "rename_tag" || action == "set_tag_flags" || action == "set_tag_options" {
     var tag_id string
     if tag_id, err = get_p_string(q, "id", g_num_reg); err != nil { panic(err) }
 
@@ -4970,6 +4975,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if tag_value, err = get_p_string(q, "descr", nil); err != nil { panic(err) }
 
       update_fields["tag_descr"] = tag_value
+    } else if action == "set_tag_options" {
+      if !can_manage { panic("Только менеджер может менять опции") }
+      var tag_value interface{}
+      if tag_value, err = get_p_string(q, "options", nil); err != nil { panic(err) }
+
+      update_fields["tag_options"] = tag_value
     } else if action == "rename_tag" {
 
       var used uint64
@@ -5495,11 +5506,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       tag_data["ts"] = dbtag["ts"]
       tag_data["name"] = dbtag["tag_name"]
       tag_data["descr"] = dbtag["tag_descr"]
+      tag_data["options"] = dbtag["tag_options"]
       tag_data["flags"] = dbtag["tag_flags"]
       tag_data["api_name"] = dbtag["tag_api_name"]
 
       tag_data["orig_name"] = dbtag["tag_name"]
       tag_data["orig_descr"] = dbtag["tag_descr"]
+      tag_data["orig_options"] = dbtag["tag_options"]
       tag_data["orig_flags"] = dbtag["tag_flags"]
       tag_data["orig_api_name"] = dbtag["tag_api_name"]
 
@@ -5649,6 +5662,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       if (tags_cache[tag_id].(M)["rights"].(uint64) & R_VIEW_NET_IPS) == 0 {
         tags_cache[tag_id].(M)["tag_name"] = "HIDDEN"
         tags_cache[tag_id].(M)["tag_descr"] = "HIDDEN"
+        tags_cache[tag_id].(M)["tag_options"] = "HIDDEN"
         tags_cache[tag_id].(M)["tag_api_name"] = nil
       }
     }

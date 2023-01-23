@@ -139,6 +139,7 @@ CREATE TABLE tags (
   tag_name	VARCHAR(190) NOT NULL DEFAULT '',
   tag_api_name	VARCHAR(256),
   tag_descr	VARCHAR(1024) NOT NULL DEFAULT '',
+  tag_options	VARCHAR(1024) NOT NULL DEFAULT '',
   tag_sort	BIGINT UNSIGNED NOT NULL DEFAULT 0,
   tag_flags BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '',
   tag_parent_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'used for unique keys checks, must be the same as tag_fk_tag_id, 0 if null',

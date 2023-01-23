@@ -11,6 +11,8 @@ var g_range_bar_margin = 5;
 
 var global_mouse_down=false;
 
+var g_show_tooltips = true;
+
 var g_sorting = false;
 var g_autosave = true;
 var g_autosave_changes = 0;
@@ -447,7 +449,16 @@ function saveable_check(elm) {
     };
     break;
   case 'ip_value':
-    return true;
+    try {
+      let col_id = elm_data['col_id'];
+      if(g_data['net_cols'][col_id]['ic_regexp'] != "") {
+        let re = new RegExp(g_data['net_cols'][col_id]['ic_regexp']);
+        return re.test(value);
+      };
+      return true;
+    } catch(e) {
+      return false;
+    };
   case 'ip':
     return true;
   case 'net':
@@ -1032,8 +1043,9 @@ function save_all() {
         let edit_state = qelm.closest(".ip_value").hasClass("ip_edit");
         let focus = qelm.is(":focus");
         let new_elm = ip_val_elm(ipdata, qdata['col_id'], edit_state);
+        let qelm_tag = qelm.prop('nodeName');
         qelm.closest(".ip_value").replaceWith( new_elm );
-        if(focus) new_elm.focus();
+        if(focus) new_elm.find(qelm_tag).focus();
         highlight = highlight.add(new_elm);
         break;
       case "vlan_value":
@@ -1877,7 +1889,7 @@ function actionNav4() {
   });
 };
 
-function ip_row(ipdata, focuson) {
+function ip_row(ipdata, focuson, col_hide_list) {
   let empty_colspan = net_cols_ids.length;
   let tr = $(TR).addClass("row").addClass("iprow")
    .data("ipdata", ipdata)
@@ -1979,7 +1991,7 @@ function ip_row(ipdata, focuson) {
         };
 
         empty_td
-         .append( $(SPAN).text(" - ") )
+         .append( $(SPAN).text(" ... ") )
          .append( $(INPUT)
            .css({"width": "8em"})
            .addClass("any_ip")
@@ -2000,7 +2012,7 @@ function ip_row(ipdata, focuson) {
       };
       if(ipdata['start'] !== ipdata['stop']) {
         empty_td
-         .append( $(SPAN).text(" - ") )
+         .append( $(SPAN).text(" ... ") )
          .append( $(LABEL).text(v4long2ip(ipdata['stop']))
            .addClass("button")
            .data("ip", ipdata['stop'])
@@ -2061,11 +2073,11 @@ function ip_row(ipdata, focuson) {
        //.html('&#x200b;')
      )
     ;
-
     ip_td.tooltip({
       classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
       items: "SPAN.ip_addr",
       content: function() {
+        if(!g_show_tooltips) return undefined;
         if( $("UL").length > 0 ) return undefined;
         let row = $(this).closest(".row");
         let ipdata = row.data("ipdata");
@@ -2106,8 +2118,11 @@ function ip_row(ipdata, focuson) {
     ip_td.appendTo( tr );
     for(let col_i in net_cols_ids) {
       let col_id = net_cols_ids[col_i];
+      let hide = in_array(col_hide_list, col_id);
       let td = $(TD)
        .addClass("unsaved_elm")
+       .addClass("col_"+col_id)
+       .toggle(!hide)
       ;
       td
        .append( ip_val_elm(ipdata, col_id, g_edit_all) )
@@ -2117,6 +2132,7 @@ function ip_row(ipdata, focuson) {
         classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
         items: "TD",
         content: function() {
+          if(!g_show_tooltips) return undefined;
           if( $("UL").length > 0 ) return undefined;
           return $(this).find(".ip_value").data("title");
         }
@@ -2135,6 +2151,10 @@ function ip_row(ipdata, focuson) {
          e.stopPropagation();
          let ipdata = $(this).data("ipdata");
          let td;
+         if(e.target.nodeName == "INPUT" || e.target.nodeName == "TEXTAREA") {
+           return;
+         };
+
          if(e.target.nodeName == "TD") {
            td = $(e.target);
          } else {
@@ -2144,7 +2164,7 @@ function ip_row(ipdata, focuson) {
            $(this).find(".ip_view").each(function() {
              $(this).replaceWith(ip_val_elm(ipdata, $(this).data('col_id'), true));
            });
-           let focuson = td.find(".ip_edit");
+           let focuson = td.find(".ip_edit").find(".autosave");
 
            if(focuson.length > 0) {
              focuson.focus();
@@ -2471,6 +2491,24 @@ function actionView4() {
       };
     };
 
+    if( (g_data['net_rights'] & R_MANAGE_NET) > 0 ) {
+      info_div
+       .append( $(DIV)
+         .append( $(SPAN).text("Назначение полей: ") )
+         .append( $(LABEL)
+           .addClass(["button", "ui-icon", "ui-icon-bullets"])
+           .title("Назначение полей")
+           .click(function() {
+             if(g_autosave_changes > 0) {
+               show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+               return;
+             };
+             net_cols_edit();
+           })
+         )
+       )
+      ;
+    };
     info_div
      .append( $(DIV)
        .append( $(SPAN).text("Ваши права на сеть: ") )
@@ -2530,6 +2568,8 @@ function actionView4() {
 
       g_edit_all = get_local("edit_all", g_edit_all);
 
+      g_show_tooltips = get_local("show_tooltips", g_show_tooltips);
+
       fixed_div
        .append( $(DIV)
          .append( $(SPAN)
@@ -2542,7 +2582,7 @@ function actionView4() {
              .on("change", function() {
                let state = $(this).is(":checked");
                save_local("edit_all", state);
-
+               g_edit_all = state;
 
                $(".main_table").find("TBODY").find("TR").each(function() {
                  let row = $(this);
@@ -2561,6 +2601,21 @@ function actionView4() {
              })
            )
          )
+         .append( $(SPAN)
+           .append( $(LABEL)
+             .text("Всплывающие подсказки: ")
+             .prop("for", "show_tooltips")
+           )
+           .append( $(INPUT)
+             .prop({"id": "show_tooltips", "type": "checkbox", "checked": g_show_tooltips})
+             .on("change", function() {
+               let state = $(this).is(":checked");
+               save_local("show_tooltips", state);
+               g_show_tooltips = state;
+               $(".tooltip").remove();
+             })
+           )
+         )
        )
       ;
 
@@ -2573,6 +2628,102 @@ function actionView4() {
       thead
        .append( $(TH)
          .text("IP")
+         .append( $(LABEL)
+           .addClass(["button", "ui-icon", "ui-icon-eye"])
+           .title("Отображение полей")
+           .css({"float": "right"})
+           .click(function(e) {
+             e.stopPropagation();
+             let menu = $(UL)
+              .addClass("popupmenu")
+              .css({"background-color": "white", "border": "1px solid black", "display": "inline-block", "z-index": 100})
+              .css({"padding": "0.2em"})
+              .css({"position": "absolute"})
+              .append( $(LI)
+                .title("Закрыть меню")
+                .append( $(DIV)
+                  .addClass("wsp")
+                  .append( $(LABEL).addClass(["ui-icon", "ui-icon-arrowreturn-1-w"]) )
+                  .append( $(SPAN).html("&#x200b;") )
+                  .click(function(e) {
+                    e.stopPropagation();
+                    $("UL.popupmenu").remove();
+                  })
+                )
+              )
+             ;
+             net_cols_ids = keys(g_data['net_cols']);
+             net_cols_ids.sort(function(a, b) {
+               return Number(g_data['net_cols'][a]['ic_sort']) - Number(g_data['net_cols'][b]['ic_sort']);
+             });
+
+             for(let col_i in net_cols_ids) {
+               let col_id = net_cols_ids[col_i];
+               let hidden = get_local('col_hide_'+g_data['v']+'_'+g_data['net_id']+'_'+col_id, false);
+               menu
+                .append( $(LI)
+                  .title(g_data['net_cols'][col_id]['ic_name'])
+                  .append( $(DIV)
+                    .click(function(e) {
+                      e.stopPropagation();
+                      if(e.target.nodeName == "DIV") {
+                        $(this).find("INPUT").trigger("click");
+                      };
+                    })
+                    .addClass("wsp")
+                    .css({"text-align": "right", "font-weight": "normal"})
+                    .append( $(LABEL).prop("for", 'col_hide_'+g_data['v']+'_'+g_data['net_id']+'_'+col_id)
+                      .text(g_data['net_cols'][col_id]['ic_name'])
+                    )
+                    .append( $(INPUT)
+                      .prop({"id": 'col_hide_'+g_data['v']+'_'+g_data['net_id']+'_'+col_id,
+                             "type": "checkbox",
+                             "checked": !hidden
+                      })
+                      .data("col_id", col_id)
+                      .on("change", function() {
+                        let col_id = $(this).data("col_id");
+                        let show = $(this).is(":checked");
+                        if(show) {
+                          del_local('col_hide_'+g_data['v']+'_'+g_data['net_id']+'_'+col_id);
+                          $(".col_"+col_id).show();
+                        } else {
+                          save_local('col_hide_'+g_data['v']+'_'+g_data['net_id']+'_'+col_id, true);
+                          $(".col_"+col_id).hide();
+                        };
+
+                        $("#hidden_cols").toggle($(this).closest("TABLE").find("THEAD").find(".column:hidden").length > 0);
+                      })
+                    )
+                  )
+                )
+               ;
+             };
+
+             let td = $(this).closest("TH");
+
+             let td_width = td.width();
+
+             menu.css({"top": "1.3em", "left": td_width+10+"px"});
+
+             menu.appendTo(td);
+
+             menu.menu();
+
+             menu.on("click dblclick", function(e) { e.stopPropagation(); });
+
+             $(".tooltip").remove();
+             
+           })
+         )
+         .append( $(SPAN).prop("id", "hidden_cols")
+           .css({"float": "right"})
+           .title("Некоторые колонки скрыты!")
+           .append( $(LABEL).addClass(["ui-icon", "ui-icon-eye"])
+             .css({"color": "darkorange"})
+           )
+           .hide()
+         )
          .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
            .addClass(["button", "ui-icon", "ui-icon-plus"])
            .title("Добавить диапазон")
@@ -2585,18 +2736,6 @@ function actionView4() {
              edit_net_range("int_v4net_range", undefined);
            })
          )
-         .append( (g_data['net_rights'] & R_MANAGE_NET) == 0?$(LABEL):$(LABEL)
-           .addClass(["button", "ui-icon", "ui-icon-bullets"])
-           .title("Назначение полей")
-           .css({"float": "right"})
-           .click(function() {
-             if(g_autosave_changes > 0) {
-               show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
-               return;
-             };
-             net_cols_edit();
-           })
-         )
        )
       ;
 
@@ -2607,8 +2746,13 @@ function actionView4() {
 
       g_data["_val_css"] = {};
 
+      let col_hide_list = [];
+
       for(let col_i in net_cols_ids) {
         let col_id = net_cols_ids[col_i];
+
+        let hide = get_local('col_hide_'+res['ok']['v']+'_'+res['ok']['net_id']+'_'+col_id, false);
+        if(hide) col_hide_list.push(col_id);
 
         if(String(res['ok']['net_cols'][col_id]['ic_options']).length > 0 &&
            String(res['ok']['net_cols'][col_id]['ic_options'])[0] === "{"
@@ -2622,7 +2766,11 @@ function actionView4() {
         };
 
         let th = $(TH)
+         .addClass('column')
+         .addClass('col_'+col_id)
          .text(res['ok']['net_cols'][col_id]['ic_name'])
+         .data("col_id", col_id)
+         .toggle(!hide)
         ;
         if(res['ok']['net_cols'][col_id]['ic_icon'] != '') {
           let icon_css;
@@ -2650,21 +2798,25 @@ function actionView4() {
 
       let tbody = $(TBODY);
 
+//let start_t = Date.now();
 
       for(let ip_i in res['ok']['ips']) {
         let ipdata = res['ok']['ips'][ip_i];
-        let tr = ip_row(ipdata, focuson);
+        let tr = ip_row(ipdata, focuson, col_hide_list);
         tr.appendTo( tbody );
 
       };
-
+//debugLog(Date.now() - start_t);
       table.append( tbody );
       table.appendTo( workarea );
+
+      $("#hidden_cols").toggle(table.find("THEAD").find(".column:hidden").length > 0);
 
       table.tooltip({
         classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
         items: ".iprange",
         content: function() {
+          if(!g_show_tooltips) return;
           let r_i = $(this).data("r_i");
           if(r_i === undefined) return;
           return v4range_title(g_data['net_ranges'][r_i]);
@@ -2688,6 +2840,7 @@ function actionView4() {
         });
       };
 
+
       if(focuson !== undefined) {
         let tr = $(".focuson");
         let prev = tr.prev();
@@ -2695,6 +2848,7 @@ function actionView4() {
          prev[0].scrollIntoView();
         };
       };
+
         
     } else {
       fixed_div
@@ -2757,8 +2911,14 @@ function take_ip(elm) {
       return;
     };
 
+    let hidden_cols = [];
+
+    row.closest("TABLE").find("THEAD").find(".column:hidden").each(function() {
+      hidden_cols.push($(this).data("col_id"));
+    });
+
     let new_ipdata = res['ok']['ipdata'];
-    let new_ip_row = ip_row(new_ipdata);
+    let new_ip_row = ip_row(new_ipdata, undefined, hidden_cols);
     row.replaceWith( new_ip_row );
 
     let prev_start = prev_ipdata['start'];
@@ -2768,13 +2928,13 @@ function take_ip(elm) {
       if(take_ip > prev_start) {
         let before_data = dup(prev_ipdata);
         before_data['stop'] = take_ip - 1;
-        let before_row = ip_row(before_data);
+        let before_row = ip_row(before_data, undefined, hidden_cols);
         before_row.insertBefore(new_ip_row);
       };
       if(take_ip < prev_stop) {
         let after_data = dup(prev_ipdata);
         after_data['start'] = take_ip + 1;
-        let after_row = ip_row(after_data);
+        let after_row = ip_row(after_data, undefined, hidden_cols);
         after_row.insertAfter(new_ip_row);
       };
     };
@@ -2968,7 +3128,13 @@ function ip_menu(elm) {
                new_ip_data['start'] = ipdata['v4ip_addr'];
                new_ip_data['stop'] = ipdata['v4ip_addr'];
 
-               row.replaceWith( ip_row(new_ip_data) );
+               let hidden_cols = [];
+
+               row.closest("TABLE").find("THEAD").find(".column:hidden").each(function() {
+                 hidden_cols.push($(this).data("col_id"));
+               });
+
+               row.replaceWith( ip_row(new_ip_data, undefined, hidden_cols) );
              });
            });
          })
@@ -2998,7 +3164,7 @@ function ip_menu(elm) {
 
   let td_width = elm.closest("TD").width();
 
-  menu.css({"top": "0px", "left": td_width+10+"px"});
+  menu.css({"top": "0px", "left": td_width+20+"px"});
 
   menu.appendTo(elm.closest("TD"));
 
@@ -3272,6 +3438,7 @@ function ip_val_elm(ipdata, col_id, state) {
     input_elm.keyup(function(e) {
       if(e.key === "Escape") {
         e.stopPropagation();
+        $(".tooltip").remove();
         let row = $(this).closest(".row");
         row.find(".ip_edit").each(function() {
           if(!$(this).find(".autosave").data("autosave_changed")) {
@@ -4624,7 +4791,7 @@ function net_cols_edit() {
         });
 
         if(on.length > 0 || off.length > 0) {
-          show_confirm_checkbox("Внимание!\nОтключение полей приведет к удалению ВСЕХ данных,\nсвязаных с IP адресами и отключаемыми полями!\n"+
+          show_confirm_checkbox("Внимание!\nОтключение полей приведет к удалению ВСЕХ данных,\nсвязаных с IP адресами и отключаемыми полями для данной сети!\n"+
                                 "Отмена будет невозможна!", function() {
             run_query({"action": "net_set_cols", "net_id": String(g_data['net_id']), "v": g_data["v"], "on": on, "off": off}, function(res) {
               window.location = "?action=view_v"+g_data["v"]+"&net="+g_data['net_addr']+"&masklen="+g_data['net_masklen']+
@@ -4866,7 +5033,7 @@ function vlan_row(row_data) {
         };
 
         empty_td
-         .append( $(SPAN).text(" - ") )
+         .append( $(SPAN).text(" ... ") )
          .append( $(INPUT)
            .css({"width": "8em"})
            .addClass("any_vlan")
@@ -4887,7 +5054,7 @@ function vlan_row(row_data) {
       };
       if(row_data['start'] !== row_data['stop']) {
         empty_td
-         .append( $(SPAN).text(" - ") )
+         .append( $(SPAN).text(" ... ") )
          .append( $(LABEL).text(row_data['stop'])
            .addClass("button")
            .data("vlan", row_data['stop'])
@@ -6530,6 +6697,8 @@ function field_row(row_data) {
          "prop": "ic_regexp",
          "id": String(row_data['ic_id']),
          "_edit_css": { 'width': '10em' },
+         "_input": "textarea",
+         "_view_css": { 'width': '10em', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis', 'display': 'inline-block' },
          "_placeholder": "^(?:boo|moo)$",
        })
      )
@@ -7310,14 +7479,6 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
          )
        )
        .append( $(DIV)
-         .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
-         .append( $(SPAN).addClass("tag_info")
-           .css({"font-size": "x-small"})
-           .text("Чтобы задать API имя, переименуйте тег и задайте имя в скобках")
-           .hide()
-         )
-       )
-       .append( $(DIV)
          .css({"margin-top": "0.5em", "min-height": "1.8em"})
          .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
          .append( $(SPAN).addClass("tag_info")
@@ -7349,6 +7510,42 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
                  };
                });
 
+             })
+           )
+           .hide()
+         )
+       )
+       .append( $(DIV)
+         .css({"margin-top": "0.5em", "min-height": "1.8em"})
+         .append( $(SPAN).html("&nbsp;").css({"display": "inline-block"}) )
+         .append( $(SPAN).addClass("tag_info")
+           .append( $(SPAN).text("Опции: ")
+             .title("Опции для использования во внешних системах")
+           )
+           .append( $(INPUT).addClass("tag_options").css({"width": "40em"})
+             .enterKey(function() { $(".save_options_btn").trigger("click"); })
+           )
+           .append( $(LABEL)
+             .addClass(["button", "ui-icon", "ui-icon-save save_options_btn"])
+             .click(function() {
+               let instance = $(this).closest(".dialog_start").find(".tree").jstree(true);
+               let nodes = instance.get_selected(true);
+               if(nodes.length != 1) return;
+               let node = nodes[0];
+
+               if((node['data']['rights'] & R_MANAGE_NET) == 0) return;
+
+               let new_options = String($(".tag_options").val()).trim();
+               node['data']['options'] = new_options;
+               if(new_options === node['data']['orig_options']) return;
+
+               run_query({"action": "set_tag_options", "id": String(node['id']), "options": new_options}, function(res) {
+                 node['data']['orig_options'] = new_options;
+                 instance.redraw_node(node, false, false, false);
+                 if(g_data['tags'] !== undefined && g_data['tags'][ node['id'] ] !== undefined) {
+                   g_data['tags'][ node['id'] ]['tag_options'] = new_options;
+                 };
+               });
              })
            )
            .hide()
@@ -7869,6 +8066,8 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
        dlg.find(".tag_name").text(node['data']['name']);
        dlg.find(".tag_api_name").text(node['data']['api_name'] !== null?node['data']['api_name']:'не задан.');
        dlg.find(".tag_descr").val(node['data']['descr']);
+       dlg.find(".tag_options").val(node['data']['options']);
+       dlg.find(".tag_options").prop("readonly", (node['data']['rights'] & R_MANAGE_NET) == 0);
 
        let flags_elms = $([]);
        let flags = (node['data']['flags'] !== undefined)?node['data']['flags']:0;
@@ -8084,6 +8283,7 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
              'tag_id': res['ok']['new_id'],
              'tag_name': node['data']['name'],
              'tag_descr': node['data']['descr'],
+             'tag_options': node['data']['options'],
              'tag_api_name': node['data']['api_name'],
              'tag_flags': node['data']['flags'],
              'tag_fk_tag_id': node['parent'] === "#"?null:node['parent'],
@@ -8907,3 +9107,4 @@ function ic_options_help() {
   dlg.appendTo("BODY");
   dlg.dialog( dialog_options );
 };
+
