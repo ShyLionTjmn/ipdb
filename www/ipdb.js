@@ -924,6 +924,9 @@ $( document ).ready(function() {
     case "global_rights":
       actionGlobalRights();
       break;
+    case "link":
+      actionLink();
+      break;
     default:
       window.location = "?action=front"+(DEBUG?"&debug":"");
       //history.pushState(undefined, undefined, "?action=front"+(DEBUG?"&debug":""));
@@ -1120,6 +1123,45 @@ function get_vlan_elm(vlan_data, allow_edit=false) {
   ;
   return ret;
 };
+
+function actionLink() {
+  workarea.empty();
+  fixed_div.empty();
+  let ip_str = getUrlParameter("ip", undefined);
+  let mask_str = getUrlParameter("mask", undefined);
+  if(mask_str === false) mask_str = undefined;
+  if(String(ip_str).match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    let ip = v4ip2long(ip_str);
+    if(ip === false) {
+      workarea.append( $(SPAN).addClass("link_error").text("Invalid IP address") );
+      return;
+    };
+    if(mask_str !== undefined) {
+      if(Number(mask_str) > 32) {
+        workarea.append( $(SPAN).addClass("link_error").text("Invalid mask") );
+        return;
+      };
+    };
+
+    run_query({"action": "find_net", "v": "4", "addr": String(ip), "masklen": mask_str}, function(res) {
+      if(res['ok']['notfound'] !== undefined) {
+        workarea.append( $(SPAN).addClass("link_error").text("Сеть не найдена") );
+        return;
+      };
+      if(res['ok']['nav'] !== undefined) {
+        window.location = "?action=nav_v4&net="+res['ok']['net']+"&masklen="+res['ok']['masklen']+
+                          (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+      } else {
+        window.location = "?action=view_v4&net="+res['ok']['net']+"&masklen="+res['ok']['masklen']+"&focuson="+res['ok']['focuson']+
+                          (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+      };
+    });
+  } else {
+    workarea.append( $(SPAN).addClass("link_error").text("Bad IP "+ip_str) );
+        return;
+  };
+};
+
 function actionFront() {
   //history.pushState(undefined, undefined, "?action=front"+(DEBUG?"&debug":""));
   workarea.empty();
