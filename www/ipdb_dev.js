@@ -317,7 +317,7 @@ function ip4net(ip, masklen) {
 };
 
 function net_mask_wc(net, masklen) {
-  return v4long2ip(net)+"/"+masklen+" ("+v4long2ip(v4len2mask[masklen])+" "+v4long2ip((~v4len2mask[masklen]) >>> 0) + ")";
+  return v4long2ip(net)+"/"+masklen+" (Маска: "+v4long2ip(v4len2mask[masklen])+", Wildcard: "+v4long2ip((~v4len2mask[masklen]) >>> 0) + ")";
 };
 
 function autosave_normalize(elm) {
@@ -2286,6 +2286,7 @@ function actionView4() {
          .title( "Назад к сети: "+net_mask_wc(net, backlen) )
        )
        .append( $(SPAN).addClass("min1em") )
+       .append( $(LABEL).text("Сеть: ").css({"font-size": "larger", "font-weight": "bold"}) )
        .append( $(SPAN).text( net_mask_wc(net, masklen) ) )
        .append( $(SPAN).addClass("min1em") )
        .append( $(LABEL).text("В избранном: ") )
@@ -8390,7 +8391,7 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
          instance.deselect_all(true);
        };
        instance.trigger("select_node.jstree");
-       dlg.dialog("option", "position", {"my": "center", "at": "center", "of": $("BODY")});
+       //dlg.dialog("option", "position", {"my": "center", "at": "center", "of": $("BODY")});
      })
     ;
 
@@ -8443,12 +8444,14 @@ function select_tag(root_api_name, preselect, donefunc, any=false) {
 
     let dialog_options = {
       modal:true,
-      maxHeight:980,
+      maxHeight:900,
+      height: 900,
       maxWidth:1800,
       minWidth:1000,
       width: 1000,
       height: "auto",
       buttons: buttons,
+      position: {"my": "center to", "at": "center top", "of": window},
       close: function() {
         $(this).dialog("destroy");
         $(this).remove();

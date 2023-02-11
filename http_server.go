@@ -3774,7 +3774,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if prev_data, err = must_return_one_M(tx, "SELECT * FROM v"+v+"nets WHERE v"+v+"net_id=?", net_id); err != nil { panic(err) }
 
     var prev_rights M
-    query = "SELECT gn4r_fk_g_id as g_id, gn4r_rmask as rights FROM gr4rs WHERE gn4r_fk_v4net_id=?"
+    query = "SELECT gn4r_fk_g_id as g_id, gn4r_rmask as rights FROM gn4rs WHERE gn4r_fk_v4net_id=?"
     if prev_rights, err = return_query_M(tx, query, "g_id", net_id); err != nil { panic(err) }
 
     prev_data.(M)["rights"] = prev_rights
