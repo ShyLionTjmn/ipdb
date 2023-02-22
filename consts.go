@@ -3,7 +3,7 @@ package main
 //opt_p
 const HTTP_PORT = uint(8888)
 //opt_w
-const WWW_ROOT = "/var/www/ipdb"
+const WWW_ROOT = "/opt/ipdb/www"
 
 //opt_b
 // see local.go
