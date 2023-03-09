@@ -1,4 +1,5 @@
 local.go
 ipdb
 **/.*
+**/local*
 **/local*.sql
