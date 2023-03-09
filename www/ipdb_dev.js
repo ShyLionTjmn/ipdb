@@ -42,6 +42,8 @@ var net_cols_ids;
 var g_node_name_reg = /^\s*([^()]+)\s*(?:\(\s*([a-zA-Z0-9_\-]+)\s*\)\s*)?$/;
 var g_data; //resets by main pages
 
+var ip_regexp = /^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$/;
+
 var usedonly = false;
 /* fetched from consts.js node in http_server.go
 const R_NAME = 1;
@@ -1188,7 +1190,7 @@ function actionFront() {
      .append( $(INPUT)
        .prop({"type": "search", "placeholder": "x.x.x.x/x", "id": "ipv4_goto"})
        .enterKey(function() {
-         $("#ipv4_goto_btn").trigger("click")
+         $("#ipv4_goto_btn").trigger("click");
        })
      )
      .append( $(LABEL).text(">").title("Перейти к отображению сети").addClass("button")
@@ -1240,6 +1242,11 @@ function actionFront() {
        .prop({"id": "search_btn"})
        .click(function() {
          let search_string = String($("#search_string").val()).trim();
+         if(ip_regexp.test(search_string)) {
+           $("#ipv4_goto").val(search_string);
+           $("#ipv4_goto_btn").trigger("click");
+           return;
+         };
          let tags = String($("#search_tags").val()).trim();
          let vlans = String($("#search_vlans").val()).trim();
          if(search_string === "" && tags === "" && vlans ===  "") {
