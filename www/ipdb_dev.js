@@ -73,6 +73,47 @@ function gen_code() {
   return code;
 };
 
+var g_mac_free_reg = new RegExp("^([0-9a-fA-F]{2})[:\.\-]?([0-9a-fA-F]{2})[:\.\-]?([0-9a-fA-F]{2})[:\.\-]?"+
+                                "([0-9a-fA-F]{2})[:\.\-]?([0-9a-fA-F]{2})[:\.\-]?([0-9a-fA-F]{2})$"
+);
+
+function format_mac(mac, view="canonic") {
+  let m = String(mac).match(g_mac_free_reg);
+  if(m === null) return mac;
+
+  switch(view) {
+  case "canonic":
+  case "u6c":
+      return(m[1].toUpperCase()+":"+m[2].toUpperCase()+":"+m[3].toUpperCase()+
+        ":"+m[4].toUpperCase()+":"+m[5].toUpperCase()+":"+m[6].toUpperCase());
+  case "snr":
+  case "l6h":
+      return(m[1].toLowerCase()+"-"+m[2].toLowerCase()+"-"+m[3].toLowerCase()+
+        "-"+m[4].toLowerCase()+"-"+m[5].toLowerCase()+"-"+m[6].toLowerCase());
+  case "cisco":
+  case "l3d":
+      return(m[1].toLowerCase()+m[2].toLowerCase()+"."+m[3].toLowerCase()+m[4].toLowerCase()+
+        "."+m[5].toLowerCase()+m[6].toLowerCase());
+  case "huawei":
+  case "l3h":
+      return(m[1].toLowerCase()+m[2].toLowerCase()+"-"+m[3].toLowerCase()+m[4].toLowerCase()+
+        "-"+m[5].toLowerCase()+m[6].toLowerCase());
+  };
+  return mac;
+};
+
+function gen_mac() {
+  let mac_chars="0123456789ABCDEF"
+  let mac = "";
+
+  for(let i=0; i < 10; i++) {
+    let idx = Math.floor(Math.random() * mac_chars.length);
+    mac += String(mac_chars.charAt(idx));
+  };
+
+  return format_mac("02" + String(mac))
+};
+
 function debugLog(text) {
   if(!DEBUG) return;
 
@@ -3466,6 +3507,16 @@ function ip_val_elm(ipdata, col_id, state) {
   if(state && can_edit) {
     let input_elm;
 
+    let options_obj = {};
+    if(String(coldata['ic_options']).trim().indexOf("{") == 0) {
+      try {
+        options_obj = JSON.parse(String(coldata['ic_options']).trim());
+      } catch(e) {
+        options_obj = {};
+      };
+    };
+
+
     if(coldata['ic_type'] == "textarea") {
       let lines = String(value).split("\n").length;
       input_elm = $(TEXTAREA)
@@ -3499,6 +3550,25 @@ function ip_val_elm(ipdata, col_id, state) {
     });
     ret.append( input_elm );
     ret.addClass("ip_edit");
+
+    if(options_obj["gen"] == "mac") {
+      ret
+        .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-gears"])
+          .title("Сгенерировать. Поле должно быть пустым")
+          .css({"margin-left": "0.3em"})
+          .click(function() {
+            let input = $(this).closest(".ip_value").find("INPUT");
+            if(input.length == 0) return;
+            if(String(input.val()).trim() != "") {
+              input.animateHighlight("orange", 300);
+              return;
+            };
+            input.val(gen_mac());
+            input.trigger("input");
+          })
+        )
+      ;
+    };
 
   } else {
     ret

@@ -70,12 +70,15 @@ var g_num_reg *regexp.Regexp
 var g_num_list_reg *regexp.Regexp
 var g_api_name_reg *regexp.Regexp
 
+var g_mac_free_reg *regexp.Regexp
+
 func init() {
   _ = spew.Sprint()
   g_name_reg = regexp.MustCompile(`^\S.*\S$`)
   g_num_reg = regexp.MustCompile(`^\d+$`)
   g_num_list_reg = regexp.MustCompile(`^(?:\d+(,\d+)*)?$`)
   g_api_name_reg = regexp.MustCompile(`^[0-9a-z_\-]+$`)
+  g_mac_free_reg = regexp.MustCompile(`^([\da-fA-F]{2})`+strings.Repeat(`[\-\.:_]([\da-fA-F]{2})`, 5)+`$`)
 
   g_rights_obj = make(M)
   g_rights_obj["nets"] = "Права на все сети и IP адреса"
@@ -1792,7 +1795,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       switch(object) {
       case "ip_value":
         if net_cols == nil {
-          query = "SELECT ic_type, ic_regexp, ic_id FROM ics INNER JOIN n4cs ON nc_fk_ic_id=ic_id WHERE nc_fk_v4net_id=?"
+          query = "SELECT ic_type, ic_regexp, ic_id, ic_options FROM ics INNER JOIN n4cs ON nc_fk_ic_id=ic_id WHERE nc_fk_v4net_id=?"
           if net_cols, err = return_query_M(db, query, "ic_id", dbnet["v4net_id"]); err != nil { panic(err) }
         }
       }
@@ -1854,6 +1857,30 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           }
           if !val_regexp.MatchString(value.(string)) {
             panic("Значение поля не соответствует регулярному выражению: "+val_regexp_str)
+          }
+        }
+
+        var ic_options_json string
+        if ic_options_json, var_ok = net_cols[col_id].(M)["ic_options"].(string); !var_ok { panic(PE) }
+        ic_options_json = strings.TrimSpace(ic_options_json)
+        if strings.TrimSpace(value.(string)) != "" && len(ic_options_json) > 0 && ic_options_json[0] == '{' {
+          var ic_options M
+          if err = json.Unmarshal([]byte(ic_options_json), &ic_options); err != nil { panic(err) }
+          if unique, var_ok := ic_options["unique"].(string); var_ok && unique == "mac" {
+            if a := g_mac_free_reg.FindStringSubmatch(value.(string)); a != nil {
+              value_mac := strings.ToLower(a[1]+a[2]+a[3]+a[4]+a[5]+a[6])
+              query = "SELECT DISTINCT iv_value FROM i4vs WHERE iv_fk_ic_id=?"
+              macs_a, err := return_arrays(db, query, col_id)
+              if err != nil { panic(err) }
+              for _, mac_m := range macs_a {
+                mac := mac_m[0].(string)
+                if a := g_mac_free_reg.FindStringSubmatch(mac); a != nil {
+                  if strings.ToLower(a[1]+a[2]+a[3]+a[4]+a[5]+a[6]) == value_mac {
+                    panic("Такой MAC адрес уже есть в БД. Воспользуйтесь поиском для информации")
+                  }
+                }
+              }
+            }
           }
         }
 
