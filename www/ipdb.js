@@ -6,8 +6,8 @@ var fixed_div;
 var user_self_sub="none";
 var user_self_id;
 
-var g_range_bar_width = 10;
-var g_range_bar_margin = 5;
+var g_range_bar_width = 3;
+var g_range_bar_margin = 2;
 
 var global_mouse_down=false;
 
