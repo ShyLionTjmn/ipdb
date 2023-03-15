@@ -1359,41 +1359,49 @@ function actionFront() {
 
       res['ok']['v4favs'].sort(function(a,b) { return a['v4net_addr']-b['v4net_addr']; });
 
+      let v4favs_table = $(TABLE).appendTo(v4favs);
+
       for(let i=0; i < res['ok']['v4favs'].length; i++) {
         let mask_bits = v4len2mask[ res['ok']['v4favs'][i]['v4net_mask'] ];
         let wildcard_bits = (~mask_bits) >>> 0;
-        v4favs
-         .append( $(DIV)
+        v4favs_table
+         .append( $(TR)
            .addClass("wsp")
            .addClass("fav_row")
-           .append( $(A).prop({"href": "?action=nav_v4&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
-                                        res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
-             .text( v4long2ip(res['ok']['v4favs'][i]['v4net_addr'])+"/"+res['ok']['v4favs'][i]['v4net_mask'] )
-             .title( "Mask: "+v4long2ip(mask_bits)+"\n"+"Wildcard: "+v4long2ip(wildcard_bits) )
+           .append( $(TD)
+             .append( $(A).prop({"href": "?action=nav_v4&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
+                                          res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
+               .text( v4long2ip(res['ok']['v4favs'][i]['v4net_addr'])+"/"+res['ok']['v4favs'][i]['v4net_mask'] )
+               .title( "Mask: "+v4long2ip(mask_bits)+"\n"+"Wildcard: "+v4long2ip(wildcard_bits) )
+             )
+             .append( $(SPAN).text(" (") )
+             .append( $(A).prop({"href": "?action=nav_v4&usedonly&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
+                                          res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
+               .text( "исп." )
+               .title("Только используемые")
+             )
+             .append( $(SPAN).text(")") )
            )
-           .append( $(SPAN).text(" (") )
-           .append( $(A).prop({"href": "?action=nav_v4&usedonly&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
-                                        res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
-             .text( "исп." )
-             .title("Только используемые")
-           )
-           .append( $(SPAN).text(")") )
-           .append( $(SPAN).addClass("min05em") )
-           .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-trash"])
-             .css({"font-size": "smaller"})
-             .title("Убрать из избранного")
-             .data("net", res['ok']['v4favs'][i]['v4net_addr'])
-             .data("masklen", res['ok']['v4favs'][i]['v4net_mask'])
-             .click(function() {
-               let net = $(this).data("net");
-               let masklen = $(this).data("masklen");
-               let row = $(this).closest(".fav_row");
-               show_confirm("Подтвердите удаление сети из избранного", function() {
-                 run_query({"action": "fav_v4", "net": String(net), "masklen": String(masklen), "fav": 0}, function(res) {
-                   row.remove();
+           .append( $(TD)
+             .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-trash"])
+               .css({"font-size": "smaller"})
+               .title("Убрать из избранного")
+               .data("net", res['ok']['v4favs'][i]['v4net_addr'])
+               .data("masklen", res['ok']['v4favs'][i]['v4net_mask'])
+               .click(function() {
+                 let net = $(this).data("net");
+                 let masklen = $(this).data("masklen");
+                 let row = $(this).closest(".fav_row");
+                 show_confirm("Подтвердите удаление сети из избранного", function() {
+                   run_query({"action": "fav_v4", "net": String(net), "masklen": String(masklen), "fav": 0}, function(res) {
+                     row.remove();
+                   });
                  });
-               });
-             })
+               })
+             )
+           )
+           .append( $(TD)
+             .text(res['ok']['v4favs'][i]['name'])
            )
          )
         ;
@@ -2342,6 +2350,50 @@ function actionView4() {
          .on("change", function() {
            let checked = $(this).is(":checked");
            run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
+           });
+         })
+       )
+       .append( $(SPAN).addClass("min5em") )
+       .append( $(SPAN).text("Перейти: ") )
+       .append( $(INPUT)
+         .prop({"type": "search", "placeholder": "x.x.x.x/x", "id": "ipv4_goto"})
+         .enterKey(function() {
+           $("#ipv4_goto_btn").trigger("click");
+         })
+       )
+       .append( $(LABEL).text(">").title("Перейти к отображению сети").addClass("button")
+         .prop({"id": "ipv4_goto_btn"})
+         .click(function() {
+           let val = String($("#ipv4_goto").val()).trim();
+           let m = val.match(/^(\d+\.\d+\.\d+\.\d+)(?:\/(\d+))?/);
+           if(m === null) {
+             $("ipv4_goto").animateHighlight("red", 300);
+             return;
+           };
+           let ip = v4ip2long(m[1]);
+           if(ip === false) {
+             $("ipv4_goto").animateHighlight("red", 300);
+             return;
+           };
+           if(m[2] !== undefined) {
+             if(Number(m[2]) > 32) {
+               $("ipv4_goto").animateHighlight("red", 300);
+               return;
+             };
+           };
+
+           run_query({"action": "find_net", "v": "4", "addr": String(ip), "masklen": m[2]}, function(res) {
+             if(res['ok']['notfound'] !== undefined) {
+               $("ipv4_goto").animateHighlight("orange", 300);
+               return;
+             };
+             if(res['ok']['nav'] !== undefined) {
+               window.location = "?action=nav_v4&net="+res['ok']['net']+"&masklen="+res['ok']['masklen']+
+                                 (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+             } else {
+               window.location = "?action=view_v4&net="+res['ok']['net']+"&masklen="+res['ok']['masklen']+"&focuson="+res['ok']['focuson']+
+                                 (usedonly?"&usedonly":"")+(DEBUG?"&debug":"");
+             };
            });
          })
        )

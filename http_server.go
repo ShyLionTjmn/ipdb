@@ -1293,7 +1293,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var v4_favs interface{}
     v4_accessible := make(M)
 
-    query = "SELECT v4net_addr, v4net_mask FROM v4favs WHERE v4fav_fk_u_id=?"
+    query = "SELECT f.v4net_addr, f.v4net_mask, IFNULL(n.v4net_name, '') as name FROM"+
+      " v4favs f LEFT JOIN v4nets n ON f.v4net_addr = n.v4net_addr AND f.v4net_mask = n.v4net_mask"+
+      " WHERE f.v4fav_fk_u_id=?"
 
     if v4_favs, err = return_query(db, query, "", user_id); err != nil { panic(err) }
 
