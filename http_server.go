@@ -2416,6 +2416,12 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       netrows[octet - first_octet]["net"] = row_net
       netrows[octet - first_octet]["last_addr"] = row_last_addr
 
+      query = "SELECT COUNT(*) FROM v4arps WHERE v4arp_ip >=? AND v4arp_ip <= ?"
+      var arp_count uint64
+      if arp_count, err = must_return_one_uint(db, query, row_net, row_last_addr); err != nil { panic(err) }
+
+      netrows[octet - first_octet]["arp_count"] = arp_count
+
       netrows[octet - first_octet]["cols"] = make([]M, lastmask - masklen)
       netrows[octet - first_octet]["ranges"] = make([]M, len(ranges))
 
@@ -2713,9 +2719,15 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       out["net_descr"] = "HIDDEN"
     }
 
+    var net_arps M
+
+    query = "SELECT * FROM v4arps WHERE v4arp_ip >= ? AND v4arp_ip <= ?"
+    if net_arps, err = return_query_M(db, query, "v4arp_ip", dbnet["v4net_addr"], dbnet["v4net_last"]); err != nil { panic(err) }
+
     aux_userinfo := make(M)
 
     if (dbnet_rights & R_VIEW_NET_INFO) > 0 {
+
       u64, _ = dbnet.Uint64("v4net_fk_vlan_id")
       if u64 > 0 {
         query = "SELECT vlan_number, vlan_name, vlan_descr, vd_name, vd_descr, vd_id, vlan_id, vlan_fk_vd_id"+
@@ -2948,6 +2960,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         addr_rights := dbnet_rights
         addr_ranges := make([]M, len(dbnet_ranges_a))
 
+        addr_str := strconv.FormatUint(uint64(ip_addr), 10)
+
+        arp, arp_ex := net_arps[addr_str].(M)
+
         for i, _ := range dbnet_ranges_a {
           addr_ranges[i] = make(M)
 
@@ -2976,6 +2992,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
           ips_a[addr_idx]["is_taken"] = 1
 
+          if arp_ex {
+            ips_a[addr_idx]["arp"] = arp
+          }
+
           if pending != nil {
             out_ips = append(out_ips, pending)
             pending = nil
@@ -2989,6 +3009,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ip_m["ranges"] = addr_ranges
             ip_m["rights"] = addr_rights
             ip_m["is_network"] = 1
+
+            if arp_ex {
+              ip_m["arp"] = arp
+            }
             out_ips = append(out_ips, ip_m)
           } else if masklen <= 30 && ip_addr == dbnet_last_addr {
             if pending != nil {
@@ -3000,6 +3024,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
             ip_m["ranges"] = addr_ranges
             ip_m["rights"] = addr_rights
             ip_m["is_broadcast"] = 1
+
+            if arp_ex {
+              ip_m["arp"] = arp
+            }
             out_ips = append(out_ips, ip_m)
           } else {
             if pending == nil {
@@ -3009,6 +3037,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
               pending["stop"] = ip_addr
               pending["rights"] = addr_rights
               pending["ranges"] = addr_ranges
+              if arp_ex {
+                pending["arp_count"] = uint64(1)
+                pending["arp"] = []M{ arp }
+              }
             } else {
               ranges_differ := false
               for i, _ := range dbnet_ranges_a {
@@ -3019,6 +3051,15 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
               }
               if !ranges_differ {
                 pending["stop"] = ip_addr
+                if arp_ex {
+                  if arp_count, arp_count_ex := pending["arp_count"].(uint64); !arp_count_ex {
+                    pending["arp_count"] = uint64(1)
+                    pending["arp"] = []M{ arp }
+                  } else {
+                    pending["arp_count"] = arp_count + 1
+                    pending["arp"] = append(pending["arp"].([]M), arp)
+                  }
+                }
               } else {
                 out_ips = append(out_ips, pending)
                 pending = make(M)
@@ -3027,6 +3068,10 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
                 pending["stop"] = ip_addr
                 pending["rights"] = addr_rights
                 pending["ranges"] = addr_ranges
+                if arp_ex {
+                  pending["arp_count"] = uint64(1)
+                  pending["arp"] = []M{ arp }
+                }
               }
             }
 

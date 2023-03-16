@@ -58,8 +58,264 @@ const ADMIN_GROUP = "usr_netapp_ipdb_appadmins";
 const F_ALLOW_LEAFS = 1;
 */
 
+const ARP_CHAR = "&#x25CF;";
+const ARP_DEAD_TIME = 600;
+const ARP_UNUSED_TIME = 30*24*60*60;
+const ARP_FLAP_TIME = 24*60*60;
+
+const MAPPER_SEARCH_URI = "/mapper/?search=";
+
 let r_keys = keys(g_rights);
 r_keys.sort(function(a, b) { return Number(a) - Number(b); });
+
+$.fn.arp_info = function(ipdata) {
+  let color;
+  let tip;
+  let click_data = undefined;
+
+  if(ipdata["arp"] == undefined) {
+    color = "white";
+    if(ipdata["is_network"] !== undefined ||
+       ipdata["is_broadcast"] !== undefined
+    ) {
+      tip = "";
+    } else {
+      tip = "В ARP кеше устройств адрес не обнаружен";
+    };
+  } else {
+    if(ipdata["is_network"] !== undefined ||
+       ipdata["is_broadcast"] !== undefined
+    ) {
+      if((unix_timestamp() - ipdata['arp']['ts']) > ARP_DEAD_TIME) {
+        color = "darkorange";
+        tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса!\n"+
+              "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
+              "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
+        ;
+      } else {
+        color = "red";
+        tip = "Менее "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса!\n"+
+              "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
+              "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
+        ;
+      };
+      click_data = [ ipdata["arp"] ];
+    } else if(ipdata["is_empty"] !== undefined) {
+      color = "green";
+      tip = "В этом диапазоне зафиксировано "+ipdata['arp_count']+
+            " ARP записей\nНажмите сюда для подробного списка"
+      ;
+      click_data = ipdata["arp"];
+    } else {
+      if((unix_timestamp() - ipdata['arp']['ts']) > ARP_UNUSED_TIME) {
+        color = "darkgray";
+        tip = "Более 1 месяца назад была зафиксирована ARP запись для этого адреса\n"+
+              "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
+              "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
+        ;
+      } if((unix_timestamp() - ipdata['arp']['ts']) > ARP_DEAD_TIME) {
+        color = "darkorange";
+        tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+              "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
+              "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
+        ;
+      } else {
+        color = "green";
+        tip = "Менее "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+              "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
+              "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
+        if(ipdata['arp']['v4arp_mac_flip_count'] > 0 &&
+           (unix_timestamp() - ipdata['arp']['v4arp_last_mac_flip']) < ARP_FLAP_TIME
+        ) {
+          color = "red";
+          tip += "\nЗафиксировано " + ipdata['arp']['v4arp_mac_flip_count'] + " изменений MAC адреса для этого адреса"+
+                 "\nПоследенее изменение: " + from_unix_time(ipdata['arp']['v4arp_last_mac_flip']) +
+                 "\nПредыдущий MAC: "+format_mac(ipdata['arp']['v4arp_prev_mac'])
+          ;
+        };
+      };
+      click_data = [ ipdata["arp"] ];
+    };
+  };
+
+  $(this)
+    .css({"color": color})
+    .data("tip", tip)
+    .tooltip({
+      classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+      items: $(this),
+      content: function() {
+        if(!g_show_tooltips) return;
+        return $(this).data("tip");
+      }    
+    })
+    .data("click_data", click_data)
+    .click(function() {
+      let arp_list = $(this).data("click_data");
+      let ipdata = $(this).closest(".iprow").data("ipdata");
+
+      if(arp_list == undefined) return;
+      if(arp_list.length == 0) return;
+
+      let dialog = $(DIV).addClass("dialog_start");
+
+      arp_list.sort(function(a, b) { return Number(a["v4arp_ip"]) - Number(b["v4arp_ip"]); });
+
+      let table = $(DIV).addClass("table").appendTo(dialog);
+      table
+        .append( $(DIV).addClass("thead")
+          .append( $(SPAN).addClass("th").text("") )
+          .append( $(SPAN).addClass("th").text("IP") )
+          .append( $(SPAN).addClass("th").text("MAC") )
+          .append( $(SPAN).addClass("th").text("Время первого и\nпоследнего обнаружения")
+            .addClass("wsp")
+          )
+          .append( $(SPAN).addClass("th").text("Предыдущий MAC") )
+          .append( $(SPAN).addClass("th").text("Время последнего\nизменения")
+            .addClass("wsp")
+          )
+          .append( $(SPAN).addClass("th").text("Количество\nизменений")
+            .addClass("wsp")
+          )
+        )
+      ;
+      let tbody = $(DIV).addClass("tbody").appendTo(table);
+
+      for(let i in arp_list) {
+        let arp = arp_list[i];
+
+        let color;
+        let tip;
+
+        if(ipdata["is_network"] !== undefined ||
+           ipdata["is_broadcast"] !== undefined
+        ) {
+          if((unix_timestamp() - arp['ts']) > ARP_DEAD_TIME) {
+            color = "darkorange";
+            tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса!\n"+
+                  "Время: "+from_unix_time(arp['ts'])+"\n"+
+                  "MAC: "+format_mac(arp['v4arp_mac'])
+            ;
+          } else {
+            color = "red";
+            tip = "Менее "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса!\n"+
+                  "Время: "+from_unix_time(arp['ts'])+"\n"+
+                  "MAC: "+format_mac(arp['v4arp_mac'])
+            ;
+          };
+        } else {
+          if((unix_timestamp() - arp['ts']) > ARP_UNUSED_TIME) {
+            color = "darkgray";
+            tip = "Более 1 месяца назад была зафиксирована ARP запись для этого адреса\n"+
+                  "Время: "+from_unix_time(arp['ts'])+"\n"+
+                  "MAC: "+format_mac(arp['v4arp_mac'])
+            ;
+          } if((unix_timestamp() - arp['ts']) > ARP_DEAD_TIME) {
+            color = "darkorange";
+            tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+                  "Время: "+from_unix_time(arp['ts'])+"\n"+
+                  "MAC: "+format_mac(arp['v4arp_mac'])
+            ;
+          } else {
+            color = "green";
+            tip = "Менее "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+                  "Время: "+from_unix_time(arp['ts'])+"\n"+
+                  "MAC: "+format_mac(arp['v4arp_mac'])
+            if(arp['v4arp_mac_flip_count'] > 0 &&
+               (unix_timestamp() - arp['v4arp_last_mac_flip']) < ARP_FLAP_TIME
+            ) {
+              color = "red";
+              tip += "\nЗафиксировано " + arp['v4arp_mac_flip_count'] + " изменений MAC адреса для этого адреса"+
+                     "\nПоследенее изменение: " + from_unix_time(arp['v4arp_last_mac_flip']) +
+                     "\nПредыдущий MAC: "+format_mac(arp['v4arp_prev_mac'])
+              ;
+            };
+          };
+        };
+        tbody
+          .append( $(DIV).addClass("tr")
+            .append( $(SPAN).addClass("td")
+              .append( $(LABEL)
+                .html(ARP_CHAR)
+                .data("tip", tip)
+                .css({"color": color})
+                .tooltip({
+                  classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+                  items: "LABEL",
+                  content: function() {
+                    if(!g_show_tooltips) return;
+                    return $(this).data("tip");
+                  }    
+                })
+              )
+            )
+            .append( $(SPAN).addClass("td")
+              .append( $(SPAN).text(v4long2ip(arp["v4arp_ip"]) ) )
+              .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-search"])
+                .css({"margin-left": "0.5em"})
+                .data("search", v4long2ip(arp["v4arp_ip"]))
+                .click(function() {
+                  let url = MAPPER_SEARCH_URI + encodeURIComponent( $(this).data("search") );
+                  window.open(url, '_blank').focus();
+                })
+              )
+            )
+            .append( $(SPAN).addClass("td")
+              .append( $(SPAN).text(format_mac(arp["v4arp_mac"])) )
+              .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-search"])
+                .css({"margin-left": "0.5em"})
+                .data("search", arp["v4arp_mac"])
+                .click(function() {
+                  let url = MAPPER_SEARCH_URI + encodeURIComponent( $(this).data("search") );
+                  window.open(url, '_blank').focus();
+                })
+              )
+            )
+            .append( $(SPAN).addClass("td")
+              .addClass("wsp")
+              .append( $(SPAN).text(from_unix_time(arp["v4arp_added"]) + "\n" + from_unix_time(arp["ts"])) )
+            )
+            .append( arp["v4arp_prev_mac"] == "" ? $(SPAN).addClass("td") : $(SPAN).addClass("td")
+              .append( $(SPAN).text(format_mac(arp["v4arp_prev_mac"])) )
+              .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-search"])
+                .css({"margin-left": "0.5em"})
+                .data("search", arp["v4arp_prev_mac"])
+                .click(function() {
+                  let url = MAPPER_SEARCH_URI + encodeURIComponent( $(this).data("search") );
+                  window.open(url, '_blank').focus();
+                })
+              )
+            )
+            .append( arp["v4arp_prev_mac"] == "" ? $(SPAN).addClass("td") : $(SPAN).addClass("td")
+              .append( $(SPAN).text(from_unix_time(arp["v4arp_last_mac_flip"])) )
+            )
+            .append( arp["v4arp_prev_mac"] == "" ? $(SPAN).addClass("td") : $(SPAN).addClass("td")
+              .append( $(SPAN).text(arp["v4arp_mac_flip_count"]) )
+            )
+          )
+        ;
+      };
+
+      let dialog_options = {
+        modal:true,
+        maxHeight:1000,
+        maxWidth:1800,
+        minWidth:1200,
+        width: "auto",
+        height: "auto",
+        close: function() {
+          $(this).dialog("destroy");
+          $(this).remove();
+        },
+        position: {"my": "center", "at": "center", "of": $(window)},
+      };
+
+      dialog.dialog(dialog_options);
+    })
+  ;
+
+  return this;
+};
 
 function gen_code() {
   let code_chars="qwertyuiopasdfghjkzxcvbnmQWERTYUPASDFGHJKLZXCVBNM23456789";
@@ -2040,6 +2296,12 @@ function ip_row(ipdata, focuson, col_hide_list) {
 
 
   if(ipdata['is_network'] !== undefined) {
+    ip_td
+      .append( $(LABEL)
+        .html(ARP_CHAR)
+        .arp_info(ipdata)
+      )
+    ;
     ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])) );
     ip_td.appendTo( tr );
     let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td")
@@ -2047,6 +2309,12 @@ function ip_row(ipdata, focuson, col_hide_list) {
     ;
     empty_td.appendTo( tr );
   } else if(ipdata['is_broadcast'] !== undefined) {
+    ip_td
+      .append( $(LABEL)
+        .html(ARP_CHAR)
+        .arp_info(ipdata)
+      )
+    ;
     ip_td.append( $(SPAN).text(v4long2ip(ipdata['v4ip_addr'])) );
     ip_td.appendTo( tr );
     let empty_td = $(TD).prop("colspan", empty_colspan).addClass("empty_td")
@@ -2054,6 +2322,12 @@ function ip_row(ipdata, focuson, col_hide_list) {
     ;
     empty_td.appendTo( tr );
   } else if(ipdata['is_empty'] !== undefined) {
+    ip_td
+      .append( $(LABEL)
+        .html(ARP_CHAR)
+        .arp_info(ipdata)
+      )
+    ;
     ip_td.appendTo( tr );
     if(focuson !== undefined) {
       if(ipdata['start'] <= focuson && ipdata['stop'] >= focuson) {
@@ -2139,6 +2413,12 @@ function ip_row(ipdata, focuson, col_hide_list) {
     };
     empty_td.appendTo( tr );
   } else {
+    ip_td
+      .append( $(LABEL)
+        .html(ARP_CHAR)
+        .arp_info(ipdata)
+      )
+    ;
     // menu
     ip_td
      .append( $(LABEL)
