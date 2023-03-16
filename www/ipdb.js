@@ -88,7 +88,7 @@ $.fn.arp_info = function(ipdata) {
     ) {
       if((unix_timestamp() - ipdata['arp']['ts']) > ARP_DEAD_TIME) {
         color = "darkorange";
-        tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса!\n"+
+        tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована последняя ARP запись для этого адреса!\n"+
               "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
               "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
         ;
@@ -101,21 +101,21 @@ $.fn.arp_info = function(ipdata) {
       };
       click_data = [ ipdata["arp"] ];
     } else if(ipdata["is_empty"] !== undefined) {
-      color = "green";
+      color = "blue";
       tip = "В этом диапазоне зафиксировано "+ipdata['arp_count']+
-            " ARP записей\nНажмите сюда для подробного списка"
+            " ARP записей"
       ;
       click_data = ipdata["arp"];
     } else {
       if((unix_timestamp() - ipdata['arp']['ts']) > ARP_UNUSED_TIME) {
         color = "darkgray";
-        tip = "Более 1 месяца назад была зафиксирована ARP запись для этого адреса\n"+
+        tip = "Более 1 месяца назад была зафиксирована последняя ARP запись для этого адреса\n"+
               "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
               "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
         ;
       } if((unix_timestamp() - ipdata['arp']['ts']) > ARP_DEAD_TIME) {
         color = "darkorange";
-        tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+        tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована последняя ARP запись для этого адреса\n"+
               "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
               "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
         ;
@@ -128,7 +128,8 @@ $.fn.arp_info = function(ipdata) {
            (unix_timestamp() - ipdata['arp']['v4arp_last_mac_flip']) < ARP_FLAP_TIME
         ) {
           color = "red";
-          tip += "\nЗафиксировано " + ipdata['arp']['v4arp_mac_flip_count'] + " изменений MAC адреса для этого адреса"+
+          tip += "\nЗафиксировано " + ipdata['arp']['v4arp_mac_flip_count'] +
+                 " изменений MAC адреса для этого адреса"+
                  "\nПоследенее изменение: " + from_unix_time(ipdata['arp']['v4arp_last_mac_flip']) +
                  "\nПредыдущий MAC: "+format_mac(ipdata['arp']['v4arp_prev_mac'])
           ;
@@ -136,6 +137,8 @@ $.fn.arp_info = function(ipdata) {
       };
       click_data = [ ipdata["arp"] ];
     };
+
+    tip += "\nНажмите сюда для подробной информации";
   };
 
   $(this)
@@ -192,7 +195,7 @@ $.fn.arp_info = function(ipdata) {
         ) {
           if((unix_timestamp() - arp['ts']) > ARP_DEAD_TIME) {
             color = "darkorange";
-            tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса!\n"+
+            tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована последняя ARP запись для этого адреса!\n"+
                   "Время: "+from_unix_time(arp['ts'])+"\n"+
                   "MAC: "+format_mac(arp['v4arp_mac'])
             ;
@@ -206,13 +209,13 @@ $.fn.arp_info = function(ipdata) {
         } else {
           if((unix_timestamp() - arp['ts']) > ARP_UNUSED_TIME) {
             color = "darkgray";
-            tip = "Более 1 месяца назад была зафиксирована ARP запись для этого адреса\n"+
+            tip = "Более 1 месяца назад была зафиксирована последняя ARP запись для этого адреса\n"+
                   "Время: "+from_unix_time(arp['ts'])+"\n"+
                   "MAC: "+format_mac(arp['v4arp_mac'])
             ;
           } if((unix_timestamp() - arp['ts']) > ARP_DEAD_TIME) {
             color = "darkorange";
-            tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+            tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована последняя ARP запись для этого адреса\n"+
                   "Время: "+from_unix_time(arp['ts'])+"\n"+
                   "MAC: "+format_mac(arp['v4arp_mac'])
             ;
@@ -2200,13 +2203,25 @@ function actionNav4() {
       if(res['ok']['rows'][i]['subnets'] != undefined) {
         tr
          .append( $(SPAN).addClass("td")
-           .text(res['ok']['rows'][i]['subnets']+" подсетей...")
-           .title(res['ok']['rows'][i]['subnets_names']+"\n...")
+           .append( $(LABEL)
+             .html(ARP_CHAR)
+             .title(res['ok']['rows'][i]['arp_count']+" ARP записей")
+             .css({"color": res['ok']['rows'][i]['arp_count'] == 0 ? "white": "blue", "margin-right": "0.3em"})
+           )
+           .append( $(SPAN)
+             .text(res['ok']['rows'][i]['subnets']+" подсетей...")
+             .title(res['ok']['rows'][i]['subnets_names']+"\n...")
+           )
          )
         ;
       } else {
         tr
          .append( $(SPAN).addClass("td")
+           .append( $(LABEL)
+             .html(ARP_CHAR)
+             .title(res['ok']['rows'][i]['arp_count']+" ARP записей")
+             .css({"color": res['ok']['rows'][i]['arp_count'] == 0 ? "white": "blue", "margin-right": "0.3em"})
+           )
            .append( vlan_label("net", "", res['ok']['rows'][i]['vlan_data'], false, "VLAN: ", "")
              .css({"margin-right": "0.2em"})
            )
