@@ -157,16 +157,27 @@ $.fn.arp_info = function(ipdata) {
       let arp_list = $(this).data("click_data");
       let ipdata = $(this).closest(".iprow").data("ipdata");
 
+      let can_flush = false;
+
+      if(ipdata['rights'] !== undefined &&
+         (ipdata['rights'] & R_MANAGE_NET) > 0
+      ) {
+        can_flush = true;
+      };
+
       if(arp_list == undefined) return;
       if(arp_list.length == 0) return;
 
       let dialog = $(DIV).addClass("dialog_start");
+
+      dialog.data("list_elm", $(this));
 
       arp_list.sort(function(a, b) { return Number(a["v4arp_ip"]) - Number(b["v4arp_ip"]); });
 
       let table = $(DIV).addClass("table").appendTo(dialog);
       table
         .append( $(DIV).addClass("thead")
+          .append( $(SPAN).addClass("th").text("") )
           .append( $(SPAN).addClass("th").text("") )
           .append( $(SPAN).addClass("th").text("IP") )
           .append( $(SPAN).addClass("th").text("MAC") )
@@ -249,6 +260,58 @@ $.fn.arp_info = function(ipdata) {
                     if(!g_show_tooltips) return;
                     return $(this).data("tip");
                   }    
+                })
+              )
+            )
+            .append( $(SPAN).addClass("td")
+              .append( (!can_flush || (unix_timestamp() - arp['ts']) < ARP_DEAD_TIME) ? $(LABEL) : $(LABEL)
+                .addClass(["button", "ui-icon", "ui-icon-trash"])
+                .data("ip", arp['v4arp_ip'])
+                .click(function() {
+                  let addr = $(this).data("ip");
+                  let row = $(this).closest(".tr");
+                  let list_elm = $(this).closest(".dialog_start").data("list_elm");
+                  show_confirm_checkbox("Подтвердите очистку ARP кеша для IP "+v4long2ip(arp["v4arp_ip"])+
+                    "\nВнимание, отмена будет невозможна!", function() {
+                      run_query({"action": "flush_arp", "addr": String(addr)}, function(res) {
+                        row.remove();
+
+                        let arp_list = list_elm.data("click_data");
+                        let new_list = [];
+                        for(let i in arp_list) {
+                          if(arp_list[i]['v4arp_ip'] != addr) {
+                            new_list.push(arp_list[i]);
+                          };
+                        };
+                        list_elm.data("click_data", new_list);
+                        if(new_list.length == 0) {
+                          list_elm
+                            .css({"color": "white"})
+                            .data("tip", "")
+                          ;
+                        };
+                        let ip_row = list_elm.closest(".iprow");
+                        let ipdata = ip_row.data("ipdata");
+                        if(ipdata['arp'] != undefined) {
+                          if(!Array.isArray(ipdata['arp'])) {
+                            delete(ipdata['arp']);
+                          } else {
+                            if(new_list.length == 0) {
+                              delete(ipdata['arp']);
+                              delete(ipdata['arp_count']);
+                            } else {
+                              ipdata['arp'] = new_list;
+                              ipdata['arp_count'] = new_list.length;
+                            };
+                          };
+                          ip_row.data("ipdata", ipdata);
+                        };
+
+                      });
+                    },
+                    undefined,
+                    (unix_timestamp() - arp['ts']) > ARP_UNUSED_TIME
+                  );
                 })
               )
             )
@@ -3565,6 +3628,9 @@ function ip_menu(elm) {
                new_ip_data['is_empty'] = 1;
                new_ip_data['start'] = ipdata['v4ip_addr'];
                new_ip_data['stop'] = ipdata['v4ip_addr'];
+               if(ipdata['arp'] != undefined) {
+                 new_ip_data['arp'] = ipdata['arp'];
+               };
 
                let hidden_cols = [];
 

@@ -3239,6 +3239,13 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       ipdata["values"].(M)[k] = make(M)
     }
 
+    var arp []M
+    if arp, err = return_query_A(tx, "SELECT * FROM v4arps WHERE v4arp_ip=?", take_ip); err != nil { panic(err) }
+
+    if len(arp) == 1 {
+      ipdata["arp"] = arp[0]
+    }
+
     out["ipdata"] = ipdata
 
     if err = audit_log(tx, "v4ip", ipdata["v4ip_id"], log_query, nil, ipdata); err != nil { panic(err) }
@@ -5910,6 +5917,34 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     query = "SELECT * FROM gs WHERE g_name != ?"
     if out["groups"], err = return_query_M(db, query, "g_id", opt_g); err != nil { panic(err) }
+
+  } else if action == "flush_arp" {
+    var addr uint32
+    if addr, err = get_p_uint32(q, "addr"); err != nil { panic(err) }
+
+    var dbnet_rights uint64
+    var dbnet M
+
+    if _, dbnet, err = get_addr_rights(db, addr, "4", nil); err != nil { panic(err) }
+    if dbnet_rights, _, err = get_net_rights(nil, nil, "4", dbnet); err != nil { panic(err) }
+    if (dbnet_rights & R_MANAGE_NET) == 0 { panic(NoAccess()) }
+
+    var arp []M
+    query = "SELECT * FROM v4arps WHERE v4arp_ip=?"
+
+    if arp, err = return_query_A(db, query, addr); err != nil { panic(err) }
+    if len(arp) == 0 {
+      out["nodata"] = 1
+      goto OUT
+    }
+
+    query = "DELETE FROM v4arps WHERE v4arp_ip=?"
+    if _, err = db.Exec(query, addr); err != nil { panic(err) }
+
+    if err = audit_log(db, "v4arp", addr, query, arp[0], nil); err != nil { panic(err) }
+
+    out["done"] = 1
+
 
   } else if action == "query" {
     out["_query"] = q
