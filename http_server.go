@@ -5890,7 +5890,19 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
           out["net"] = net
           out["masklen"] = masklen
         } else {
-          out["notfound"] = 1
+          notfound := true
+          for _, octet_mask := range []uint32{ 8, 16, 24 } {
+            if net := ip4net(addr, octet_mask); net == addr {
+              out["nav"] = 1
+              out["net"] = net
+              out["masklen"] = octet_mask
+              notfound = false
+              break
+            }
+          }
+          if notfound {
+            out["notfound"] = 1
+          }
         }
       } else {
         out["net"] = rows[0]["v4net_addr"]
