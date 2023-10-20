@@ -4749,7 +4749,7 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if ic_name == "" { panic("Bad ic_name") }
 
     query = "INSERT INTO ics SET ic_name=?, ic_api_name=?"+
-            ", ic_sort=((SELECT MAX(_ics.ic_sort) FROM ics as _ics)+1)"+
+            ", ic_sort=IFNULL((SELECT MAX(_ics.ic_sort) FROM ics as _ics)+1, 0)"+
             ", ts=?, fk_u_id=?"
 
     if dbres, err = db.Exec(query, ic_name, ic_api_name, ts, user_id); err != nil { panic(err) }
