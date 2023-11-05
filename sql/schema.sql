@@ -543,6 +543,8 @@ CREATE TABLE v4arps (
   v4arp_mac varchar(12) NOT NULL,
   v4arp_mac_flip_count BIGINT UNSIGNED NOT NULL COMMENT 'increase when mac changes',
   v4arp_last_mac_flip BIGINT UNSIGNED NOT NULL COMMENT 'update with unix_time when mac changes',
+  v4arp_added BIGINT UNSIGNED NOT NULL COMMENT,
+  v4arp_prev_mac varchar(12) NOT NULL DEFAULT '',
   ts    BIGINT UNSIGNED NOT NULL,
   PRIMARY KEY (v4arp_ip),
   tc            TINYINT COMMENT 'arp data from mapper'
