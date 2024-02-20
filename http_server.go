@@ -1,28 +1,31 @@
 package main
 
 import (
-  "os"
-  "math"
-  "io/ioutil"
-  "reflect"
-  "sync"
-  "strings"
-  "strconv"
-  "context"
-  "time"
-  "regexp"
-  "encoding/json"
-  "net"
-  "fmt"
-  "net/http"
-  "errors"
-  "golang.org/x/net/netutil"
-  //wai "github.com/jimlawless/whereami"
-  "runtime/debug"
-  "github.com/davecgh/go-spew/spew"
-  "database/sql"
-  _ "github.com/go-sql-driver/mysql"
-  "golang.org/x/exp/slices"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"math"
+	"net"
+	"net/http"
+	"os"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/net/netutil"
+
+	//wai "github.com/jimlawless/whereami"
+	"database/sql"
+	"runtime/debug"
+
+	"github.com/davecgh/go-spew/spew"
+	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -1293,9 +1296,9 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     var v4_favs interface{}
     v4_accessible := make(M)
 
-    query = "SELECT f.v4net_addr, f.v4net_mask, IFNULL(n.v4net_name, '') as name FROM"+
+    query = "SELECT f.v4net_addr, f.v4net_mask, IFNULL(n.v4net_name, '') as name, GROUP_CONCAT(v4fav_fk_u_id) as u_ids FROM"+
       " v4favs f LEFT JOIN v4nets n ON f.v4net_addr = n.v4net_addr AND f.v4net_mask = n.v4net_mask"+
-      " WHERE f.v4fav_fk_u_id=?"
+      " WHERE f.v4fav_fk_u_id=? OR v4fav_fk_u_id=0 GROUP BY f.v4net_addr,f.v4net_mask,name"
 
     if v4_favs, err = return_query(db, query, "", user_id); err != nil { panic(err) }
 
@@ -2326,6 +2329,44 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     out["done"] = 1
 
+  } else if action == "fav_all_v4" {
+
+    if !user_is_admin { panic(NoAccess()) }
+
+    var nav_net uint32
+    var masklen uint32
+    var fav uint32
+
+    if nav_net, err = get_p_uint32(q, "net"); err != nil { panic(err) }
+    if masklen, err = get_p_uint32(q, "masklen"); err != nil { panic(err) }
+    if masklen > 31 { panic(errors.New("Too big masklen")) }
+
+    if nav_net != ip4net(nav_net, masklen) { panic("Bad network/masklen") }
+
+    if fav, err = get_p_uint32(q, "fav_all"); err != nil { panic(err) }
+    if fav > 1 { panic(errors.New("Too big fav")) }
+
+    if fav > 0 {
+      query = "INSERT INTO v4favs SET"+
+              " v4fav_fk_u_id=?"+
+              ",v4net_addr=?"+
+              ",v4net_mask=?"+
+              ",ts=?"+
+              ",fk_u_id=?"+
+              " ON DUPLICATE KEY UPDATE"+
+              " ts=VALUES(ts)"+
+              ",fk_u_id=VALUES(fk_u_id)"
+      if _, err = db.Exec(query, uint64(0), nav_net, masklen, ts, user_id); err != nil { panic(err) }
+    } else {
+      query = "DELETE FROM v4favs WHERE"+
+              " v4fav_fk_u_id=?"+
+              " AND v4net_addr=?"+
+              " AND v4net_mask=?"
+      if _, err = db.Exec(query, uint64(0), nav_net, masklen); err != nil { panic(err) }
+    }
+
+    out["done"] = 1
+
   } else if action == "nav_v4" {
 
     var nav_net uint32
@@ -2352,6 +2393,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if unum, err = must_return_one_uint(db, query, nav_net, masklen, user_id); err != nil { panic(err) }
 
     out["fav"] = unum
+
+    query = "SELECT COUNT(*) as c FROM v4favs WHERE v4net_addr=? AND v4net_mask=? AND v4fav_fk_u_id=?"
+    if unum, err = must_return_one_uint(db, query, nav_net, masklen, uint64(0)); err != nil { panic(err) }
+
+    out["fav_all"] = unum
 
     nav_last_addr := uint32(nav_net | (0xFFFFFFFF >> masklen))
 
@@ -2688,6 +2734,11 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     if u64, err = must_return_one_uint(db, query, nav_net, masklen, user_id); err != nil { panic(err) }
 
     out["fav"] = u64
+
+    query = "SELECT COUNT(*) as c FROM v4favs WHERE v4net_addr=? AND v4net_mask=? AND v4fav_fk_u_id=?"
+    if u64, err = must_return_one_uint(db, query, nav_net, masklen, uint64(0)); err != nil { panic(err) }
+
+    out["fav_all"] = u64
 
     var dbnet_last_addr uint32
     if u64, var_ok = dbnet.Uint64("v4net_last"); !var_ok { panic(PE) }

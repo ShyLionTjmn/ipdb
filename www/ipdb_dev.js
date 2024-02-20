@@ -6,8 +6,8 @@ var fixed_div;
 var user_self_sub="none";
 var user_self_id;
 
-var g_range_bar_width = 3;
-var g_range_bar_margin = 2;
+var g_range_bar_width = 5;
+var g_range_bar_margin = 3;
 
 var global_mouse_down=false;
 
@@ -1705,24 +1705,6 @@ function actionFront() {
              .append( $(SPAN).text(")") )
            )
            .append( $(TD)
-             .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-trash"])
-               .css({"font-size": "smaller"})
-               .title("Убрать из избранного")
-               .data("net", res['ok']['v4favs'][i]['v4net_addr'])
-               .data("masklen", res['ok']['v4favs'][i]['v4net_mask'])
-               .click(function() {
-                 let net = $(this).data("net");
-                 let masklen = $(this).data("masklen");
-                 let row = $(this).closest(".fav_row");
-                 show_confirm("Подтвердите удаление сети из избранного", function() {
-                   run_query({"action": "fav_v4", "net": String(net), "masklen": String(masklen), "fav": 0}, function(res) {
-                     row.remove();
-                   });
-                 });
-               })
-             )
-           )
-           .append( $(TD)
              .text(res['ok']['v4favs'][i]['name'])
            )
          )
@@ -2064,6 +2046,18 @@ function actionNav4() {
        .on("change", function() {
          let checked = $(this).is(":checked");
          run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
+         });
+       })
+     )
+     .append( $(LABEL).text(" у всех: ") )
+     .append( $(INPUT).prop({"type": "checkbox", "checked": res['ok']['fav_all'] == 1})
+       .on("change", function() {
+         if(!userinfo['is_admin']) {
+           $(this).prop('checked', !$(this).prop('checked'));
+           return false;
+         };
+         let checked = $(this).is(":checked");
+         run_query({"action": "fav_all_v4", "net": net, "masklen": masklen, "fav_all": checked?1:0}, function(res) {
          });
        })
      )
@@ -2708,6 +2702,18 @@ function actionView4() {
          .on("change", function() {
            let checked = $(this).is(":checked");
            run_query({"action": "fav_v4", "net": net, "masklen": masklen, "fav": checked?1:0}, function(res) {
+           });
+         })
+       )
+       .append( $(LABEL).text(" у всех: ") )
+       .append( $(INPUT).prop({"type": "checkbox", "checked": res['ok']['fav_all'] == 1})
+         .on("change", function() {
+           if(!userinfo['is_admin']) {
+             $(this).prop('checked', !$(this).prop('checked'));
+             return false;
+           };
+           let checked = $(this).is(":checked");
+           run_query({"action": "fav_all_v4", "net": net, "masklen": masklen, "fav_all": checked?1:0}, function(res) {
            });
          })
        )
