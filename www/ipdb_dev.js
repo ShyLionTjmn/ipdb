@@ -30,6 +30,8 @@ var g_vlan_css = {"border": "1px solid black", "padding-left": "0.2em",
 var g_show_net_info = false;
 var g_show_vdom_info = false;
 
+var g_hide_fav_all = false;
+
 var g_edit_all = false;
 
 var initial_g_name = "usr_netapp_ipdb_";
@@ -1672,24 +1674,46 @@ function actionFront() {
     ;
 
     if(res['ok']['v4favs'] !== undefined && Array.isArray(res['ok']['v4favs']) && res['ok']['v4favs'].length > 0) {
+
+      g_hide_fav_all = get_local("hide_fav_all", g_hide_fav_all);
+
       let v4favs = $(DIV)
        .css({"display": "inline-block", "vertical-align": "top"})
        .append( $(DIV)
          .append( $(SPAN).text("Избранное") )
+         .append( $(LABEL).addClass("min1em") )
+         .append( $(LABEL)
+           .addClass(["button", "ui-icon", "ui-icon-eye"])
+           .title("Скрыть Избранное для всех")
+           .css({"color": g_hide_fav_all?"orange":"gray"})
+           .data("state", g_hide_fav_all)
+           .click(function() {
+             let new_state = ! $(this).data("state");
+             save_local("hide_fav_all", new_state);
+             $(this).css({"color": new_state?"orange":"gray"});
+             $(this).data("state", new_state);
+             g_hide_fav_all = new_state;
+             $(".fav_all").toggle(!g_hide_fav_all);
+           })
+         )
        )
       ;
 
       res['ok']['v4favs'].sort(function(a,b) { return a['v4net_addr']-b['v4net_addr']; });
 
-      let v4favs_table = $(TABLE).appendTo(v4favs);
+      let v4favs_table = $(TABLE).addClass("favs_table").appendTo(v4favs);
+
 
       for(let i=0; i < res['ok']['v4favs'].length; i++) {
         let mask_bits = v4len2mask[ res['ok']['v4favs'][i]['v4net_mask'] ];
         let wildcard_bits = (~mask_bits) >>> 0;
+        let fav_all = (String(res['ok']['v4favs'][i]['u_ids']) == "0");
         v4favs_table
          .append( $(TR)
            .addClass("wsp")
            .addClass("fav_row")
+           .addClass(fav_all ? "fav_all" : "not_fav_all")
+           .toggle(!(fav_all && g_hide_fav_all))
            .append( $(TD)
              .append( $(A).prop({"href": "?action=nav_v4&net="+res['ok']['v4favs'][i]['v4net_addr']+"&masklen="+
                                           res['ok']['v4favs'][i]['v4net_mask']+(DEBUG?"&debug":"")})
