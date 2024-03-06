@@ -2019,6 +2019,7 @@ function actionNav4() {
   fixed_div.empty();
   let net = getUrlParameter("net", undefined);
   let masklen = getUrlParameter("masklen", undefined);
+  let focuson = getUrlParameter("focuson", undefined); //will be false if not defined!
 
   if(net === undefined || ! String(net).match(/^\d+$/) || Number(net) > 4294967295) { error_at(); return; };
   if(masklen === undefined || ! String(masklen).match(/^\d{1,2}$/) || Number(masklen) > 32) { error_at(); return; };
@@ -2050,7 +2051,7 @@ function actionNav4() {
 
     fixed_div
      .append( $(A)
-       .prop("href", "?action=nav_v4&net="+ip4net(net, backlen)+"&masklen="+backlen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+       .prop("href", "?action=nav_v4&net="+ip4net(net, backlen)+"&masklen="+backlen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"")+"&focuson="+net)
        .text("<<<")
        .title( "Назад к сети: "+net_mask_wc(net, backlen) )
      )
@@ -2165,6 +2166,10 @@ function actionNav4() {
          .text(v4long2ip(row["net"]))
        )
       ;
+
+      if(focuson !== false && row["net"] == focuson) {
+        tr.addClass("focuson");
+      };
 
       for(let ci in res['ok']['rows'][i]['cols']) {
         let col_mask = Number(masklen)+Number(ci)+Number(1);
@@ -2336,6 +2341,13 @@ function actionNav4() {
        };
      })
     ;
+    if(focuson !== false) {
+      let tr = $(".focuson");
+      let prev = tr.prev();
+      if(prev.length > 0) {
+       prev[0].scrollIntoView();
+      };
+    };
   });
 };
 
@@ -2425,7 +2437,7 @@ function ip_row(ipdata, focuson, col_hide_list) {
       )
     ;
     ip_td.appendTo( tr );
-    if(focuson !== undefined) {
+    if(focuson !== false && focuson !== undefined) {
       if(ipdata['start'] <= focuson && ipdata['stop'] >= focuson) {
         tr.addClass("focuson");
       };
@@ -2528,7 +2540,7 @@ function ip_row(ipdata, focuson, col_hide_list) {
        })
      )
     ;
-    if(focuson !== undefined) {
+    if(focuson !== false && focuson !== undefined) {
       if(Number(ipdata['v4ip_addr']) === Number(focuson)) {
         tr.addClass("focuson");
       };
@@ -2713,7 +2725,7 @@ function actionView4() {
     fixed_div
      .append( $(DIV)
        .append( $(A)
-         .prop("href", "?action=nav_v4&net="+ip4net(net, backlen)+"&masklen="+backlen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":""))
+         .prop("href", "?action=nav_v4&net="+ip4net(net, backlen)+"&masklen="+backlen+(usedonly?"&usedonly":"")+(DEBUG?"&debug":"")+"&focuson="+net)
          .text("<<<")
          .title( "Назад к сети: "+net_mask_wc(net, backlen) )
        )
@@ -3372,7 +3384,7 @@ function actionView4() {
       };
 
 
-      if(focuson !== undefined) {
+      if(focuson !== false && focuson !== undefined) {
         let tr = $(".focuson");
         let prev = tr.prev();
         if(prev.length > 0) {
