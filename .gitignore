@@ -1,0 +1,7 @@
+local.go
+ipdb
+**/.*
+!.gitignore
+**/local*
+**/local*.sql
+www/favicon.ico
