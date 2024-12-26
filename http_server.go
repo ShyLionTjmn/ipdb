@@ -585,6 +585,8 @@ func handleConsts(w http.ResponseWriter, req *http.Request) {
   w.Write(jstr)
   w.Write([]byte(";\n"))
 
+  w.Write([]byte(fmt.Sprintf("const g_autosave_timeout = %d;\n", g_autosave_timeout)))
+
   w.Write([]byte("\n"))
 }
 

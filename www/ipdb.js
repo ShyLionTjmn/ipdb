@@ -16,7 +16,9 @@ var g_show_tooltips = true;
 var g_sorting = false;
 var g_autosave = true;
 var g_autosave_changes = 0;
-var g_autosave_timeout = 500; //ms
+
+// passed from consts.js
+//var g_autosave_timeout = 500; //ms
 
 var g_default_range_style = {"background-color": "black"};
 var g_default_ext_range_style = {"color": "black"};
@@ -1147,7 +1149,7 @@ $( document ).ready(function() {
     user_self_id = userinfo["id"];
 
     g_autosave = get_local("autosave", g_autosave);
-    g_autosave_timeout = get_local("autosave_timeout", g_autosave_timeout);
+    //g_autosave_timeout = get_local("autosave_timeout", g_autosave_timeout);
 
     let menu = $(DIV).addClass("menu");
     body.append( menu );

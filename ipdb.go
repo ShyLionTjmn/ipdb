@@ -21,6 +21,8 @@ const DEFAULT_APP_LOCATION = "/ipdb/"
 const DEFAULT_ADMIN_GROUP = "usr_netapp_ipdb_appadmins"
 const DEFAULT_DSN = "ipdb_ajax:@unix(/var/lib/mysql/mysql.sock)/ipdb"
 
+const DEFAULT_AUTOSAVE_TIMEOUT = 1000
+
 
 type FG struct {
   Name string `json:"name"`
@@ -35,6 +37,7 @@ type Config struct {
   Www_root string `json:"www_root"` //opt_w
   App_location string `json:"app_location"` //opt_l
   Admin_group string `json:"admin_group"` //opt_g
+  Autosave_timeout uint `json:"autosave_timeout"`
   Fortigates []FG `json:"fortigates"`
 }
 
@@ -46,6 +49,7 @@ var opt_w string
 var opt_l string
 var opt_g string
 var opt_C string
+var g_autosave_timeout uint
 
 func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
   c := make(chan struct{})
@@ -99,6 +103,8 @@ func main() {
 
   var f_opt_C *string = flag.String("C", DEFAULT_CONFIG_FILE, "Config file location")
 
+  g_autosave_timeout = DEFAULT_AUTOSAVE_TIMEOUT
+
   flag.Parse()
 
   if *f_opt_p >= uint(65535) {
@@ -141,6 +147,11 @@ func main() {
     } else {
       opt_g = strings.ToLower(DEFAULT_ADMIN_GROUP)
     }
+
+    if config.Autosave_timeout != 0 {
+      g_autosave_timeout = config.Autosave_timeout
+    }
+
   } else if isFlagPassed("C") {
     log.Fatal("Error opening config file: ", opt_C)
   }
