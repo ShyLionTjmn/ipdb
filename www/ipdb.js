@@ -768,6 +768,9 @@ function autosave_normalize(elm) {
   case 'oob':
     return String(elm.val()).trim();
     break;
+  case 'api':
+    return String(elm.val()).trim();
+    break;
   };
   error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
 };
@@ -955,6 +958,28 @@ function saveable_check(elm) {
     };
     return true;
   case 'oob':
+    return true;
+  case 'api':
+    switch(elm_data['prop']) {
+    case 'api_name':
+      if(!value.match(/^[0-9a-zA-Z_\-]+$/)) {
+        return false;
+      };
+      row = elm.closest(".tr");
+      row_data = row.data("row_data");
+      found = false;
+      row.closest(".tbody").find(".tr").each(function() {
+        let r_data = $(this).data("row_data");
+        if(r_data['api_id'] == row_data['api_id']) return;
+
+        if(String(g_data['apis'][ r_data['api_id'] ]['api_name']).trim() === value) {
+          found = true;
+          return false;
+        };
+      });
+      if(found) return false;
+      break;
+    };
     return true;
   };
   error_at("Unknown object: "+elm_data['object']+" prop: "+elm_data['prop']);
@@ -1259,6 +1284,16 @@ $( document ).ready(function() {
       ;
     };
 
+    if(userinfo["is_admin"]) {
+      menu
+       .append( $(SPAN).addClass("bigbutton").text("Доступ к API")
+         .click( function() {
+           window.location = "?action=api_list"+(DEBUG?"&debug":"");
+         })
+       )
+      ;
+    };
+
     menu.append( fixed_div )
 
     let action=getUrlParameter("action");
@@ -1295,6 +1330,9 @@ $( document ).ready(function() {
       break;
     case "link":
       actionLink();
+      break;
+    case "api_list":
+      actionApi();
       break;
     default:
       window.location = "?action=front"+(DEBUG?"&debug":"");
@@ -4171,6 +4209,8 @@ function editable_elm(data, edit) {
     value = g_data['tps'][ data['id'] ][ data['prop'] ];
   } else if(data['object'] == 'oob') {
     value = data['value'];
+  } else if(data['object'] == 'api') {
+    value = g_data['apis'][ data['id'] ][ data['prop'] ];
   } else if(data['value'] !== undefined) {
     value = data['value'];
   } else {
@@ -4202,6 +4242,8 @@ function editable_elm(data, edit) {
         ret.val(value);
         ret.on("select change", function() { $(this).trigger("input_stop"); });
       });
+    } else if(data['object'] == 'api' && data['prop'] == 'api_nets') {
+      ret = $(TEXTAREA);
     } else if(data['_input'] !== undefined && String(data['_input']).toLowerCase() == 'hidden') {
       ret = $(INPUT).prop("type", "hidden");
     } else if(data['_input'] !== undefined && String(data['_input']).toLowerCase() == 'textarea') {
@@ -4243,6 +4285,7 @@ function editable_elm(data, edit) {
       };
     } else if(data['object'] == 'net' && data['prop'] == 'v4net_tags') {
     } else if(data['object'] == 'oob' && data['prop'] == 'tags') {
+    } else if(data['object'] == 'oob' && data['prop'] == 'tags') {
     } else if(data['_input'] !== undefined && String(data['_input']).toLowerCase() == 'textarea') {
       let lines = String(value).split("\n");
       ret.text(lines[0]);
@@ -4275,6 +4318,8 @@ function editable_elm(data, edit) {
     } else if(data['object'] == 'oob') {
       if((userinfo['g_oobs_rights'] & R_EDIT_IP_VLAN) == 0) return;
     } else if(data['object'] == 'vdom') {
+      if(!userinfo['is_admin']) return;
+    } else if(data['object'] == 'api') {
       if(!userinfo['is_admin']) return;
     };
     let new_state = $(this).hasClass("editable_view");
@@ -9687,3 +9732,371 @@ function ic_options_help() {
   dlg.dialog( dialog_options );
 };
 
+function select_groups(groups, presel, options, donefunc) {
+  let presel_list = [];
+  if(presel !== undefined && presel !== "") {
+    presel_list = String(presel).split(",");
+  };
+
+  let ks = keys(groups);
+  ks.sort(function(a, b) { return Number(a) - Number(b) });
+
+  let dialog = $(DIV).addClass("dialog_start");
+  dialog.data("options", options);
+
+  let table = $(TABLE).appendTo(dialog);
+  table
+    .append( $(THEAD)
+      .append( $(TR)
+        .append( $(TH).text("") )
+        .append( $(TH).text("Имя") )
+        .append( $(TH).text("Описание") )
+      )
+    )
+  ;
+
+  let tbody = $(TBODY).appendTo(table);
+
+  for(let i in ks) {
+    let _id = ks[i];
+
+    let checked = false;
+    for(let p in presel_list) {
+      if(presel_list[p] == _id) {
+        checked = true;
+        break;
+      };
+    };
+
+    let row = $(TR)
+      .data("id", _id)
+      .append( $(TD)
+        .append( $(INPUT)
+          .addClass("select")
+          .prop({"type": "checkbox", "checked": checked})
+        )
+      )
+      .append( $(TD)
+        .append( $(SPAN).text(groups[_id]["g_name"]) )
+      )
+      .append( $(TD)
+        .append( $(SPAN).text(groups[_id]["g_descr"]) )
+      )
+    ; 
+
+    row.appendTo(tbody);
+  };
+
+  let buttons = [];
+  if(true) {
+    buttons.push({
+      'text': 'Сохранить',
+      'click': function() {
+        let dlg = $(this);
+
+        let list = [];
+
+        dlg.find("TBODY").find("TR").each(function() {
+          let _id = $(this).data("id");
+          if($(this).find(".select").is(":checked")) {
+            list.push(_id);
+          };
+        });
+
+        dlg.dialog("close");
+
+        if(donefunc !== undefined) {
+          donefunc(list.join(","));
+        };
+      }
+    })
+  };
+
+  buttons.push({
+    'text': true?'Отмена':'Закрыть',
+    'click': function() {$(this).dialog( "close" );},
+  });
+
+  let dialog_options = {
+    modal:true,
+    maxHeight:1000,
+    maxWidth:1800,
+    minWidth:1200,
+    width: "auto",
+    height: "auto",
+    buttons: buttons,
+    close: function() {
+      $(this).dialog("destroy");
+      $(this).remove();
+    }
+  };
+
+  dialog.appendTo("BODY");
+  dialog.dialog( dialog_options );
+};
+
+function api_row(row_data) {
+
+  let groups_list = [];
+
+  if(row_data["api_groups"] != "") {
+    let g_nums = String(row_data["api_groups"]).split(",");
+    g_nums.sort(function(a, b) { return Number(a) - Number(b) });
+
+    for(let g in g_nums) {
+      let g_id = g_nums[g];
+      groups_list.push(g_data["groups"][g_id]["g_name"]);
+    };
+  };
+
+  let ret = $(DIV).addClass("tr")
+   .data("row_data", row_data)
+  ;
+
+  ret
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append(
+       editable_elm({
+         "object": "api",
+         "prop": "api_name",
+         "id": String(row_data['api_id']),
+         "_edit_css": { 'width': '10em' },
+       })
+     )
+   )
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append(
+       editable_elm({
+         "object": "api",
+         "prop": "api_descr",
+         "id": String(row_data['api_id']),
+       })
+     )
+   )
+   .append( $(SPAN).addClass("td")
+     .append( $(SPAN).text(row_data['api_key']).addClass("api_key")
+       .css({"font-family": "monospace", "margin-right": "0.5em"})
+     )
+     .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-copy"])
+       .title("Скопировать в буфер")
+       .data("copy", row_data['api_key'])
+       .click(function() {
+         let value = $(this).data("copy");
+         let flash = $(this).closest(".td");
+         try {
+           navigator.clipboard.writeText(value).then(
+             function() {
+               /* clipboard successfully set */
+               flash.animateHighlight("green", 300);
+             }, 
+             function() {
+               /* clipboard write failed */
+               window.alert('Opps! Your browser does not support the Clipboard API')
+             }
+           );
+         } catch(e) {
+           alert(e);
+         };
+       })
+     )
+   )
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append( $(INPUT)
+       .prop("type", "hidden")
+       .val(row_data['api_groups'])
+       .addClass("api_groups")
+       .saveable({
+         "object": "api",
+         "prop": "api_groups",
+         "id": String(row_data['api_id']),
+       })
+     )
+     .append( $(LABEL).addClass("api_groups_ind").text(groups_list.length)
+       .title(groups_list.join(", "))
+       .css({"margin-right": "0.5em", "text-decoration": "underline"})
+     )
+     .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-bullets"])
+       .addClass("off_btn")
+       .click(function() {
+         if($(this).hasClass("off_btn")) return;
+         let input = $(this).closest(".tr").find(".api_groups");
+         let ind = $(this).closest(".tr").find(".api_groups_ind");
+         select_groups(g_data["groups"], String(input.val()), undefined, function(new_list) {
+           let groups_list = [];
+
+           if(new_list != "") {
+             let g_nums = String(new_list).split(",");
+             g_nums.sort(function(a, b) { return Number(a) - Number(b) });
+
+             for(let g in g_nums) {
+               let g_id = g_nums[g];
+               groups_list.push(g_data["groups"][g_id]["g_name"]);
+             };
+           };
+
+           ind
+             .text(groups_list.length)
+             .title(groups_list.join(", "))
+           ;
+           input.val(new_list).trigger("input_stop");
+         });
+       })
+     )
+   )
+   .append( $(SPAN).addClass("td").addClass("unsaved_elm")
+     .append(
+       editable_elm({
+         "object": "api",
+         "prop": "api_nets",
+         "id": String(row_data['api_id']),
+       })
+     )
+   )
+   .append( $(SPAN).addClass("td")
+     .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-edit", "edit_btn"])
+       .click(function() {
+         let row = $(this).closest(".tr");
+         let _id = row.data("row_data")['api_id'];
+         if((row.find(".editable_view,.off_btn").length) > 0) {
+           row.find(".editable_view").trigger("editable_toggle");
+           row.find(".off_btn").removeClass("off_btn").addClass("on_btn");
+         } else if(row.find(".editable_edit,.on_btn").length > 0) {
+           row.find(".editable_edit").trigger("editable_toggle");
+           row.find(".on_btn").removeClass("on_btn").addClass("off_btn");
+           row.find(".api_groups").val(g_data['apis'][_id]['api_groups']).trigger("input_stop");
+         };
+       })
+     )
+     .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-trash"])
+       .css("margin-left", "0.5em")
+       .click(function() {
+         if(g_autosave_changes > 0) {
+           show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+           return;
+         };
+         let row = $(this).closest(".tr");
+         let _id = row.data("row_data")['api_id'];
+
+         show_confirm("Подтвердите удаление API доступа.\nВнимание: отмена будет невозможна", function() {
+           run_query({"action": "del_api", "id": String(_id)}, function(res) {
+             row.remove();
+             delete(g_data['apis'][_id]);
+           });
+         });
+       })
+     )
+   )
+  ;
+
+  ret
+   .on("click dblclick", function(e) {
+     if ((e.type == "click" && e.ctrlKey) ||
+         e.type == "dblclick"
+     ) {
+       e.stopPropagation();
+       if( $(e.target).hasClass("td")) {
+         $(e.target).find(".editable_view").trigger("editable_toggle");
+         $(e.target).find(".off_btn").removeClass("off_btn").addClass("on_btn");
+       };
+     };
+   })
+  ;
+
+  return ret;
+};
+
+function actionApi() {
+  workarea.empty();
+  fixed_div.empty();
+
+  run_query({"action": "get_apis"}, function(res) {
+    g_data = res['ok'];
+
+    let table = $(DIV).addClass("table")
+     .appendTo(workarea)
+    ;
+
+    $(DIV).addClass("thead")
+     .append( $(SPAN).addClass("th").text("Имя").title("Отображаемое имя. Должно быть уникальным") )
+     .append( $(SPAN).addClass("th").text("Коментарий") )
+     .append( $(SPAN).addClass("th").text("Ключ") )
+     .append( $(SPAN).addClass("th").text("Группы") )
+     .append( $(SPAN).addClass("th").text("Сети").title("TODO. Перечень в виде x.x.x.x/x разделенных пробелом или запятой") )
+     .append( $(SPAN).addClass("th") )
+     .appendTo(table)
+    ;
+
+    let tbody = $(DIV).addClass("tbody")
+     .appendTo(table)
+    ;
+
+    let ks = keys(g_data['apis']);
+    ks.sort(function(a, b) { return Number(a) - Number(b) });
+
+    for(let i in ks) {
+      let _id = ks[i];
+      tbody.append( api_row(g_data['apis'][_id]) );
+    };
+
+    table
+     .append( $(DIV).addClass("tfoot")
+       .append( $(SPAN).addClass("td")
+         .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
+           .css({"margin-right": "0.5em"})
+           .click(function() {
+             if(g_autosave_changes > 0) {
+               show_dialog("На странице есть несохраненные поля.\nСперва сохраните изменения.");
+               return;
+             };
+
+             let _name = String($(this).closest(".tfoot").find("._name").val()).trim();
+
+             let highlight = $([]);
+
+             let found = false;
+
+             if(_name == "" && !/^[0-9a-zA-Z_\-]+$/.test(_name)) {
+               highlight = highlight.add($(this).closest(".tfoot").find("._name"));
+               found = true;
+             } else {
+
+               for(let i in g_data['apis']) {
+                 if(_name == String(g_data['apis'][i]['api_name']).trim()) {
+                   highlight = highlight.add($(this).closest(".tfoot").find("._name"));
+                   found = true;
+                   break;
+                 };
+               };
+             };
+
+             if(found) {
+               highlight.animateHighlight("red", 300);
+               return;
+             };
+
+             run_query({"action": "add_api", "name": _name}, function(res) {
+               if(res['ok']['aux_userinfo'] !== undefined) {
+                 if(g_data['aux_userinfo'] === undefined) g_data['aux_userinfo'] = {};
+                 for(let u_id in res['ok']['aux_userinfo']) {
+                   g_data['aux_userinfo'][u_id] = res['ok']['aux_userinfo'][u_id];
+                 };
+               };
+
+               let _id = res['ok']['api']['api_id'];
+               g_data['apis'][_id] = res['ok']['api'];
+               let new_row = api_row(res['ok']['api']);
+               new_row.appendTo( $(".tbody") );
+               new_row.find(".edit_btn").trigger("click");
+             });
+           })
+         )
+         .append( $(INPUT)
+           .addClass("_name")
+           .css({ 'width': '10em' })
+         )
+       )
+     )
+    ;
+
+  });
+};
