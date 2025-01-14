@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -27,6 +28,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/exp/slices"
 )
+
+const API_KEY_DICT = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890_-"
+const API_KEY_LEN = 32
 
 const (
   R_NAME uint64 = 1 // view net name and deny all other actions if not set
@@ -75,13 +79,33 @@ var g_api_name_reg *regexp.Regexp
 
 var g_mac_free_reg *regexp.Regexp
 
+var g_data_key_reg *regexp.Regexp
+var g_remote_ip_reg *regexp.Regexp
+var g_ip_reg *regexp.Regexp
+var g_ip_range_reg *regexp.Regexp
+var g_ip_net_reg *regexp.Regexp
+var g_ips_split_reg *regexp.Regexp
+
+type RangeV4 struct {
+  Start uint32
+  End   uint32
+}
+
 func init() {
   _ = spew.Sprint()
   g_name_reg = regexp.MustCompile(`^\S.*\S$`)
   g_num_reg = regexp.MustCompile(`^\d+$`)
   g_num_list_reg = regexp.MustCompile(`^(?:\d+(,\d+)*)?$`)
-  g_api_name_reg = regexp.MustCompile(`^[0-9a-z_\-]+$`)
+  g_api_name_reg = regexp.MustCompile(`^[0-9a-zA-Z_\-]+$`)
   g_mac_free_reg = regexp.MustCompile(`^([\da-fA-F]{2})`+strings.Repeat(`[\-\.:_]([\da-fA-F]{2})`, 5)+`$`)
+
+  g_data_key_reg = regexp.MustCompile(`^data\.([a-zA-Z_\-0-9]+)$`)
+  g_remote_ip_reg = regexp.MustCompile(`^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}):\d+$`)
+
+  g_ip_reg = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
+  g_ip_range_reg = regexp.MustCompile(`^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s*-\s*([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})$`)
+  g_ip_net_reg = regexp.MustCompile(`^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\/([0-9]{1,2})$`)
+  g_ips_split_reg = regexp.MustCompile(`[\s,;\n\r]+`)
 
   g_rights_obj = make(M)
   g_rights_obj["nets"] = "Права на все сети и IP адреса"
@@ -167,6 +191,19 @@ func init() {
   g_tag_flags[F_IN_LABEL]["descr"] = "Отображать прямо в ярлыке тега"
   g_tag_flags[F_IN_LABEL]["required_by"] = [...]uint64{}
   g_tag_flags[F_IN_LABEL]["conflict_with"] = [...]uint64{}
+}
+
+func genApiKey() string {
+  ret := ""
+  c := 0
+  for c < API_KEY_LEN {
+    c++
+
+    idx := rand.Intn(len(API_KEY_DICT))
+    ret += string(API_KEY_DICT[idx])
+  }
+
+  return ret
 }
 
 func containsDotFile(name string) bool {
@@ -510,6 +547,7 @@ func http_server(wg *sync.WaitGroup, stop_ch chan struct{}) {
   http.Handle("/", NoCache(http.FileServer(fsys)))
   http.HandleFunc("/consts.js", handleConsts)
   http.HandleFunc("/ajax", handleAjax)
+  http.HandleFunc("/api", handleApi)
 
   listener, listen_err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", opt_p))
   if listen_err != nil {
@@ -2017,6 +2055,23 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if v, var_ok = data.String("v"); !var_ok { panic(fmt.Sprint("No v in queue item #", i)) }
         if v != "4" && v != "6" { panic(fmt.Sprint("Bad v in queue item #", i)) }
 
+      case "api":
+        if !user_is_admin { panic(NoAccess()) }
+
+        if _, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+
+        if prop != "api_name" &&
+           prop != "api_descr" &&
+           prop != "api_nets" &&
+           prop != "api_groups" &&
+        true { panic(fmt.Sprint("Bad property in queue item #", i)) }
+
+        if prop == "api_groups" && !g_num_list_reg.MatchString(value.(string)) {
+          panic(fmt.Sprint("Bad value in queue item #", i))
+        }
+
+
       default:
         panic("Unknown object type: "+object)
       }
@@ -2283,6 +2338,45 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
         if _, err = tx.Exec(query, value, ts, user_id, obj_id); err != nil { panic(err) }
 
         if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
+
+      case "api":
+        if obj_id, var_ok = data.UintString("id"); !var_ok { panic(fmt.Sprint("No id in queue item #", i)) }
+        if prop, var_ok = data.String("prop"); !var_ok { panic(fmt.Sprint("No prop in queue item #", i)) }
+
+        switch(prop) {
+        case "api_name","api_descr", "api_nets":
+          if prev_data, err = must_return_one_M(tx, "SELECT "+prop+" FROM apis WHERE api_id=?", obj_id); err != nil { panic(err) }
+
+          query = "UPDATE apis SET "+prop+"=?, ts=?, fk_u_id=? WHERE api_id=?"
+          if _, err = tx.Exec(query, value, ts, user_id, obj_id); err != nil { panic(err) }
+
+          if err = audit_log(tx, object, obj_id, query, prev_data, value); err != nil { panic(err) }
+
+        case "api_groups":
+          if value.(string) == "" {
+            query = "DELETE FROM ags WHERE ag_fk_api_id=?"
+            if _, err = tx.Exec(query, obj_id); err != nil { panic(err) }
+
+            if err = audit_log(tx, object, obj_id, query, nil, nil); err != nil { panic(err) }
+
+          } else {
+            query = "DELETE FROM ags WHERE ag_fk_api_id=? AND ag_fk_g_id NOT IN("+value.(string)+")"
+            if _, err = tx.Exec(query, obj_id); err != nil { panic(err) }
+
+            if err = audit_log(tx, object, obj_id, query, nil, nil); err != nil { panic(err) }
+
+          }
+          if value.(string) != "" {
+            query = "INSERT IGNORE INTO ags(ag_fk_g_id, ag_fk_api_id, ts, fk_u_id)"+
+                    " SELECT g_id, ?, ?, ? FROM gs WHERE g_id IN("+value.(string)+")"
+            if _, err = tx.Exec(query, obj_id, ts, user_id); err != nil { panic(err) }
+
+            if err = audit_log(tx, object, obj_id, query, nil, nil); err != nil { panic(err) }
+
+          }
+        default:
+          panic("Unknown object prop")
+        }
 
       default:
         panic("Unknown object type: "+object)
@@ -6011,6 +6105,62 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     out["done"] = 1
 
 
+  } else if action == "get_apis" {
+    if !user_is_admin { panic(NoAccess()) }
+
+    query = "SELECT apis.*, u_login, u_name"+
+            ", IFNULL((SELECT GROUP_CONCAT(ag_fk_g_id) FROM ags WHERE ag_fk_api_id = api_id), '') as api_groups"+
+            " FROM apis LEFT JOIN us ON u_id = apis.fk_u_id"
+
+    if out["apis"], err = return_query_M(db, query, "api_id"); err != nil { panic(err) }
+
+    query = "SELECT * FROM gs WHERE g_name != ? AND any = 0"
+
+    if out["groups"], err = return_query_M(db, query, "g_id", opt_g); err != nil { panic(err) }
+
+  } else if action == "del_api" {
+    if !user_is_admin { panic(NoAccess()) }
+
+    var id string
+    if id, err = get_p_string(q, "id", g_num_reg); err != nil { panic(err) }
+
+    query = "SELECT apis.*"+
+      ", IFNULL((SELECT GROUP_CONCAT(ag_fk_g_id) FROM ags WHERE ag_fk_api_id = api_id), '') as api_groups"+
+      " FROM apis WHERE api_id=?"
+    if prev_data, err = must_return_one_M(db, query, id); err != nil { panic(err) }
+
+    if _, err = db.Exec("DELETE FROM apis WHERE api_id=?", id); err != nil { panic(err) }
+
+    if err = audit_log(db, "api", id, "DELETE FROM apis WHERE api_id=?", prev_data, nil); err != nil { panic(err) }
+
+    out["done"] = 1
+
+  } else if action == "add_api" {
+    if !user_is_admin { panic(NoAccess()) }
+
+    var name string
+    if name, err = get_p_string(q, "name", g_api_name_reg); err != nil { panic(err) }
+
+    var key = genApiKey()
+
+    query = "INSERT INTO apis(api_name, api_key, added, ts, fk_u_id) VALUES(?,?,?,0,?)"
+
+    if dbres, err = db.Exec(query, name, key, ts, user_id); err != nil { panic(err) }
+
+    log_query := query
+
+    var lid int64
+
+    if lid, err = dbres.LastInsertId(); err != nil { panic(err) }
+    if lid <= 0 { panic("weird LastInsertId returned") }
+
+    query = "SELECT apis.*"+
+            ", IFNULL((SELECT GROUP_CONCAT(ag_fk_g_id) FROM ags WHERE ag_fk_api_id = api_id), '') as api_groups"+
+            " FROM apis WHERE api_id=?"
+    if out["api"], err = must_return_one_M(db, query, lid); err != nil { panic(err) }
+
+    if err = audit_log(db, "api", lid, log_query, nil, out["api"]); err != nil { panic(err) }
+
   } else if action == "query" {
     out["_query"] = q
   } else {
@@ -6018,6 +6168,933 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
   }
 
 OUT:
+
+  ok_out := make(M)
+  ok_out["ok"] = out
+  if opt_d {
+    fmt.Println("out")
+    dj, _ := json.MarshalIndent(ok_out, "", "  ")
+    fmt.Println(string(dj))
+  }
+  json, jerr := json.MarshalIndent(ok_out, "", "  ")
+  if jerr != nil {
+    panic(jerr)
+  }
+
+  w.Header().Set("Content-Type", "text/javascript; charset=UTF-8")
+  w.Header().Set("Cache-Control", "no-cache")
+  w.Header().Set("Access-Control-Allow-Origin", "*")
+  w.Header().Set("Access-Control-Allow-Methods", "*")
+  w.Header().Set("Access-Control-Allow-Headers", "*")
+  w.WriteHeader(http.StatusOK)
+
+  w.Write(json)
+  w.Write([]byte("\n"))
+}
+
+func handleApi(w http.ResponseWriter, req *http.Request) {
+
+  if req.Method == "OPTIONS" {
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "*")
+    w.Header().Set("Access-Control-Allow-Headers", "*")
+    w.WriteHeader(http.StatusOK)
+    return
+  }
+
+  //fmt.Println(whereami.WhereAmI())
+
+  defer func() { handle_error(recover(), w, req); } ()
+  //mutex_locked := false
+  //defer func() { if mutex_locked { globalMutex.Unlock(); mutex_locked = false; }; } ()
+
+  var body []byte
+  var err error
+
+  if body, err = ioutil.ReadAll(req.Body); err != nil {
+    panic(err)
+  }
+
+  ts := time.Now().Unix()
+
+  var u64 uint64 //general use var for typecasting
+
+  var q M
+
+  if req.Method == "GET" {
+    q = make(M)
+    values := req.URL.Query()
+    for k, v := range values {
+      if len(v) == 0 {
+          q[k] = ""
+      } else if len(v) == 1 {
+          q[k] = v[0]
+      } else {
+        q[k] = v
+      }
+    }
+  } else {
+    if err = json.Unmarshal(body, &q); err != nil {
+      panic(err)
+    }
+  }
+
+  if _, action_ex := q["action"]; !action_ex {
+    panic("no action in query")
+  }
+
+  action := q["action"].(string)
+  _ = action
+
+  if _, key_ex := q["key"]; !key_ex {
+    panic("no key in query")
+  }
+
+  key := q["key"].(string)
+  _ = key
+
+  var user_sub string
+  var user_name string
+  var user_login string
+
+  //if user_groups_string == "" {
+    //panic("No groups header present or is empty")
+  //}
+
+  out := make(M)
+
+  var db *sql.DB
+  var dbres sql.Result
+  _ = dbres
+
+  var query string
+  _ = query
+
+  db, err = sql.Open("mysql", opt_b)
+  if err != nil { panic(err) }
+
+  defer db.Close()
+
+  user_is_admin := false
+
+  query = "SELECT apis.*, ifnull((select group_concat(ag_fk_g_id) from ags where ag_fk_api_id=api_id), '') as groups"
+  query += " FROM apis"
+  query += " WHERE api_key=?"
+
+  var key_row M
+  var rows []M
+
+  rows, err = return_query_A(db, query, key)
+
+  if err != nil { panic(err) }
+  if len(rows) == 0 {
+    panic("Bad key")
+  }
+
+  if len(rows) > 1 {
+    panic("Too many keys")
+  }
+
+  key_row = rows[0]
+
+  var g_var_ok bool
+
+  u64, g_var_ok = key_row.Uint64("api_id")
+  if !g_var_ok {
+    panic("No api_id")
+  }
+
+  user_sub = fmt.Sprintf("api_%d", u64)
+  user_name = key_row["api_name"].(string)
+  user_login = user_name
+
+  // check key ip
+
+  var client_ip string
+
+  for header, header_values := range req.Header {
+    if strings.ToLower(header) == "x-forwarded-for" && len(header_values) > 0 {
+      client_ip = strings.TrimSpace(header_values[0])
+    }
+  }
+
+  if m := g_remote_ip_reg.FindStringSubmatch(req.RemoteAddr); m != nil && client_ip == "" {
+    client_ip = m[1]
+  }
+
+  var has_filter bool
+
+  filter_v4ranges := make([]RangeV4, 0)
+
+  for _, filter_str := range g_ips_split_reg.Split(key_row["api_nets"].(string), -1) {
+    filter_str = strings.TrimSpace(filter_str)
+
+    if g_ip_reg.MatchString(filter_str) {
+      if ip, ip_err := v4ip2long(filter_str); ip_err == nil {
+        has_filter = true
+        filter_v4ranges = append(filter_v4ranges, RangeV4{ip,ip})
+      }
+    } else if m := g_ip_range_reg.FindStringSubmatch(filter_str); m != nil {
+      ip_start, ip1_err := v4ip2long(m[1])
+      ip_end, ip2_err := v4ip2long(m[2])
+
+      if ip_start <= ip_end && ip1_err == nil && ip2_err == nil {
+        has_filter = true
+        filter_v4ranges = append(filter_v4ranges, RangeV4{ip_start, ip_end})
+      }
+    } else if m := g_ip_net_reg.FindStringSubmatch(filter_str); m != nil {
+      ip, ip_err := v4ip2long(m[1])
+      masklen, m_err := strconv.ParseUint(m[2], 10, 8)
+
+      if ip_err == nil && m_err == nil && masklen <= 32 &&
+         ip == ip4net(ip, uint32(masklen)) &&
+      true {
+        end_ip := ip | (0xFFFFFFFF >> masklen)
+        has_filter = true
+        filter_v4ranges = append(filter_v4ranges, RangeV4{ip, end_ip})
+      }
+    }
+  }
+
+  if has_filter {
+    var filer_passed bool
+
+    var client_v4addr uint32
+
+    if client_v4addr, err = v4ip2long(client_ip); err == nil {
+      for _, r := range filter_v4ranges {
+        if client_v4addr >= r.Start && client_v4addr <= r.End {
+          filer_passed = true
+          break
+        }
+      }
+    }
+
+    if !filer_passed { panic("No access") }
+  }
+
+  query = "SELECT * FROM gs"
+  var groups M
+
+  if groups, err = return_query_M(db, query, "g_name"); err != nil { panic(err) }
+
+  if _, ex := groups[opt_g]; !ex { panic("No "+opt_g+" group in DB") }
+
+  var any_g_id string
+  for _, g := range groups {
+    var var_ok bool
+    if u64, var_ok = g.(M).Uint64("any"); !var_ok { panic(PE) }
+    if u64 > 0 {
+      if any_g_id != "" { panic(PE) }
+      if any_g_id, var_ok = g.(M).UintString("g_id"); !var_ok { panic(PE) }
+    }
+  }
+
+  if any_g_id == "" { panic("No Any group found in DB") }
+
+  user_groups := make([]string, 1)
+  user_groups[0] = any_g_id
+
+  user_groups_in := "FALSE"
+
+  if key_row["groups"].(string) != "" {
+    user_groups = append(user_groups, strings.Split(key_row["groups"].(string), ",")...)
+  }
+
+  if len(user_groups) > 0 {
+    user_groups_in = strings.Join(user_groups, ",")
+  }
+
+  NoAccess := func() (M) {
+    out_userinfo := make(M);
+    out_userinfo["name"] = user_name
+    out_userinfo["login"] = user_login
+    out_userinfo["groups"] = user_groups
+
+    na_out := make(M)
+    na_out["fail"] = "noaccess"
+    na_out["userinfo"] = out_userinfo
+
+    ok_out := make(M)
+    ok_out["ok"] = na_out
+    return ok_out
+  }
+
+  if !user_is_admin && len(user_groups) == 1 {
+    panic(NoAccess())
+  }
+
+  var prev_data interface{}
+  var new_data interface{}
+
+  var user_r interface{}
+  var user_row M
+
+  query = "SELECT * FROM us WHERE u_sub = ?"
+  if user_r, err = return_query(db, query, "u_sub", user_sub); err != nil { panic(err) }
+
+  if _, ok := user_r.(M)[user_sub]; !ok {
+    query = "INSERT INTO us SET"+
+            " u_sub=?"+
+            ",u_name=?"+
+            ",u_login=?"+
+            ",u_seen=?"+
+            ",added=?"+
+            ",ts=?"
+    if _, err = db.Exec(query, user_sub, user_name, user_login, ts, ts, ts); err != nil { panic(err) }
+
+    query = "SELECT * FROM us WHERE u_sub = ?"
+    if user_r, err = return_query(db, query, "u_sub", user_sub); err != nil { panic(err) }
+
+    if _, ok := user_r.(M)[user_sub]; !ok { panic("Cannot add user") }
+  }
+
+  user_row = user_r.(M)[user_sub].(M)
+
+  var user_id string
+  var user_id_var_ok bool
+  if user_id, user_id_var_ok = user_row.UintString("u_id"); !user_id_var_ok { panic(PE) }
+
+  if user_row["u_name"].(string) != user_name ||
+     user_row["u_login"].(string) != user_login ||
+     false {
+    query = "UPDATE us SET u_name=?, u_login=?, ts=? WHERE u_id=?"
+    if _, err = db.Exec(query, user_name, user_login, ts, user_id); err != nil { panic(err) }
+
+    user_row["u_name"] = user_name
+    user_row["u_login"] = user_login
+  }
+
+  query = "UPDATE us SET u_seen=? WHERE u_id=?"
+  if _, err = db.Exec(query, ts, user_id); err != nil { panic(err) }
+
+  if opt_d {
+    dj, _ := json.MarshalIndent(q, "", "  ")
+    fmt.Println(string(dj))
+  }
+
+  var var_ok bool
+
+  var g_nets_rights uint64
+  var g_vlans_rights uint64
+  var g_tags_rights uint64
+  var g_oobs_rights uint64
+
+  query = "SELECT IFNULL(BIT_OR(glr_rmask), CAST(0 AS UNSIGNED)) FROM glrs WHERE glr_object=?"+
+          " AND glr_fk_g_id IN("+user_groups_in+")"
+
+  if g_nets_rights, err = must_return_one_uint(db, query, "nets"); err != nil { panic(err) }
+  if g_vlans_rights, err = must_return_one_uint(db, query, "vlans"); err != nil { panic(err) }
+  if g_tags_rights, err = must_return_one_uint(db, query, "tags"); err != nil { panic(err) }
+  if g_oobs_rights, err = must_return_one_uint(db, query, "oobs"); err != nil { panic(err) }
+
+  if user_is_admin {
+    g_nets_rights |= ADMIN_NET_RIGHTS
+    g_vlans_rights |= ADMIN_VLAN_RIGHTS
+    g_tags_rights |= ADMIN_TAG_RIGHTS
+    g_oobs_rights |= ADMIN_OOB_RIGHTS
+  }
+
+  var tags_cache M
+
+  audit_log := func(db interface{}, al_subject string, al_subject_id interface{},
+                    al_query string, al_prev_data, al_new_data interface{}) (error) {
+    table_name := time.Now().Format("audit_200601")
+    var e error
+
+    if _, e = db_exec(db, "CREATE TABLE IF NOT EXISTS "+table_name+" LIKE log_template");
+    e != nil { return e }
+
+    var prev_json []byte
+    if al_prev_data != nil {
+      if prev_json, e = json.MarshalIndent(al_prev_data, "", "  "); e != nil { return e }
+    } else {
+      prev_json = make([]byte, 0)
+    }
+
+    var new_json []byte
+    if al_new_data != nil {
+      if new_json, e = json.MarshalIndent(al_new_data, "", "  "); e != nil { return e }
+    } else {
+      new_json = make([]byte, 0)
+    }
+
+    if _, e = db_exec(db, "INSERT INTO "+table_name+"(ts,fk_u_id,al_subject,al_subject_id"+
+                      ",al_query,al_prev_data,al_new_data) VALUES(?,?,?,?,?,?,?)",
+                      ts, user_id, al_subject, al_subject_id, al_query,
+                      string(prev_json),string(new_json));
+    e != nil { return e }
+
+    return nil
+  }
+
+  var get_tag = func(db interface{}, _tag_id interface{}) (M, error) {
+    var tag_id string
+    switch v := _tag_id.(type) {
+    case string:
+      tag_id = v
+    case uint8:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case uint16:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case uint32:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case uint64:
+      tag_id = strconv.FormatUint(uint64(v), 10)
+    case int8:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    case int16:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    case int32:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    case int64:
+      tag_id = strconv.FormatInt(int64(v), 10)
+    default:
+      return nil, errors.New("Unsupported tag_id type in get_tag")
+    }
+
+    if tags_cache == nil {
+      tags_cache = make(M)
+    }
+
+    if ret, ex := tags_cache[tag_id]; ex { return ret.(M), nil }
+
+    query = "SELECT tags.*"+
+            ", CAST(("+
+            " (SELECT COUNT(*) FROM v4nets WHERE FIND_IN_SET(tag_id,v4net_tags))+"+
+            " (SELECT COUNT(*) FROM v6nets WHERE FIND_IN_SET(tag_id,v6net_tags))+"+
+            " (SELECT COUNT(*) FROM v4oobs WHERE FIND_IN_SET(tag_id,v4oob_tags))+"+
+            " (SELECT COUNT(*) FROM v6oobs WHERE FIND_IN_SET(tag_id,v6oob_tags))+"+
+            " (SELECT COUNT(*) FROM i4vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " (SELECT COUNT(*) FROM i6vs INNER JOIN ics ON iv_fk_ic_id=ic_id WHERE FIND_IN_SET(tag_id,iv_value) > 0 AND (ic_type='tag' OR ic_type='multitag'))+"+
+            " 0) AS UNSIGNED) AS used"+
+            ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                      " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+            " FROM tags WHERE tag_id=?"
+
+    if ret, err := must_return_one_M(db, query, tag_id); err != nil {
+      return nil, err
+    } else {
+      tags_cache[tag_id] = ret
+      return ret, nil
+    }
+  }
+
+  var tag_usage func(interface{}, interface{}, int) (uint64, error)
+  tag_usage = func(db interface{}, tag_id interface{}, counter int) (uint64, error) {
+    var tag M
+
+    if tag, err = get_tag(db, tag_id); err != nil { return 0, err }
+
+    var used uint64
+    if used, var_ok = tag.Uint64("used"); !var_ok { return 0, fmt.Errorf("No used in tag %v", tag_id) }
+
+    query = "SELECT tag_id FROM tags WHERE tag_fk_tag_id=?"
+    if rows, err := return_query_A(db, query, tag_id); err != nil {
+      return 0, err
+    } else {
+      for _, row := range rows {
+        if child_id, var_ok := row.UintString("tag_id"); !var_ok {
+          return 0, errors.New("No child tag_id")
+        } else {
+          if child_used, err := tag_usage(db, child_id, counter+1); err != nil {
+            return 0, err
+          } else {
+            used += child_used
+          }
+        }
+      }
+    }
+
+    return used, nil
+  }
+
+  var get_root_tag func(interface{}, interface{}, int) (M, error)
+  get_root_tag = func(db interface{}, tag_id interface{}, counter int) (M, error) {
+    if counter > MAX_TREE_LEN { return nil, errors.New("Tags loop detected") }
+    var err error
+    var tag M
+
+    if tag, err = get_tag(db, tag_id); err != nil { return nil, err }
+    if tag["tag_fk_tag_id"] == nil { return tag, nil }
+
+    var var_ok bool
+    var parent_id string
+    if parent_id, var_ok = tag.UintString("tag_fk_tag_id"); !var_ok { return nil, fmt.Errorf("No tag_fk_tag_id for tag_id: %v", tag_id) }
+
+    return get_root_tag(db, parent_id, counter + 1)
+  }
+
+  var get_tag_rights func(interface{}, interface{}, int) (uint64, error)
+  get_tag_rights = func(db interface{}, tag_id interface{}, counter int) (uint64, error) {
+    if counter > MAX_TREE_LEN { return 0, errors.New("Tags loop detected") }
+
+    if tag, err := get_tag(db, tag_id); err != nil {
+      return 0, err
+    } else {
+      if tag_rights, var_ok := tag.Uint64("rights"); !var_ok {
+        return 0, fmt.Errorf("No rights for tag_id: %v", tag_id)
+      } else {
+        if tag["tag_fk_tag_id"] != nil {
+          if parent_id, var_ok := tag.UintString("tag_fk_tag_id"); !var_ok {
+            return 0, fmt.Errorf("No tag_fk_tag_id for tag_id: %v", tag_id)
+          } else {
+            if parent_rights, err := get_tag_rights(db, parent_id, counter+1); err != nil {
+              return 0, err
+            } else {
+              tag_rights |= parent_rights
+            }
+          }
+        }
+        tag_rights |= g_tags_rights
+        return tag_rights, nil
+      }
+    }
+  }
+
+  var update_tag = func(db interface{}, tag_id interface{}, update_fields M) (error) {
+    query := "UPDATE tags SET "
+    sets := make([]string, 2)
+    values := make([]interface{}, 2)
+
+    var err error
+
+    if prev_data, err = must_return_one_M(db, "SELECT * FROM tags WHERE tag_id=?", tag_id); err != nil { return err }
+
+    sets[0] = "ts=?"
+    sets[1] = "fk_u_id=?"
+
+    values[0] = ts
+    values[1] = user_id
+
+    if update_fields != nil {
+      for k, v := range update_fields {
+        sets = append(sets, k+"=?")
+        values = append(values, v)
+      }
+    }
+
+    query += strings.Join(sets, ",")+" WHERE tag_id=?"
+    values = append(values, tag_id)
+
+    switch db.(type) {
+    case *sql.DB:
+      _, err = db.(*sql.DB).Exec(query, values...)
+    case *sql.Tx:
+      _, err = db.(*sql.Tx).Exec(query, values...)
+    default:
+      err = errors.New("Bad db handle type:"+reflect.TypeOf(db).String())
+    }
+
+    if err != nil { return err }
+
+    if new_data, err = must_return_one_M(db, "SELECT * FROM tags WHERE tag_id=?", tag_id); err != nil { return err }
+    if err = audit_log(db, "tag", tag_id, query, prev_data, new_data); err != nil { return err }
+
+    return err
+  }
+
+  _ = update_tag
+
+  get_net_rights := func(db interface{}, net_id interface{}, v string, netrow M) (uint64, M, error) {
+    var net M
+    if netrow != nil {
+      net = netrow
+    } else {
+      query = "SELECT"+
+              " v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets WHERE v"+v+"net_id=?"
+      if net, err = must_return_one_M(db, query, net_id); err != nil { return 0, nil, err }
+    }
+
+    var ret uint64
+    if ret, var_ok = net.Uint64("rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+    if u64, var_ok = net.Uint64("r_rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+
+    owner, _ := net.AnyString("v"+v+"net_owner")
+
+    ret |= u64
+
+    if owner == user_id {
+      ret |= OWNER_RIGHTS
+    }
+
+    ret |= g_nets_rights
+
+    return ret, net, nil
+  }
+
+  _ = get_net_rights
+
+  get_addr_rights := func(db interface{}, ip_addr interface{}, v string, netrow M) (uint64, M, error) {
+    var net M
+    if netrow != nil {
+      net = netrow
+    } else {
+      query = "SELECT"+
+              " v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets WHERE v"+v+"net_addr <=? AND v"+v+"net_last >=?"
+      if net, err = must_return_one_M(db, query, ip_addr, ip_addr); err != nil { return 0, nil, err }
+    }
+
+    var ret uint64
+    if ret, var_ok = net.Uint64("rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+    if u64, var_ok = net.Uint64("r_rights"); !var_ok { return 0, nil, errors.New("No r_rights in get_net_rights call") }
+    ret |= u64
+
+    owner, _ := net.AnyString("v"+v+"net_owner")
+
+    if owner == user_id {
+      ret |= OWNER_RIGHTS
+    }
+
+    ret |= g_nets_rights
+
+    query = "SELECT IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND v"+v+"r_start <= ? AND v"+v+"r_stop >= ?"+
+                         "), CAST(0 AS UNSIGNED)) as ip_rights "+
+            " FROM v"+v+"nets WHERE v"+v+"net_id=?"
+
+    if u64, err = must_return_one_uint(db, query, ip_addr, ip_addr, net["v"+v+"net_id"]); err != nil { return 0, nil, err }
+
+    ret |= u64
+
+    return ret, net, nil
+  }
+
+  _ = get_addr_rights
+
+  get_ip_rights := func(db interface{}, ip_id interface{}, v string, netrow M) (uint64, M, error) {
+    var net M
+    if netrow != nil {
+      net = netrow
+    } else {
+      query = "SELECT"+
+              " v"+v+"nets.*"+
+              ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
+                         " FROM gn"+v+"rs WHERE"+
+                         " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND gn"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         "),0) as rights"+
+              ", IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id IS NULL"+
+                         " AND v"+v+"r_start <= v"+v+"net_addr AND v"+v+"r_stop >= v"+v+"net_last"+
+                         "), 0) AS r_rights"+
+              " FROM v"+v+"nets INNER JOIN v"+v+"ips ON v"+v+"ip_fk_v"+v+"net_id=v"+v+"net_id WHERE v"+v+"ip_id=?"
+      if net, err = must_return_one_M(db, query, ip_id); err != nil { return 0, nil, err }
+    }
+
+    var ret uint64
+    if ret, var_ok = net.Uint64("rights"); !var_ok { return 0, nil, errors.New("No rights in get_net_rights call") }
+    if u64, var_ok = net.Uint64("r_rights"); !var_ok { return 0, nil, errors.New("No r_rights in get_net_rights call") }
+    ret |= u64
+
+    owner, _ := net.AnyString("v"+v+"net_owner")
+
+    if owner == user_id {
+      ret |= OWNER_RIGHTS
+    }
+
+    ret |= g_nets_rights
+
+    var ip_rows []M
+    query = "SELECT v"+v+"net_id"+
+            ",IFNULL((SELECT BIT_OR(gr"+v+"r_rmask)"+
+                         " FROM gr"+v+"rs INNER JOIN v"+v+"rs ON gr"+v+"r_fk_v"+v+"r_id=v"+v+"r_id"+
+                         " WHERE gr"+v+"r_fk_g_id IN("+user_groups_in+")"+
+                         " AND v"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
+                         " AND v"+v+"r_start <= v"+v+"ip_addr AND v"+v+"r_stop >= v"+v+"ip_addr"+
+                         "), 0) as ip_rights "+
+            " FROM v"+v+"nets INNER JOIN v"+v+"ips ON v"+v+"ip_fk_v"+v+"net_id=v"+v+"net_id WHERE v"+v+"ip_id=?"
+
+    if ip_rows, err = return_query_A(db, query, ip_id); err != nil { return 0, nil, err }
+
+    if len(ip_rows) != 1 { return 0, nil, errors.New("Адреса не существует. Вероятно он был удален другим пользователем.\nОбновите страницу") }
+
+    if ip_rows[0]["v"+v+"net_id"] != net["v"+v+"net_id"] {
+      return 0, nil, errors.New("Адрес из другой сети")
+    }
+
+    if u64, var_ok = ip_rows[0].Uint64("ip_rights"); !var_ok { return 0, nil, errors.New("No ip_rights") }
+
+    ret |= u64
+
+    return ret, net, nil
+  }
+
+  _ = get_ip_rights
+
+  query = ""
+
+  if action == "userinfo" {
+    out["id"] = user_id
+    out["sub"] = user_sub
+    out["name"] = user_name
+    out["login"] = user_login
+    out["groups"] = user_groups
+    out["is_admin"] = user_is_admin
+
+    out["ip"] = client_ip
+    out["remote_addr"] = req.RemoteAddr
+    out["has_filter"] = has_filter
+    out["v4filter"] = filter_v4ranges
+
+    out["g_nets_rights"] = g_nets_rights
+    out["g_vlans_rights"] = g_vlans_rights
+    out["g_tags_rights"] = g_tags_rights
+    out["g_oobs_rights"] = g_oobs_rights
+
+    has_vlans_access := false
+
+    query = "SELECT BIT_OR(gvrr_rmask) as rights FROM"+
+            " gvrrs WHERE gvrr_fk_g_id IN("+user_groups_in+")"
+
+    var rows []M
+
+    vlans_rights := g_vlans_rights
+
+    if rows, err = return_query_A(db, query); err != nil { panic(err) }
+
+    for _, row := range rows {
+      if u64, var_ok = row.Uint64("rights"); !var_ok { panic(PE) }
+
+      vlans_rights |= u64
+    }
+
+    if (vlans_rights & R_VIEW_NET_IPS) > 0 {
+      has_vlans_access = true
+    }
+
+    out["has_vlans_access"] = has_vlans_access
+
+    has_tags_access := false
+
+    query = "SELECT tags.*"+
+            ", IFNULL((SELECT BIT_OR(tgr_rmask) FROM tgrs WHERE tgr_fk_g_id IN("+user_groups_in+") AND tgr_fk_tag_id=tag_id"+
+                      " GROUP BY tgr_fk_tag_id), CAST(0 AS UNSIGNED)) as rights"+
+            " FROM tags WHERE tag_fk_tag_id IS NULL"
+
+    tags_rights := g_tags_rights
+
+    if rows, err = return_query_A(db, query); err != nil { panic(err) }
+
+    for _, row := range rows {
+      if u64, var_ok = row.Uint64("rights"); !var_ok { panic(PE) }
+
+      tags_rights |= u64
+    }
+
+    if (tags_rights & R_VIEW_NET_IPS) > 0 {
+      has_tags_access = true
+    }
+
+    out["has_tags_access"] = has_tags_access
+
+    has_oobs_access := false
+
+    oobs_rights := g_oobs_rights
+
+    if (oobs_rights & R_VIEW_NET_IPS) > 0 {
+      has_oobs_access = true
+    }
+
+    out["has_oobs_access"] = has_oobs_access
+
+  } else if action == "get_ip" {
+    var v string
+    if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
+
+    var ip_str string
+    var v4ip uint32
+    var ip_rows []M
+    var ip_rights uint64
+
+    if v == "4" {
+
+      if ip_str, err = get_p_string(q, "ip", nil); err != nil { panic(err) }
+
+      if v4ip, err = v4ip2long(ip_str); err != nil { panic(err) }
+
+      query = "SELECT v4ip_id FROM v4ips WHERE v4ip_addr=?"
+
+      ip_rows, err = return_query_A(db, query, v4ip)
+      if err != nil { panic(err) }
+
+      if len(ip_rows) != 1 {
+        out["success"] = 0
+        out["error"] = "IP not found"
+      } else {
+        var ip_id uint64
+        var _var_ok bool
+
+        if ip_id, _var_ok = ip_rows[0].Uint64("v4ip_id"); !_var_ok { panic("no desired key") }
+        if ip_rights, _, err = get_ip_rights(db, ip_id, v, nil); err != nil { panic(err) }
+
+        if (ip_rights & R_VIEW_NET_IPS) == 0 ||
+        false {
+          panic(NoAccess())
+        }
+
+        query = "SELECT i4vs.iv_value as value, ic_api_name as field_api_name, ic_type as type, ic_name as field_human_name"
+        query += " FROM ((v4ips INNER JOIN n4cs ON nc_fk_v4net_id=v4ip_fk_v4net_id)"
+        query += " INNER JOIN i4vs ON v4ip_id=iv_fk_v4ip_id AND iv_fk_ic_id=nc_fk_ic_id)"
+        query += " INNER JOIN ics ON nc_fk_ic_id=ic_id"
+        query += " WHERE v4ip_id=?"
+
+        out["data"], err = return_query_M(db, query, "field_api_name", ip_id)
+        if err != nil { panic(err) }
+
+        out["rights"] = ip_rights
+        out["ip_id"] = ip_id
+      }
+
+
+    } else {
+      out["error"] = "Unsupported IP version"
+      out["success"] = 0
+    }
+  } else if action == "edit_ip" {
+    var v string
+    if v, err = get_p_string(q, "v", "^[46]{1}$"); err != nil { panic(err) }
+
+    var ip_str string
+    var v4ip uint32
+    var ip_rows []M
+    var ip_rights uint64
+
+    tx, tx_err := db.Begin()
+    if tx_err != nil { panic(tx_err) }
+    var commited bool = false
+    defer func() {
+      if !commited {
+        tx.Rollback()
+      }
+    } ()
+
+    if v == "4" {
+
+      if ip_str, err = get_p_string(q, "ip", nil); err != nil { panic(err) }
+
+      if v4ip, err = v4ip2long(ip_str); err != nil { panic(err) }
+
+      query = "SELECT v4ip_id FROM v4ips WHERE v4ip_addr=?"
+
+      ip_rows, err = return_query_A(tx, query, v4ip)
+      if err != nil { panic(err) }
+
+      if len(ip_rows) != 1 {
+        out["success"] = 0
+        out["error"] = "IP not found"
+      } else {
+        var ip_id uint64
+        var _var_ok bool
+
+        if ip_id, _var_ok = ip_rows[0].Uint64("v4ip_id"); !_var_ok { panic("no desired key") }
+        if ip_rights, _, err = get_ip_rights(tx, ip_id, v, nil); err != nil { panic(err) }
+
+        if (ip_rights & R_EDIT_IP_VLAN) == 0 ||
+           (ip_rights & R_VIEW_NET_IPS) == 0 ||
+           ((ip_rights & R_DENYIP) > 0 &&
+            (ip_rights & R_IGNORE_R_DENY) == 0) ||
+        false {
+          panic(NoAccess())
+        }
+
+        ip_data := make(map[string]string)
+        ip_data_ic_id := make(map[string]string)
+
+        for q_key, _ := range q {
+          m := g_data_key_reg.FindStringSubmatch(q_key)
+          if m != nil {
+            if data_val, data_ok := q.AnyString(q_key); !data_ok {
+              panic("Bad value type")
+            } else {
+              ip_data[m[1]] = data_val
+
+              query = "SELECT ic_id FROM ("
+              query += "v4ips INNER JOIN n4cs ON nc_fk_v4net_id=v4ip_fk_v4net_id)"
+              query += " INNER JOIN ics ON nc_fk_ic_id=ic_id"
+              query += " WHERE ic_api_name=? AND v4ip_id=?"
+
+              var ic_rows []M
+              if ic_rows, err = return_query_A(tx, query, m[1], ip_id); err != nil { panic(err) }
+              if len(ic_rows) != 1 { panic("No such api field for ip") }
+              if ic_id, _ok := ic_rows[0].AnyString("ic_id"); !_ok {
+                panic("No key")
+              } else {
+                ip_data_ic_id[m[1]] = ic_id
+              }
+
+            }
+          }
+        }
+
+        for data_key, data_value := range ip_data {
+          query = "SELECT iv_value FROM i4vs WHERE iv_fk_ic_id=? AND iv_fk_v4ip_id=?"
+          prev_data, _ := must_return_one_M(tx, query, ip_data_ic_id[data_key], ip_id)
+
+          query = "INSERT INTO i4vs SET"+
+                  " iv_fk_ic_id=?"+
+                  ",iv_fk_v4ip_id=?"+
+                  ",iv_value=?"+
+                  ",ts=?"+
+                  ",fk_u_id=?"+
+                  " ON DUPLICATE KEY UPDATE"+
+                  " iv_value=VALUES(iv_value)"+
+                  ",ts=VALUES(ts)"+
+                  ",fk_u_id=VALUES(fk_u_id)"
+          _, err = tx.Exec(query, ip_data_ic_id[data_key], ip_id, data_value, ts, user_id)
+          if err != nil { panic(err) }
+
+          if err = audit_log(tx, "ip_value", ip_id, query, prev_data, data_value); err != nil { panic(err) }
+
+        }
+
+        err = tx.Commit()
+        if err != nil { panic(err) }
+        commited = true
+
+        out["success"] = 1
+
+      }
+    } else {
+      panic("Unsupported IP version")
+    }
+
+  } else if action == "query" {
+    out["_query"] = q
+  } else {
+    panic("unknown action: "+action)
+  }
+
+ //API_OUT:
 
   ok_out := make(M)
   ok_out["ok"] = out

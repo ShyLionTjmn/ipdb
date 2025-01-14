@@ -28,6 +28,37 @@ CREATE TABLE gs (
 INSERT INTO gs SET g_name='usr_netapp_ipdb_appadmins', g_descr='Администраторы приложения', added=0, ts=0;
 INSERT INTO gs SET any=1, g_name='Все', g_descr='Любой пользователь', added=0, ts=0;
 
+CREATE TABLE apis (
+  api_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  api_name        VARCHAR(256) NOT NULL,
+  api_descr       VARCHAR(256) NOT NULL DEFAULT '',
+  api_key         VARCHAR(32) NOT NULL,
+  api_nets        VARCHAR(1024) NOT NULL DEFAULT '',
+  added   BIGINT UNSIGNED NOT NULL,
+  ts        BIGINT UNSIGNED NOT NULL,
+  fk_u_id BIGINT UNSIGNED,
+  PRIMARY KEY pk_api_id(api_id),
+  UNIQUE KEY uk_api_key(api_key),
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
+  tc        TINYINT COMMENT 'API keys, users added as sub: api_{api_id}'
+);
+
+CREATE TABLE ags (
+  ag_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ag_fk_api_id BIGINT UNSIGNED NOT NULL,
+  ag_fk_g_id BIGINT UNSIGNED NOT NULL,
+  added   BIGINT UNSIGNED NOT NULL,
+  ts        BIGINT UNSIGNED NOT NULL,
+  fk_u_id BIGINT UNSIGNED,
+  PRIMARY KEY pk_ag_id(ag_id),
+  UNIQUE KEY uk_ag_api_id_g_id(ag_fk_api_id, ag_fk_g_id),
+  FOREIGN KEY (ag_fk_api_id) REFERENCES apis(api_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (ag_fk_g_id) REFERENCES gs(g_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
+  tc       TINYINT COMMENT 'API keys groups'
+);
+
+
 CREATE TABLE atts (
   `att_id`	BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `att_key`	varchar(64) NOT NULL,
