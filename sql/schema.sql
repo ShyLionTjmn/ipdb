@@ -39,6 +39,7 @@ CREATE TABLE apis (
   fk_u_id BIGINT UNSIGNED,
   PRIMARY KEY pk_api_id(api_id),
   UNIQUE KEY uk_api_key(api_key),
+  UNIQUE KEY uk_api_name(api_name),
   FOREIGN KEY (fk_u_id) REFERENCES us(u_id) ON DELETE SET NULL,
   tc        TINYINT COMMENT 'API keys, users added as sub: api_{api_id}'
 );
