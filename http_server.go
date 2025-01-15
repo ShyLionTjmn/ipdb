@@ -6962,9 +6962,10 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
           panic(NoAccess())
         }
 
-        query = "SELECT i4vs.iv_value as value, ic_api_name as field_api_name, ic_type as type, ic_name as field_human_name"
+        query = "SELECT IFNULL(i4vs.iv_value, '') as value"
+        query += ", ic_api_name as field_api_name, ic_type as type, ic_name as field_human_name"
         query += " FROM ((v4ips INNER JOIN n4cs ON nc_fk_v4net_id=v4ip_fk_v4net_id)"
-        query += " INNER JOIN i4vs ON v4ip_id=iv_fk_v4ip_id AND iv_fk_ic_id=nc_fk_ic_id)"
+        query += " LEFT JOIN i4vs ON v4ip_id=iv_fk_v4ip_id AND iv_fk_ic_id=nc_fk_ic_id)"
         query += " INNER JOIN ics ON nc_fk_ic_id=ic_id"
         query += " WHERE v4ip_id=?"
 
