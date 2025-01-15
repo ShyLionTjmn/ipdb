@@ -6948,8 +6948,7 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
       if err != nil { panic(err) }
 
       if len(ip_rows) != 1 {
-        out["success"] = 0
-        out["error"] = "IP not found"
+        panic("IP not found")
       } else {
         var ip_id uint64
         var _var_ok bool
@@ -6974,13 +6973,11 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
 
         out["rights"] = ip_rights
         out["ip_id"] = ip_id
-        out["success"] = 1
       }
 
 
     } else {
-      out["error"] = "Unsupported IP version"
-      out["success"] = 0
+      panic("Unsupported IP version")
     }
   } else if action == "edit_ip" {
     var v string
@@ -7012,8 +7009,7 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
       if err != nil { panic(err) }
 
       if len(ip_rows) != 1 {
-        out["success"] = 0
-        out["error"] = "IP not found"
+        panic("IP not found")
       } else {
         var ip_id uint64
         var _var_ok bool
@@ -7083,7 +7079,6 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
         if err != nil { panic(err) }
         commited = true
 
-        out["success"] = 1
         out["rights"] = ip_rights
         out["ip_id"] = ip_id
 
