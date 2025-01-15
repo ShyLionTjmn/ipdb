@@ -7078,6 +7078,8 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
         out["ip_id"] = ip_id
 
       }
+
+      out["done"] = 1
     } else {
       panic("Unsupported IP version")
     }
