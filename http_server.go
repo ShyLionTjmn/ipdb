@@ -6974,6 +6974,7 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
 
         out["rights"] = ip_rights
         out["ip_id"] = ip_id
+        out["success"] = 1
       }
 
 
@@ -7083,6 +7084,8 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
         commited = true
 
         out["success"] = 1
+        out["rights"] = ip_rights
+        out["ip_id"] = ip_id
 
       }
     } else {
