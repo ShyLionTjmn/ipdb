@@ -6406,18 +6406,13 @@ func handleApi(w http.ResponseWriter, req *http.Request) {
   }
 
   NoAccess := func() (M) {
-    out_userinfo := make(M);
-    out_userinfo["name"] = user_name
-    out_userinfo["login"] = user_login
-    out_userinfo["groups"] = user_groups
+    _out := make(M)
+    _out["name"] = user_name
+    _out["login"] = user_login
+    _out["groups"] = user_groups
 
-    na_out := make(M)
-    na_out["fail"] = "noaccess"
-    na_out["userinfo"] = out_userinfo
-
-    ok_out := make(M)
-    ok_out["ok"] = na_out
-    return ok_out
+    _out["error"] = "No access"
+    return _out
   }
 
   if !user_is_admin && len(user_groups) == 1 {
