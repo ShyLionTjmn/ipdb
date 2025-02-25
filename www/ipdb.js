@@ -128,6 +128,7 @@ $.fn.arp_info = function(ipdata) {
         tip = "Менее "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
               "Время: "+from_unix_time(ipdata['arp']['ts'])+"\n"+
               "MAC: "+format_mac(ipdata['arp']['v4arp_mac'])
+        ;
         if(ipdata['arp']['v4arp_mac_flip_count'] > 0 &&
            (unix_timestamp() - ipdata['arp']['v4arp_last_mac_flip']) < ARP_FLAP_TIME
         ) {
@@ -9407,6 +9408,59 @@ function show_search_results(results) {
 
       if(row['data'][ 'v'+row['v']+'ip_fk_vlan_id' ] !== null) {
         data_td.append( get_vlan_elm(row['data']['ip_vlan_data']) );
+      };
+
+      if(row['data']['mac'] != '') {
+        let color = "darkgray";
+        let tip = "";
+
+        if((unix_timestamp() - row['data']['mac_ts']) > ARP_UNUSED_TIME) {
+          color = "darkgray";
+          tip = "Более 1 месяца назад была зафиксирована последняя ARP запись для этого адреса\n"+
+                "Время: "+from_unix_time(row['data']['mac_ts'])+"\n"
+          ;
+        } if((unix_timestamp() - row['data']['mac_ts']) > ARP_DEAD_TIME) {
+          color = "darkorange";
+          tip = "Более "+ARP_DEAD_TIME+" секунд назад была зафиксирована последняя ARP запись для этого адреса\n"+
+                "Время: "+from_unix_time(row['data']['mac_ts'])+"\n"
+          ;
+        } else {
+          color = "green";
+          tip = "Менее "+ARP_DEAD_TIME+" секунд назад была зафиксирована ARP запись для этого адреса\n"+
+                "Время: "+from_unix_time(row['data']['mac_ts'])+"\n"
+          ;
+          if(row['data']['mac_flip_count'] > 0 &&
+             (unix_timestamp() - row['data']['last_mac_flip']) < ARP_FLAP_TIME
+          ) {
+            color = "red";
+            tip += "\nЗафиксировано " + row['data']['mac_flip_count'] +
+                   " изменений MAC адреса для этого адреса"+
+                   "\nПоследенее изменение: " + from_unix_time(row['data']['last_mac_flip']) +
+                   "\nПредыдущий MAC: "+format_mac(row['data']['prev_mac'])
+            ;
+          };
+        };
+        data_td
+         .append( $(SPAN)
+           .addClass("search_val_span")
+           .append( $(SPAN).text("ARP: ") )
+           .append( $(LABEL)
+             .html(ARP_CHAR)
+             .css({"color": color})
+             .data("tip", tip)
+             .tooltip({
+               classes: { "ui-tooltip": "ui-corner-all ui-widget-shadow wsp tooltip" },
+               items: "LABEL",
+               content: function() {
+                 if(!g_show_tooltips) return;
+                 return $(this).data("tip");
+               }
+             })
+           )
+           .append( $(SPAN).text(" " + format_mac(row['data']['mac'])) )
+         )
+        ;
+
       };
 
       for(let vi in row['data']['values']) {

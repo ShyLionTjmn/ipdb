@@ -1387,10 +1387,16 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
     search_tags = strings.TrimSpace(search_tags)
     search_vlans = strings.TrimSpace(search_vlans)
 
+    search_mac := ""
+
     out["rows"] = make([]M, 0)
 
     if search_string == "" && search_tags == "" && search_vlans == "" {
       goto OUT
+    }
+
+    if a := g_mac_free_reg.FindStringSubmatch(search_string); a != nil {
+      search_mac = strings.ToLower(a[1]+a[2]+a[3]+a[4]+a[5]+a[6])
     }
 
     var tags_list []string
@@ -1538,6 +1544,26 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
       query = "SELECT v"+v+"nets.*, v"+v+"ip_addr"+
               ", v"+v+"ip_id"+
               ", v"+v+"ip_fk_vlan_id"+
+              ", IFNULL((SELECT v"+v+"arp_mac"+
+                         " FROM v"+v+"arps WHERE"+
+                         " v"+v+"arp_ip = v"+v+"ip_addr"+
+                         "), '') as mac"+
+              ", IFNULL((SELECT ts"+
+                         " FROM v"+v+"arps WHERE"+
+                         " v"+v+"arp_ip = v"+v+"ip_addr"+
+                         "), 0) as mac_ts"+
+              ", IFNULL((SELECT v"+v+"arp_mac_flip_count"+
+                         " FROM v"+v+"arps WHERE"+
+                         " v"+v+"arp_ip = v"+v+"ip_addr"+
+                         "), 0) as mac_flip_count"+
+              ", IFNULL((SELECT v"+v+"arp_last_mac_flip"+
+                         " FROM v"+v+"arps WHERE"+
+                         " v"+v+"arp_ip = v"+v+"ip_addr"+
+                         "), 0) as last_mac_flip"+
+              ", IFNULL((SELECT v"+v+"arp_prev_mac"+
+                         " FROM v"+v+"arps WHERE"+
+                         " v"+v+"arp_ip = v"+v+"ip_addr"+
+                         "), '') as prev_mac"+
               ", IFNULL((SELECT BIT_OR(gn"+v+"r_rmask)"+
                          " FROM gn"+v+"rs WHERE"+
                          " gn"+v+"r_fk_v"+v+"net_id=v"+v+"net_id"+
@@ -1554,10 +1580,17 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
       args = make([]interface{}, 0)
       if search_string != "" {
-        query += " AND (SELECT COUNT(*) FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
+        query += " AND ((SELECT COUNT(*) FROM i"+v+"vs INNER JOIN ics ON iv_fk_ic_id=ic_id"+
                        " WHERE (ic_type='text' OR ic_type='textarea') AND iv_fk_v"+v+"ip_id=v"+v+"ip_id"+
                        " AND iv_value LIKE CONCAT('%',?,'%')) > 0"
         args = append(args, search_string)
+
+        if search_mac != "" {
+          query += " OR (SELECT COUNT(*) FROM v"+v+"arps WHERE v"+v+"arp_ip = v"+v+"ip_addr AND v"+v+"arp_mac = ?)"+
+                        " = 1"
+          args = append(args, search_mac)
+        }
+        query += ")"
       }
 
       if search_tags != "" && tags_list != nil && len(tags_list) > 0 {
