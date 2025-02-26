@@ -1374,6 +1374,68 @@ func handleAjax(w http.ResponseWriter, req *http.Request) {
 
     out["tags"] = tags_cache
 
+    var search_vlans string
+
+    if search_vlans, err = get_p_string(q, "vlans", g_num_list_reg, false, ""); err != nil { panic(err) }
+    search_vlans = strings.TrimSpace(search_vlans)
+
+    if search_vlans != "" {
+      query = "SELECT vds.*, vlans.* FROM"+
+              " vlans INNER JOIN vds ON vlan_fk_vd_id=vd_id"+
+              " WHERE vlan_id IN("+search_vlans+")"
+      var dbvlans M
+      if dbvlans, err = return_query_M(db, query, "vlan_id"); err != nil { panic(err) }
+
+      query = "SELECT vrs.*"+
+              ", IFNULL((SELECT BIT_OR(gvrr_rmask) FROM"+
+                         " gvrrs WHERE gvrr_fk_vr_id=vr_id"+
+                         " AND gvrr_fk_g_id IN("+user_groups_in+")"+
+                         "), 0) as rights"+
+              " FROM vrs"
+      var vlan_ranges []M
+
+      if vlan_ranges, err = return_query_A(db, query); err != nil { panic(err) }
+
+      for vlan_id, _ := range dbvlans {
+        vlan_rights := g_vlans_rights
+
+        var vlan_fk_vd_id uint64
+        var vlan_number uint64
+
+        if vlan_fk_vd_id, var_ok = dbvlans[vlan_id].(M).Uint64("vlan_fk_vd_id"); !var_ok { panic(PE) }
+        if vlan_number, var_ok = dbvlans[vlan_id].(M).Uint64("vlan_number"); !var_ok { panic(PE) }
+
+        for _, vr := range vlan_ranges {
+          var vr_start uint64
+          var vr_stop uint64
+          var vr_fk_vd_id uint64
+          var vr_rights uint64
+
+          if vr_start, var_ok = vr.Uint64("vr_start"); !var_ok { panic(PE) }
+          if vr_stop, var_ok = vr.Uint64("vr_stop"); !var_ok { panic(PE) }
+          if vr_fk_vd_id, var_ok = vr.Uint64("vr_fk_vd_id"); !var_ok { panic(PE) }
+          if vr_rights, var_ok = vr.Uint64("rights"); !var_ok { panic(PE) }
+
+          if vr_fk_vd_id == vlan_fk_vd_id && vlan_number >= vr_start && vlan_number <= vr_stop {
+            vlan_rights |= vr_rights
+          }
+        }
+
+        dbvlans[vlan_id].(M)["calc_rights"] = vlan_rights
+
+        if (vlan_rights & R_VIEW_NET_IPS) == 0 {
+          dbvlans[vlan_id].(M)["vd_name"] = "HIDDEN"
+          dbvlans[vlan_id].(M)["vd_descr"] = "HIDDEN"
+          dbvlans[vlan_id].(M)["vlan_name"] = "HIDDEN"
+          dbvlans[vlan_id].(M)["vlan_descr"] = "HIDDEN"
+        }
+
+      }
+
+      out["vlans"] = dbvlans
+
+    }
+
   } else if action == "search" {
     var search_string string
     var search_tags string

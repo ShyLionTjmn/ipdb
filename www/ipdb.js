@@ -1574,7 +1574,14 @@ function actionFront() {
   //history.pushState(undefined, undefined, "?action=front"+(DEBUG?"&debug":""));
   workarea.empty();
   fixed_div.empty();
-  run_query({"action": "get_front"}, function(res) {
+  let query = {"action": "get_front"};
+
+  let _vlans=getUrlParameter("vlans", "");
+  if(_vlans != "") {
+    query["vlans"] = _vlans;
+  };
+
+  run_query(query, function(res) {
 
     if(g_data === undefined) g_data = {};
 
@@ -1659,7 +1666,15 @@ function actionFront() {
            $("#search_string").animateHighlight("red", 300);
            return;
          };
-         run_query({"action": "search", "search_string": search_string, "search_tags": tags, "search_vlans": vlans}, function(res) {
+
+         history.pushState(undefined, undefined,
+             "?action=front"+(DEBUG?"&debug":"")+"&search="+
+             encodeURIComponent(search_string)+
+             "&tags="+tags+"&vlans="+vlans
+         );
+
+         run_query({"action": "search", "search_string": search_string, "search_tags": tags, "search_vlans": vlans},
+         function(res) {
            show_search_results(res['ok']);
          });
        })
@@ -1668,6 +1683,7 @@ function actionFront() {
      .append( $(LABEL).text("Ограничить тегами: ") )
      .append( $(SPAN).addClass("tagset")
        .append( $(INPUT).prop({"id": "search_tags", "type": "hidden"}) )
+       .append( $(SPAN).prop({"id": "tag_insert"}) )
        .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
          .click(function() {
            let before = $(this);
@@ -1691,6 +1707,7 @@ function actionFront() {
      .append( $(LABEL).text("Ограничить VLAN-ами: ") )
      .append( $(SPAN).addClass("set")
        .append( $(INPUT).prop({"id": "search_vlans", "type": "hidden"}) )
+       .append( $(SPAN).prop({"id": "vlan_insert"}) )
        .append( $(LABEL).addClass(["button", "ui-icon", "ui-icon-plus"])
          .click(function() {
            let before = $(this);
@@ -1821,6 +1838,45 @@ function actionFront() {
       v4accessible.appendTo( fixed_div );
     };
     workarea.append( $(DIV).prop("id", "searchresult").addClass("table") );
+
+    let search_str=getUrlParameter("search");
+    let search_tags=getUrlParameter("tags", "");
+    let search_vlans=getUrlParameter("vlans", "");
+    
+    if(search_str !== false) {
+      $("#search_string").val(search_str);
+
+      if(search_tags != "") {
+        let tags_a = String(search_tags).split(",");
+        for(let i in tags_a) {
+          let tag_id = tags_a[i];
+
+          if(g_data['tags'][tag_id] !== undefined) {
+            get_tag_elm(tag_id, true).insertBefore($("#tag_insert"));
+          };
+        };
+        $(".tagset").trigger("recalc");
+      };
+
+      if(search_vlans != "") {
+        let vlans_a = String(search_vlans).split(",");
+        for(let i in vlans_a) {
+          let vlan_id = vlans_a[i];
+
+          if(res["ok"]["vlans"] !== undefined && res["ok"]["vlans"][vlan_id] !== undefined) {
+
+            get_vlan_elm(res["ok"]["vlans"][vlan_id], true).insertBefore($("#vlan_insert"));
+          };
+        };
+        $(".set").trigger("recalc");
+      };
+
+      setTimeout(function() {
+        $("#search_btn").trigger("click");
+      });
+
+    };
+
   });
 };
 
@@ -5771,6 +5827,12 @@ function vlan_row(row_data) {
      .append( $(TD)
        .text( row_data['v6ips'] )
      )
+     .append( $(TD)
+       .append( $(A)
+         .text(">>")
+         .prop({"href": "?action=front"+(DEBUG?"&debug":"")+"&search=&vlans="+row_data['vlan_id']})
+       )
+     )
     ;
 
   };
@@ -6033,6 +6095,9 @@ function actionViewVlanDomain() {
      )
      .append( $(TH)
        .text("Адресов v6")
+     )
+     .append( $(TH)
+       .text("Поиск")
      )
     ;
 
