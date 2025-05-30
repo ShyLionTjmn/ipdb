@@ -4783,8 +4783,13 @@ function edit_net_range(object, object_id) {
 
       switch(object) {
       case "int_v4net_range":
-        r_start = g_data['net_addr'];
-        r_stop = g_data['net_last_addr'];
+        if(g_data['net_masklen'] >= 31) {
+          r_start = g_data['net_addr'];
+          r_stop = g_data['net_last_addr'];
+        } else {
+          r_start = g_data['net_addr'] + 1;
+          r_stop = g_data['net_last_addr'] - 1;
+        };
         style = JSON.stringify(g_default_range_style);
         break;
       case "ext_v4net_range":
